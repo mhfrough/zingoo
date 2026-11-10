@@ -2,7 +2,7 @@ import { ChangeDetectionStrategy, Component, inject, input } from '@angular/core
 import { ReactiveFormsModule, Validators } from '@angular/forms';
 import { SettingsStore } from '../../core/settings.store';
 import { fmtMoney } from '../../shared/format';
-import { Btn, Field, Modal } from '../../ui';
+import { Btn, Field, Offcanvas } from '../../ui';
 import { FinanceApi } from '../finance/finance.api';
 import { AccountingDoc } from '../finance/models';
 import { FormModal } from '../ops/form-modal';
@@ -13,10 +13,10 @@ const today = () => new Date().toISOString().slice(0, 10);
 @Component({
   selector: 'app-settle-form',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [ReactiveFormsModule, Modal, Field, Btn],
+  imports: [ReactiveFormsModule, Offcanvas, Field, Btn],
   template: `
-    <app-modal [(open)]="open" size="sm" [title]="doc()?.kind === 'Income' ? 'Collect income' : 'Pay expense bill'"
-               [subtitle]="doc() ? doc()!.refNo + ' · ' + doc()!.party : ''">
+    <app-offcanvas #oc [(open)]="open" [title]="doc()?.kind === 'Income' ? 'Collect income' : 'Pay expense bill'"
+               [subtitle]="doc() ? doc()!.refNo + ' · ' + doc()!.party : ''" size="lg" [dirty]="form.dirty">
       @if (doc(); as d) {
         <div class="notice">
           <span>Document {{ money(d.amount) }} · Settled {{ money(d.paid) }} · <strong>Open {{ money(d.due) }}</strong></span>
@@ -41,13 +41,13 @@ const today = () => new Date().toISOString().slice(0, 10);
         </app-field>
         <app-field label="Reference / notes" [wide]="true"><input type="text" formControlName="note" /></app-field>
       </form>
-      <ng-container modalFooter>
-        <button appBtn type="button" (click)="close()">Cancel</button>
+      <ng-container offcanvasFooter>
+        <button appBtn type="button" (click)="oc.requestClose()">Cancel</button>
         <button appBtn variant="primary" type="submit" [attr.form]="formId" icon="banknote" [loading]="busy()">
           Post {{ doc()?.kind === 'Income' ? 'receipt' : 'payment' }}
         </button>
       </ng-container>
-    </app-modal>
+    </app-offcanvas>
   `,
 })
 export class SettleForm extends FormModal {

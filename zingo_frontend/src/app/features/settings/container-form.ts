@@ -1,6 +1,6 @@
 import { ChangeDetectionStrategy, Component, inject, input } from '@angular/core';
 import { ReactiveFormsModule, Validators } from '@angular/forms';
-import { Btn, Field, Modal } from '../../ui';
+import { Btn, Field, Offcanvas } from '../../ui';
 import { ContainerType } from '../exports/models';
 import { FormModal } from '../ops/form-modal';
 import { SettingsApi } from './settings.api';
@@ -9,10 +9,10 @@ import { SettingsApi } from './settings.api';
 @Component({
   selector: 'app-container-form',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [ReactiveFormsModule, Modal, Field, Btn],
+  imports: [ReactiveFormsModule, Offcanvas, Field, Btn],
   template: `
-    <app-modal [(open)]="open" size="sm" [title]="container() ? 'Edit container type' : 'Add container type'"
-               subtitle="Planning cartons only. Check weight and volume yourself.">
+    <app-offcanvas #oc [(open)]="open" [title]="container() ? 'Edit container type' : 'Add container type'"
+               subtitle="Planning cartons only. Check weight and volume yourself." size="lg" [dirty]="form.dirty">
       @if (error()) {
         <div class="notice" data-tone="danger" role="alert">{{ error() }}</div>
       }
@@ -24,13 +24,13 @@ import { SettingsApi } from './settings.api';
           <input type="number" formControlName="maxCartons" min="1" step="1" />
         </app-field>
       </form>
-      <ng-container modalFooter>
-        <button appBtn type="button" (click)="close()">Cancel</button>
+      <ng-container offcanvasFooter>
+        <button appBtn type="button" (click)="oc.requestClose()">Cancel</button>
         <button appBtn variant="primary" type="submit" [attr.form]="formId" icon="check" [loading]="busy()">
           {{ container() ? 'Save changes' : 'Add container type' }}
         </button>
       </ng-container>
-    </app-modal>
+    </app-offcanvas>
   `,
 })
 export class ContainerForm extends FormModal {

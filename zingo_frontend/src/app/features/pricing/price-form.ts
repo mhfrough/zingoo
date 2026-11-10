@@ -2,7 +2,7 @@ import { ChangeDetectionStrategy, Component, computed, inject, input } from '@an
 import { toSignal } from '@angular/core/rxjs-interop';
 import { ReactiveFormsModule, Validators } from '@angular/forms';
 import { fmtAmount2, fmtPct } from '../../shared/format';
-import { Btn, Field, Modal } from '../../ui';
+import { Btn, Field, Offcanvas } from '../../ui';
 import { FormModal } from '../ops/form-modal';
 import { Product } from '../ops/models';
 import { unitEconomics } from './economics';
@@ -15,10 +15,10 @@ import { PricingApi } from './pricing.api';
 @Component({
   selector: 'app-price-form',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [ReactiveFormsModule, Modal, Field, Btn],
+  imports: [ReactiveFormsModule, Offcanvas, Field, Btn],
   template: `
-    <app-modal [(open)]="open" size="lg" [title]="'Edit rates · ' + (product()?.sku ?? '')"
-               subtitle="Every rate is per pack, in PKR. Booked sales keep the rate they were booked at.">
+    <app-offcanvas #oc [(open)]="open" [title]="'Edit rates · ' + (product()?.sku ?? '')"
+               subtitle="Every rate is per pack, in PKR. Booked sales keep the rate they were booked at." size="lg" [dirty]="form.dirty">
       @if (error()) {
         <div class="notice" data-tone="danger" role="alert">{{ error() }}</div>
       }
@@ -37,11 +37,11 @@ import { PricingApi } from './pricing.api';
           After {{ money(overhead()) }} overhead <strong>PKR {{ money(eco().net) }}</strong> ({{ pct(eco().netPct) }})
         </span>
       </div>
-      <ng-container modalFooter>
-        <button appBtn type="button" (click)="close()">Cancel</button>
+      <ng-container offcanvasFooter>
+        <button appBtn type="button" (click)="oc.requestClose()">Cancel</button>
         <button appBtn variant="primary" type="submit" [attr.form]="formId" icon="check" [loading]="busy()">Update rates</button>
       </ng-container>
-    </app-modal>
+    </app-offcanvas>
   `,
 })
 export class PriceForm extends FormModal {

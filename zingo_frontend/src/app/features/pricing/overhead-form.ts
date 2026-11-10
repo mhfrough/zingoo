@@ -1,6 +1,6 @@
 import { ChangeDetectionStrategy, Component, inject, input } from '@angular/core';
 import { ReactiveFormsModule, Validators } from '@angular/forms';
-import { Btn, Field, Modal } from '../../ui';
+import { Btn, Field, Offcanvas } from '../../ui';
 import { FormModal } from '../ops/form-modal';
 import { PricingApi } from './pricing.api';
 
@@ -8,10 +8,10 @@ import { PricingApi } from './pricing.api';
 @Component({
   selector: 'app-overhead-form',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [ReactiveFormsModule, Modal, Field, Btn],
+  imports: [ReactiveFormsModule, Offcanvas, Field, Btn],
   template: `
-    <app-modal [(open)]="open" size="sm" title="Overhead per pack"
-               subtitle="A planning share of central costs charged to every pack. It is not booked as an expense.">
+    <app-offcanvas #oc [(open)]="open" title="Overhead per pack"
+               subtitle="A planning share of central costs charged to every pack. It is not booked as an expense." size="lg" [dirty]="form.dirty">
       @if (error()) {
         <div class="notice" data-tone="danger" role="alert">{{ error() }}</div>
       }
@@ -20,11 +20,11 @@ import { PricingApi } from './pricing.api';
           <span class="money-input"><span class="money-input__cur">PKR</span><input type="number" formControlName="profitAllocationPerPack" min="0" step="0.01" /></span>
         </app-field>
       </form>
-      <ng-container modalFooter>
-        <button appBtn type="button" (click)="close()">Cancel</button>
+      <ng-container offcanvasFooter>
+        <button appBtn type="button" (click)="oc.requestClose()">Cancel</button>
         <button appBtn variant="primary" type="submit" [attr.form]="formId" icon="check" [loading]="busy()">Save overhead</button>
       </ng-container>
-    </app-modal>
+    </app-offcanvas>
   `,
 })
 export class OverheadForm extends FormModal {

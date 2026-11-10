@@ -1,7 +1,7 @@
 import { ChangeDetectionStrategy, Component, inject, input } from '@angular/core';
 import { ReactiveFormsModule, Validators } from '@angular/forms';
 import { Lookup } from '../../core/settings.store';
-import { Btn, Field, Modal } from '../../ui';
+import { Btn, Field, Offcanvas } from '../../ui';
 import { FormModal } from '../ops/form-modal';
 import { SettingsApi } from './settings.api';
 
@@ -22,11 +22,11 @@ export const SELLER_LINES: [string, string][] = [
 @Component({
   selector: 'app-lookup-form',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [ReactiveFormsModule, Modal, Field, Btn],
+  imports: [ReactiveFormsModule, Offcanvas, Field, Btn],
   template: `
-    <app-modal [(open)]="open" size="md"
+    <app-offcanvas #oc [(open)]="open"
                [title]="(entry() ? 'Edit ' : 'Add ') + (list() === 'INCOTERM' ? 'Incoterm' : 'payment method')"
-               [subtitle]="list() === 'INCOTERM' ? 'Which cost lines the seller carries drives the export costing.' : 'Offered in every payment form.'">
+               [subtitle]="list() === 'INCOTERM' ? 'Which cost lines the seller carries drives the export costing.' : 'Offered in every payment form.'" size="lg" [dirty]="form.dirty">
       @if (error()) {
         <div class="notice" data-tone="danger" role="alert">{{ error() }}</div>
       }
@@ -53,13 +53,13 @@ export const SELLER_LINES: [string, string][] = [
           </div>
         }
       </form>
-      <ng-container modalFooter>
-        <button appBtn type="button" (click)="close()">Cancel</button>
+      <ng-container offcanvasFooter>
+        <button appBtn type="button" (click)="oc.requestClose()">Cancel</button>
         <button appBtn variant="primary" type="submit" [attr.form]="formId" icon="check" [loading]="busy()">
           {{ entry() ? 'Save changes' : 'Add entry' }}
         </button>
       </ng-container>
-    </app-modal>
+    </app-offcanvas>
   `,
   styles: `
     .seller-lines {

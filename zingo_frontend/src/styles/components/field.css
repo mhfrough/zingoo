@@ -8,13 +8,17 @@
     Look: soft fill (--surface-field), 44px height, 3:1 border, border + 4px ring animate on focus.
   */
 
-  /* form layout: 2 columns, collapses to 1; .field--wide spans both */
+  /* form layout: 3 compact columns, 2 on small screens, 1 on phones; .field--wide spans every column */
   .form-grid {
     display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: var(--form-gap) var(--space-4);
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: var(--form-gap) var(--space-3);
 
-    @media (max-width: 640px) {
+    @media (max-width: 760px) {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    @media (max-width: 480px) {
       grid-template-columns: minmax(0, 1fr);
     }
   }

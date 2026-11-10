@@ -2,7 +2,7 @@ import { ChangeDetectionStrategy, Component, computed, inject, input, signal } f
 import { takeUntilDestroyed, toSignal } from '@angular/core/rxjs-interop';
 import { AbstractControl, FormArray, FormControl, FormGroup, ReactiveFormsModule, ValidationErrors, Validators } from '@angular/forms';
 import { fmtAmount2 } from '../../shared/format';
-import { Btn, Field, Modal } from '../../ui';
+import { Btn, Field, Offcanvas } from '../../ui';
 import { Currency } from '../finance/models';
 import { FormModal } from '../ops/form-modal';
 import { LedgerApi } from './ledger.api';
@@ -33,7 +33,7 @@ function balanced(group: AbstractControl): ValidationErrors | null {
 @Component({
   selector: 'app-voucher-form',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [ReactiveFormsModule, Modal, Field, Btn],
+  imports: [ReactiveFormsModule, Offcanvas, Field, Btn],
   styles: `
     /* the grid of voucher lines: account, debit, credit, remove */
     .voucher-lines {
@@ -74,8 +74,8 @@ function balanced(group: AbstractControl): ValidationErrors | null {
     }
   `,
   template: `
-    <app-modal [(open)]="open" size="lg" title="Post a journal voucher"
-               subtitle="Debits and credits must be equal. Use two or more lines to spread a cost over several accounts.">
+    <app-offcanvas #oc [(open)]="open" title="Post a journal voucher"
+               subtitle="Debits and credits must be equal. Use two or more lines to spread a cost over several accounts." size="lg" [dirty]="form.dirty">
       @if (error()) {
         <div class="notice" data-tone="danger" role="alert">{{ error() }}</div>
       }
@@ -126,11 +126,11 @@ function balanced(group: AbstractControl): ValidationErrors | null {
           @if (problem(); as p) { · {{ p }} } @else if (totals().debit) { · Balanced. } @else { · Enter amounts on at least two lines. }
         </span>
       </div>
-      <ng-container modalFooter>
-        <button appBtn type="button" (click)="close()">Cancel</button>
+      <ng-container offcanvasFooter>
+        <button appBtn type="button" (click)="oc.requestClose()">Cancel</button>
         <button appBtn variant="primary" type="submit" [attr.form]="formId" icon="check" [loading]="busy()">Post voucher</button>
       </ng-container>
-    </app-modal>
+    </app-offcanvas>
   `,
 })
 export class VoucherForm extends FormModal {

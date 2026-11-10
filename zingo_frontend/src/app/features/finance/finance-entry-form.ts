@@ -2,7 +2,7 @@ import { ChangeDetectionStrategy, Component, computed, inject, input } from '@an
 import { toSignal } from '@angular/core/rxjs-interop';
 import { ReactiveFormsModule, Validators } from '@angular/forms';
 import { fmtMoney } from '../../shared/format';
-import { Btn, Field, Modal } from '../../ui';
+import { Btn, Field, Offcanvas } from '../../ui';
 import { FormModal } from '../ops/form-modal';
 import { FinanceApi } from './finance.api';
 import { FinanceEntry, FinanceType } from './models';
@@ -18,10 +18,10 @@ const TYPES: FinanceType[] = ['Capital Injection', 'Operating Expense', 'Asset P
 @Component({
   selector: 'app-finance-entry-form',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [ReactiveFormsModule, Modal, Field, Btn],
+  imports: [ReactiveFormsModule, Offcanvas, Field, Btn],
   template: `
-    <app-modal [(open)]="open" [title]="entry() ? 'Edit pending request ' + entry()!.refNo : 'New finance transaction'"
-               subtitle="Amounts are in PKR.">
+    <app-offcanvas #oc [(open)]="open" [title]="entry() ? 'Edit pending request ' + entry()!.refNo : 'New finance transaction'"
+               subtitle="Amounts are in PKR." size="lg" [dirty]="form.dirty">
       @if (needsApproval()) {
         <div class="notice">
           <span>Spending needs one signature, or two (seat A and seat B) from {{ money(threshold()) }}. It does not reduce cash until it is approved.</span>
@@ -62,13 +62,13 @@ const TYPES: FinanceType[] = ['Capital Injection', 'Operating Expense', 'Asset P
         }
         <app-field label="Description" [wide]="true"><textarea formControlName="note" placeholder="Optional"></textarea></app-field>
       </form>
-      <ng-container modalFooter>
-        <button appBtn type="button" (click)="close()">Cancel</button>
+      <ng-container offcanvasFooter>
+        <button appBtn type="button" (click)="oc.requestClose()">Cancel</button>
         <button appBtn variant="primary" type="submit" [attr.form]="formId" icon="check" [loading]="busy()">
           {{ entry() ? 'Update request' : 'Create entry' }}
         </button>
       </ng-container>
-    </app-modal>
+    </app-offcanvas>
   `,
 })
 export class FinanceEntryForm extends FormModal {

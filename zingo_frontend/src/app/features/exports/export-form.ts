@@ -3,7 +3,7 @@ import { takeUntilDestroyed, toSignal } from '@angular/core/rxjs-interop';
 import { ReactiveFormsModule, Validators } from '@angular/forms';
 import { SettingsStore } from '../../core/settings.store';
 import { fmtAmount2, fmtMoney, fmtPct } from '../../shared/format';
-import { Btn, Field, Modal } from '../../ui';
+import { Btn, Field, Offcanvas } from '../../ui';
 import { Currency } from '../finance/models';
 import { FormModal } from '../ops/form-modal';
 import { Product } from '../ops/models';
@@ -28,10 +28,10 @@ const COSTS = [
 @Component({
   selector: 'app-export-form',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [ReactiveFormsModule, Modal, Field, Btn],
+  imports: [ReactiveFormsModule, Offcanvas, Field, Btn],
   template: `
-    <app-modal [(open)]="open" size="lg" [title]="quote() ? 'Edit container quote' : 'New container quote'"
-               subtitle="A quote is a costing scenario. Shipping it posts the invoice, the goods cost and the seller's costs.">
+    <app-offcanvas #oc [(open)]="open" [title]="quote() ? 'Edit container quote' : 'New container quote'"
+               subtitle="A quote is a costing scenario. Shipping it posts the invoice, the goods cost and the seller's costs." size="lg" [dirty]="form.dirty">
       @if (error()) {
         <div class="notice" data-tone="danger" role="alert">{{ error() }}</div>
       }
@@ -90,13 +90,13 @@ const COSTS = [
           Goods cost is estimated at the product's planning rates until it ships.
         </span>
       </div>
-      <ng-container modalFooter>
-        <button appBtn type="button" (click)="close()">Cancel</button>
+      <ng-container offcanvasFooter>
+        <button appBtn type="button" (click)="oc.requestClose()">Cancel</button>
         <button appBtn variant="primary" type="submit" [attr.form]="formId" icon="check" [loading]="busy()">
           {{ quote() ? 'Update quote' : 'Save quote' }}
         </button>
       </ng-container>
-    </app-modal>
+    </app-offcanvas>
   `,
 })
 export class ExportForm extends FormModal {

@@ -2,7 +2,7 @@ import { ChangeDetectionStrategy, Component, input, inject } from '@angular/core
 import { ReactiveFormsModule, Validators } from '@angular/forms';
 import { SettingsStore } from '../../core/settings.store';
 import { fmtMoney } from '../../shared/format';
-import { Btn, Field, Modal } from '../../ui';
+import { Btn, Field, Offcanvas } from '../../ui';
 import { FormModal } from '../ops/form-modal';
 import { Batch } from '../ops/models';
 
@@ -12,9 +12,9 @@ const today = () => new Date().toISOString().slice(0, 10);
 @Component({
   selector: 'app-pay-manufacturer-form',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [ReactiveFormsModule, Modal, Field, Btn],
+  imports: [ReactiveFormsModule, Offcanvas, Field, Btn],
   template: `
-    <app-modal [(open)]="open" size="sm" title="Pay manufacturer" [subtitle]="batch() ? batch()!.refNo + ' · ' + batch()!.manufacturer.name : ''">
+    <app-offcanvas #oc [(open)]="open" title="Pay manufacturer" [subtitle]="batch() ? batch()!.refNo + ' · ' + batch()!.manufacturer.name : ''" size="lg" [dirty]="form.dirty">
       @if (batch(); as b) {
         <div class="notice">
           Accrued {{ money(b.cost) }} · Paid {{ money(b.paid) }} · <strong>Remaining {{ money(b.due) }}</strong>
@@ -37,11 +37,11 @@ const today = () => new Date().toISOString().slice(0, 10);
         </app-field>
         <app-field label="Reference / notes" [wide]="true"><input type="text" formControlName="note" /></app-field>
       </form>
-      <ng-container modalFooter>
-        <button appBtn type="button" (click)="close()">Cancel</button>
+      <ng-container offcanvasFooter>
+        <button appBtn type="button" (click)="oc.requestClose()">Cancel</button>
         <button appBtn variant="primary" type="submit" [attr.form]="formId" icon="banknote" [loading]="busy()">Post payment</button>
       </ng-container>
-    </app-modal>
+    </app-offcanvas>
   `,
 })
 export class PayManufacturerForm extends FormModal {

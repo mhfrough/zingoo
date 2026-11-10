@@ -2,7 +2,7 @@ import { ChangeDetectionStrategy, Component, inject, input } from '@angular/core
 import { ReactiveFormsModule, Validators } from '@angular/forms';
 import { SettingsStore } from '../../core/settings.store';
 import { fmtMoney } from '../../shared/format';
-import { Btn, Field, Modal } from '../../ui';
+import { Btn, Field, Offcanvas } from '../../ui';
 import { FormModal } from '../ops/form-modal';
 import { ExportsApi } from './exports.api';
 import { ExportRow } from './models';
@@ -13,10 +13,10 @@ const today = () => new Date().toISOString().slice(0, 10);
 @Component({
   selector: 'app-export-cost-form',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [ReactiveFormsModule, Modal, Field, Btn],
+  imports: [ReactiveFormsModule, Offcanvas, Field, Btn],
   template: `
-    <app-modal [(open)]="open" size="sm" title="Pay export costs"
-               [subtitle]="shipment() ? shipment()!.refNo + ' · ' + shipment()!.buyer : ''">
+    <app-offcanvas #oc [(open)]="open" title="Pay export costs"
+               [subtitle]="shipment() ? shipment()!.refNo + ' · ' + shipment()!.buyer : ''" size="lg" [dirty]="form.dirty">
       @if (shipment(); as s) {
         <div class="notice"><span>Export costs payable <strong>{{ money(s.costDue) }}</strong>. Paying them lowers cash, not profit again.</span></div>
       }
@@ -37,11 +37,11 @@ const today = () => new Date().toISOString().slice(0, 10);
         </app-field>
         <app-field label="Reference" [wide]="true"><input type="text" formControlName="note" /></app-field>
       </form>
-      <ng-container modalFooter>
-        <button appBtn type="button" (click)="close()">Cancel</button>
+      <ng-container offcanvasFooter>
+        <button appBtn type="button" (click)="oc.requestClose()">Cancel</button>
         <button appBtn variant="primary" type="submit" [attr.form]="formId" icon="banknote" [loading]="busy()">Pay costs</button>
       </ng-container>
-    </app-modal>
+    </app-offcanvas>
   `,
 })
 export class ExportCostForm extends FormModal {

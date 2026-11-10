@@ -1,6 +1,6 @@
 import { ChangeDetectionStrategy, Component, input } from '@angular/core';
 import { ReactiveFormsModule, Validators } from '@angular/forms';
-import { Btn, Field, Modal } from '../../ui';
+import { Btn, Field, Offcanvas } from '../../ui';
 import { FormModal } from '../ops/form-modal';
 import { Product } from '../ops/models';
 
@@ -8,10 +8,10 @@ import { Product } from '../ops/models';
 @Component({
   selector: 'app-product-form',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [ReactiveFormsModule, Modal, Field, Btn],
+  imports: [ReactiveFormsModule, Offcanvas, Field, Btn],
   template: `
-    <app-modal [(open)]="open" size="lg" [title]="product() ? 'Edit product / SKU' : 'Add product / SKU'"
-               subtitle="Rates are per pack, in PKR.">
+    <app-offcanvas #oc [(open)]="open" [title]="product() ? 'Edit product / SKU' : 'Add product / SKU'"
+               subtitle="Rates are per pack, in PKR." size="lg" [dirty]="form.dirty">
       @if (error()) {
         <div class="notice" data-tone="danger" role="alert">{{ error() }}</div>
       }
@@ -50,13 +50,13 @@ import { Product } from '../ops/models';
           <select formControlName="active"><option value="true">Active</option><option value="false">Inactive</option></select>
         </app-field>
       </form>
-      <ng-container modalFooter>
-        <button appBtn type="button" (click)="close()">Cancel</button>
+      <ng-container offcanvasFooter>
+        <button appBtn type="button" (click)="oc.requestClose()">Cancel</button>
         <button appBtn variant="primary" type="submit" [attr.form]="formId" icon="check" [loading]="busy()">
           {{ product() ? 'Save product' : 'Add product' }}
         </button>
       </ng-container>
-    </app-modal>
+    </app-offcanvas>
   `,
 })
 export class ProductForm extends FormModal {

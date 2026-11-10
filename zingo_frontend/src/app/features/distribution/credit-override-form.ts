@@ -1,7 +1,7 @@
 import { ChangeDetectionStrategy, Component, input } from '@angular/core';
 import { ReactiveFormsModule, Validators } from '@angular/forms';
 import { fmtMoney } from '../../shared/format';
-import { Btn, Field, Modal } from '../../ui';
+import { Btn, Field, Offcanvas } from '../../ui';
 import { FormModal } from '../ops/form-modal';
 import { Order } from '../ops/models';
 
@@ -9,9 +9,9 @@ import { Order } from '../ops/models';
 @Component({
   selector: 'app-credit-override-form',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [ReactiveFormsModule, Modal, Field, Btn],
+  imports: [ReactiveFormsModule, Offcanvas, Field, Btn],
   template: `
-    <app-modal [(open)]="open" size="sm" title="Credit hold override" [subtitle]="order() ? order()!.refNo + ' · ' + order()!.distributor.name : ''">
+    <app-offcanvas #oc [(open)]="open" title="Credit hold override" [subtitle]="order() ? order()!.refNo + ' · ' + order()!.distributor.name : ''" size="lg" [dirty]="form.dirty">
       @if (order(); as o) {
         <div class="notice" data-tone="warning">
           Projected debt {{ money(o.projectedExposure ?? 0) }} is above the limit of {{ money(o.creditLimit) }}.
@@ -26,11 +26,11 @@ import { Order } from '../ops/models';
           <textarea formControlName="reason" placeholder="Why is this order allowed?"></textarea>
         </app-field>
       </form>
-      <ng-container modalFooter>
-        <button appBtn type="button" (click)="close()">Cancel</button>
+      <ng-container offcanvasFooter>
+        <button appBtn type="button" (click)="oc.requestClose()">Cancel</button>
         <button appBtn variant="primary" type="submit" [attr.form]="formId" icon="shield-check" [loading]="busy()">Override hold</button>
       </ng-container>
-    </app-modal>
+    </app-offcanvas>
   `,
 })
 export class CreditOverrideForm extends FormModal {

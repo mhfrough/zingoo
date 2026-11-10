@@ -3,7 +3,7 @@ import { toSignal } from '@angular/core/rxjs-interop';
 import { ReactiveFormsModule, Validators } from '@angular/forms';
 import { SettingsStore } from '../../core/settings.store';
 import { fmtAmount2, fmtMoney } from '../../shared/format';
-import { Btn, Field, Modal } from '../../ui';
+import { Btn, Field, Offcanvas } from '../../ui';
 import { FormModal } from '../ops/form-modal';
 import { ExportsApi } from './exports.api';
 import { ExportRow } from './models';
@@ -17,10 +17,10 @@ const today = () => new Date().toISOString().slice(0, 10);
 @Component({
   selector: 'app-export-collect-form',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [ReactiveFormsModule, Modal, Field, Btn],
+  imports: [ReactiveFormsModule, Offcanvas, Field, Btn],
   template: `
-    <app-modal [(open)]="open" size="sm" title="Collect from the buyer"
-               [subtitle]="shipment() ? shipment()!.refNo + ' · ' + shipment()!.buyer : ''">
+    <app-offcanvas #oc [(open)]="open" title="Collect from the buyer"
+               [subtitle]="shipment() ? shipment()!.refNo + ' · ' + shipment()!.buyer : ''" size="lg" [dirty]="form.dirty">
       @if (shipment(); as s) {
         <div class="notice">
           <span>Outstanding <strong>{{ s.currency }} {{ amount(s.due) }}</strong> · invoice rate PKR {{ amount(s.fxRate, 4) }} per {{ s.currency }}</span>
@@ -58,11 +58,11 @@ const today = () => new Date().toISOString().slice(0, 10);
           </span>
         </div>
       }
-      <ng-container modalFooter>
-        <button appBtn type="button" (click)="close()">Cancel</button>
+      <ng-container offcanvasFooter>
+        <button appBtn type="button" (click)="oc.requestClose()">Cancel</button>
         <button appBtn variant="primary" type="submit" [attr.form]="formId" icon="banknote" [loading]="busy()">Post collection</button>
       </ng-container>
-    </app-modal>
+    </app-offcanvas>
   `,
 })
 export class ExportCollectForm extends FormModal {

@@ -2,7 +2,7 @@ import { ChangeDetectionStrategy, Component, computed, inject, input } from '@an
 import { takeUntilDestroyed, toSignal } from '@angular/core/rxjs-interop';
 import { ReactiveFormsModule, Validators } from '@angular/forms';
 import { fmtMoney } from '../../shared/format';
-import { Btn, Field, Modal } from '../../ui';
+import { Btn, Field, Offcanvas } from '../../ui';
 import { FinanceApi } from '../finance/finance.api';
 import { AccountingDoc, Currency } from '../finance/models';
 import { FormModal } from '../ops/form-modal';
@@ -17,10 +17,10 @@ const today = () => new Date().toISOString().slice(0, 10);
 @Component({
   selector: 'app-accounting-doc-form',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [ReactiveFormsModule, Modal, Field, Btn],
+  imports: [ReactiveFormsModule, Offcanvas, Field, Btn],
   template: `
-    <app-modal [(open)]="open" [title]="(doc() ? 'Edit ' : 'Record new ') + kind().toLowerCase()"
-               [subtitle]="kind() === 'Income' ? 'An invoice we issue to a customer.' : 'A bill from a supplier. It needs approval before it can be paid.'">
+    <app-offcanvas #oc [(open)]="open" [title]="(doc() ? 'Edit ' : 'Record new ') + kind().toLowerCase()"
+               [subtitle]="kind() === 'Income' ? 'An invoice we issue to a customer.' : 'A bill from a supplier. It needs approval before it can be paid.'" size="lg" [dirty]="form.dirty">
       @if (error()) {
         <div class="notice" data-tone="danger" role="alert">{{ error() }}</div>
       }
@@ -56,13 +56,13 @@ const today = () => new Date().toISOString().slice(0, 10);
       @if (pkr() > 0) {
         <div class="notice"><span>Posts to the ledger as <strong>{{ money(pkr()) }}</strong>.</span></div>
       }
-      <ng-container modalFooter>
-        <button appBtn type="button" (click)="close()">Cancel</button>
+      <ng-container offcanvasFooter>
+        <button appBtn type="button" (click)="oc.requestClose()">Cancel</button>
         <button appBtn variant="primary" type="submit" [attr.form]="formId" icon="check" [loading]="busy()">
           {{ doc() ? 'Update document' : 'Create ' + kind().toLowerCase() }}
         </button>
       </ng-container>
-    </app-modal>
+    </app-offcanvas>
   `,
 })
 export class AccountingDocForm extends FormModal {

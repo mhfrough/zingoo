@@ -2,7 +2,7 @@ import { ChangeDetectionStrategy, Component, computed, inject, input } from '@an
 import { toSignal } from '@angular/core/rxjs-interop';
 import { ReactiveFormsModule, Validators } from '@angular/forms';
 import { fmtAmount2 } from '../../shared/format';
-import { Btn, Field, Modal } from '../../ui';
+import { Btn, Field, Offcanvas } from '../../ui';
 import { FormModal } from '../ops/form-modal';
 import { Distributor, Product } from '../ops/models';
 import { AgreedRate, PricingApi } from './pricing.api';
@@ -14,10 +14,10 @@ import { AgreedRate, PricingApi } from './pricing.api';
 @Component({
   selector: 'app-agreed-rate-form',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [ReactiveFormsModule, Modal, Field, Btn],
+  imports: [ReactiveFormsModule, Offcanvas, Field, Btn],
   template: `
-    <app-modal [(open)]="open" size="sm" [title]="rate() ? 'Change agreed rate' : 'Agree a rate'"
-               subtitle="The price per pack for one distributor and one SKU.">
+    <app-offcanvas #oc [(open)]="open" [title]="rate() ? 'Change agreed rate' : 'Agree a rate'"
+               subtitle="The price per pack for one distributor and one SKU." size="lg" [dirty]="form.dirty">
       @if (error()) {
         <div class="notice" data-tone="danger" role="alert">{{ error() }}</div>
       }
@@ -43,11 +43,11 @@ import { AgreedRate, PricingApi } from './pricing.api';
           <span class="money-input"><span class="money-input__cur">PKR</span><input type="number" formControlName="rate" min="0" step="0.01" /></span>
         </app-field>
       </form>
-      <ng-container modalFooter>
-        <button appBtn type="button" (click)="close()">Cancel</button>
+      <ng-container offcanvasFooter>
+        <button appBtn type="button" (click)="oc.requestClose()">Cancel</button>
         <button appBtn variant="primary" type="submit" [attr.form]="formId" icon="check" [loading]="busy()">Save agreed rate</button>
       </ng-container>
-    </app-modal>
+    </app-offcanvas>
   `,
 })
 export class AgreedRateForm extends FormModal {

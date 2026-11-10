@@ -1,6 +1,6 @@
 import { ChangeDetectionStrategy, Component, input } from '@angular/core';
 import { ReactiveFormsModule, Validators } from '@angular/forms';
-import { Btn, Field, Modal } from '../../ui';
+import { Btn, Field, Offcanvas } from '../../ui';
 import { FormModal } from '../ops/form-modal';
 import { Batch, Manufacturer, Product, QC_OPTIONS } from '../ops/models';
 
@@ -10,10 +10,10 @@ const today = () => new Date().toISOString().slice(0, 10);
 @Component({
   selector: 'app-batch-form',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [ReactiveFormsModule, Modal, Field, Btn],
+  imports: [ReactiveFormsModule, Offcanvas, Field, Btn],
   template: `
-    <app-modal [(open)]="open" [title]="batch() ? 'Edit production batch ' + batch()!.refNo : 'New production batch'"
-               subtitle="Enter the actual cartons and cost after the run, then release it once QC passes.">
+    <app-offcanvas #oc [(open)]="open" [title]="batch() ? 'Edit production batch ' + batch()!.refNo : 'New production batch'"
+               subtitle="Enter the actual cartons and cost after the run, then release it once QC passes." size="lg" [dirty]="form.dirty">
       @if (error()) {
         <div class="notice" data-tone="danger" role="alert">{{ error() }}</div>
       }
@@ -57,13 +57,13 @@ const today = () => new Date().toISOString().slice(0, 10);
           <textarea formControlName="notes" placeholder="Optional"></textarea>
         </app-field>
       </form>
-      <ng-container modalFooter>
-        <button appBtn type="button" (click)="close()">Cancel</button>
+      <ng-container offcanvasFooter>
+        <button appBtn type="button" (click)="oc.requestClose()">Cancel</button>
         <button appBtn variant="primary" type="submit" [attr.form]="formId" icon="check" [loading]="busy()">
           {{ batch() ? 'Save batch' : 'Create batch' }}
         </button>
       </ng-container>
-    </app-modal>
+    </app-offcanvas>
   `,
 })
 export class BatchForm extends FormModal {

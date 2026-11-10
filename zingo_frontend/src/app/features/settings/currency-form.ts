@@ -1,6 +1,6 @@
 import { ChangeDetectionStrategy, Component, inject, input } from '@angular/core';
 import { ReactiveFormsModule, Validators } from '@angular/forms';
-import { Btn, Field, Modal } from '../../ui';
+import { Btn, Field, Offcanvas } from '../../ui';
 import { Currency } from '../finance/models';
 import { FormModal } from '../ops/form-modal';
 import { SettingsApi } from './settings.api';
@@ -9,10 +9,10 @@ import { SettingsApi } from './settings.api';
 @Component({
   selector: 'app-currency-form',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [ReactiveFormsModule, Modal, Field, Btn],
+  imports: [ReactiveFormsModule, Offcanvas, Field, Btn],
   template: `
-    <app-modal [(open)]="open" size="sm" [title]="currency() ? 'Edit ' + currency()!.code : 'Add currency'"
-               subtitle="The rate is PKR per 1 unit. Documents freeze the rate they were made at.">
+    <app-offcanvas #oc [(open)]="open" [title]="currency() ? 'Edit ' + currency()!.code : 'Add currency'"
+               subtitle="The rate is PKR per 1 unit. Documents freeze the rate they were made at." size="lg" [dirty]="form.dirty">
       @if (error()) {
         <div class="notice" data-tone="danger" role="alert">{{ error() }}</div>
       }
@@ -30,13 +30,13 @@ import { SettingsApi } from './settings.api';
           <input type="number" formControlName="rate" min="0" step="any" />
         </app-field>
       </form>
-      <ng-container modalFooter>
-        <button appBtn type="button" (click)="close()">Cancel</button>
+      <ng-container offcanvasFooter>
+        <button appBtn type="button" (click)="oc.requestClose()">Cancel</button>
         <button appBtn variant="primary" type="submit" [attr.form]="formId" icon="check" [loading]="busy()">
           {{ currency() ? 'Save changes' : 'Add currency' }}
         </button>
       </ng-container>
-    </app-modal>
+    </app-offcanvas>
   `,
 })
 export class CurrencyForm extends FormModal {

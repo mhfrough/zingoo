@@ -2,7 +2,7 @@ import { ChangeDetectionStrategy, Component, computed, input } from '@angular/co
 import { takeUntilDestroyed, toSignal } from '@angular/core/rxjs-interop';
 import { ReactiveFormsModule, Validators } from '@angular/forms';
 import { fmtMoney } from '../../shared/format';
-import { Btn, Field, Modal } from '../../ui';
+import { Btn, Field, Offcanvas } from '../../ui';
 import { FormModal } from '../ops/form-modal';
 import { Distributor, Order, Product } from '../ops/models';
 
@@ -12,10 +12,10 @@ const today = () => new Date().toISOString().slice(0, 10);
 @Component({
   selector: 'app-order-form',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [ReactiveFormsModule, Modal, Field, Btn],
+  imports: [ReactiveFormsModule, Offcanvas, Field, Btn],
   template: `
-    <app-modal [(open)]="open" [title]="order() ? 'Edit draft order ' + order()!.refNo : 'New distributor sales order'"
-               subtitle="Dispatch it later to reserve stock and create the invoice.">
+    <app-offcanvas #oc [(open)]="open" [title]="order() ? 'Edit draft order ' + order()!.refNo : 'New distributor sales order'"
+               subtitle="Dispatch it later to reserve stock and create the invoice." size="lg" [dirty]="form.dirty">
       @if (error()) {
         <div class="notice" data-tone="danger" role="alert">{{ error() }}</div>
       }
@@ -53,13 +53,13 @@ const today = () => new Date().toISOString().slice(0, 10);
           <span>Invoice value <strong>{{ money(invoice()) }}</strong> = {{ cartons() }} cartons × {{ packs() }} packs × PKR {{ rate() }}</span>
         </div>
       }
-      <ng-container modalFooter>
-        <button appBtn type="button" (click)="close()">Cancel</button>
+      <ng-container offcanvasFooter>
+        <button appBtn type="button" (click)="oc.requestClose()">Cancel</button>
         <button appBtn variant="primary" type="submit" [attr.form]="formId" icon="check" [loading]="busy()">
           {{ order() ? 'Save draft order' : 'Create draft order' }}
         </button>
       </ng-container>
-    </app-modal>
+    </app-offcanvas>
   `,
 })
 export class OrderForm extends FormModal {

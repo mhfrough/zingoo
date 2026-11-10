@@ -1,7 +1,7 @@
 import { ChangeDetectionStrategy, Component, inject, input } from '@angular/core';
 import { ReactiveFormsModule, Validators } from '@angular/forms';
 import { SettingsStore } from '../../core/settings.store';
-import { Btn, Field, Modal } from '../../ui';
+import { Btn, Field, Offcanvas } from '../../ui';
 import { FormModal } from '../ops/form-modal';
 import { Manufacturer } from '../ops/models';
 import { SettingsApi } from './settings.api';
@@ -10,10 +10,10 @@ import { SettingsApi } from './settings.api';
 @Component({
   selector: 'app-manufacturer-form',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [ReactiveFormsModule, Modal, Field, Btn],
+  imports: [ReactiveFormsModule, Offcanvas, Field, Btn],
   template: `
-    <app-modal [(open)]="open" size="md" [title]="manufacturer() ? 'Edit manufacturer' : 'Add manufacturer'"
-               subtitle="The factory that makes the goods for Zen Foods.">
+    <app-offcanvas #oc [(open)]="open" [title]="manufacturer() ? 'Edit manufacturer' : 'Add manufacturer'"
+               subtitle="The factory that makes the goods for Zen Foods." size="lg" [dirty]="form.dirty">
       @if (error()) {
         <div class="notice" data-tone="danger" role="alert">{{ error() }}</div>
       }
@@ -33,13 +33,13 @@ import { SettingsApi } from './settings.api';
         </app-field>
         <app-field label="Contact" [wide]="true"><input type="text" formControlName="contact" maxlength="200" /></app-field>
       </form>
-      <ng-container modalFooter>
-        <button appBtn type="button" (click)="close()">Cancel</button>
+      <ng-container offcanvasFooter>
+        <button appBtn type="button" (click)="oc.requestClose()">Cancel</button>
         <button appBtn variant="primary" type="submit" [attr.form]="formId" icon="check" [loading]="busy()">
           {{ manufacturer() ? 'Save changes' : 'Add manufacturer' }}
         </button>
       </ng-container>
-    </app-modal>
+    </app-offcanvas>
   `,
 })
 export class ManufacturerForm extends FormModal {

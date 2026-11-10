@@ -1,6 +1,6 @@
 import { ChangeDetectionStrategy, Component, inject, input } from '@angular/core';
 import { ReactiveFormsModule, Validators } from '@angular/forms';
-import { Btn, Field, Modal } from '../../ui';
+import { Btn, Field, Offcanvas } from '../../ui';
 import { FormModal } from '../ops/form-modal';
 import { FinanceApi } from './finance.api';
 
@@ -8,9 +8,9 @@ import { FinanceApi } from './finance.api';
 @Component({
   selector: 'app-capital-target-form',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [ReactiveFormsModule, Modal, Field, Btn],
+  imports: [ReactiveFormsModule, Offcanvas, Field, Btn],
   template: `
-    <app-modal [(open)]="open" size="sm" title="Capital investment target" subtitle="Used for the progress bar on the Overview.">
+    <app-offcanvas #oc [(open)]="open" title="Capital investment target" subtitle="Used for the progress bar on the Overview." size="lg" [dirty]="form.dirty">
       @if (error()) {
         <div class="notice" data-tone="danger" role="alert">{{ error() }}</div>
       }
@@ -19,11 +19,11 @@ import { FinanceApi } from './finance.api';
           <span class="money-input"><span class="money-input__cur">PKR</span><input type="number" formControlName="target" min="0" step="10000" /></span>
         </app-field>
       </form>
-      <ng-container modalFooter>
-        <button appBtn type="button" (click)="close()">Cancel</button>
+      <ng-container offcanvasFooter>
+        <button appBtn type="button" (click)="oc.requestClose()">Cancel</button>
         <button appBtn variant="primary" type="submit" [attr.form]="formId" icon="check" [loading]="busy()">Save target</button>
       </ng-container>
-    </app-modal>
+    </app-offcanvas>
   `,
 })
 export class CapitalTargetForm extends FormModal {

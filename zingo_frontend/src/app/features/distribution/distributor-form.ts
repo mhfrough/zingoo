@@ -1,6 +1,6 @@
 import { ChangeDetectionStrategy, Component, input } from '@angular/core';
 import { ReactiveFormsModule, Validators } from '@angular/forms';
-import { Btn, Field, Modal } from '../../ui';
+import { Btn, Field, Offcanvas } from '../../ui';
 import { FormModal } from '../ops/form-modal';
 import { Distributor } from '../ops/models';
 
@@ -8,10 +8,10 @@ import { Distributor } from '../ops/models';
 @Component({
   selector: 'app-distributor-form',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [ReactiveFormsModule, Modal, Field, Btn],
+  imports: [ReactiveFormsModule, Offcanvas, Field, Btn],
   template: `
-    <app-modal [(open)]="open" [title]="distributor() ? 'Edit distributor' : 'Add distributor'"
-               subtitle="Company details and trading terms.">
+    <app-offcanvas #oc [(open)]="open" [title]="distributor() ? 'Edit distributor' : 'Add distributor'"
+               subtitle="Company details and trading terms." size="lg" [dirty]="form.dirty">
       @if (error()) {
         <div class="notice" data-tone="danger" role="alert">{{ error() }}</div>
       }
@@ -39,13 +39,13 @@ import { Distributor } from '../ops/models';
           <input type="number" formControlName="advancePct" min="0" max="100" step="1" />
         </app-field>
       </form>
-      <ng-container modalFooter>
-        <button appBtn type="button" (click)="close()">Cancel</button>
+      <ng-container offcanvasFooter>
+        <button appBtn type="button" (click)="oc.requestClose()">Cancel</button>
         <button appBtn variant="primary" type="submit" [attr.form]="formId" icon="check" [loading]="busy()">
           {{ distributor() ? 'Save distributor' : 'Add distributor' }}
         </button>
       </ng-container>
-    </app-modal>
+    </app-offcanvas>
   `,
 })
 export class DistributorForm extends FormModal {

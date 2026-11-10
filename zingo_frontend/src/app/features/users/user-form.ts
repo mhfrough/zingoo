@@ -1,7 +1,7 @@
 import { ChangeDetectionStrategy, Component, computed, inject, input } from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { ReactiveFormsModule, Validators } from '@angular/forms';
-import { Btn, Field, Modal } from '../../ui';
+import { Btn, Field, Offcanvas } from '../../ui';
 import { FormModal } from '../ops/form-modal';
 import { Distributor } from '../ops/models';
 import { ROLE_LIST, UserRow, UsersApi } from './users.api';
@@ -13,10 +13,10 @@ import { ROLE_LIST, UserRow, UsersApi } from './users.api';
 @Component({
   selector: 'app-user-form',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [ReactiveFormsModule, Modal, Field, Btn],
+  imports: [ReactiveFormsModule, Offcanvas, Field, Btn],
   template: `
-    <app-modal [(open)]="open" size="md" [title]="user() ? 'Edit user' : 'Add user'"
-               [subtitle]="user() ? user()!.email : 'They sign in with this email and password.'">
+    <app-offcanvas #oc [(open)]="open" [title]="user() ? 'Edit user' : 'Add user'"
+               [subtitle]="user() ? user()!.email : 'They sign in with this email and password.'" size="lg" [dirty]="form.dirty">
       @if (error()) {
         <div class="notice" data-tone="danger" role="alert">{{ error() }}</div>
       }
@@ -63,13 +63,13 @@ import { ROLE_LIST, UserRow, UsersApi } from './users.api';
           </app-field>
         }
       </form>
-      <ng-container modalFooter>
-        <button appBtn type="button" (click)="close()">Cancel</button>
+      <ng-container offcanvasFooter>
+        <button appBtn type="button" (click)="oc.requestClose()">Cancel</button>
         <button appBtn variant="primary" type="submit" [attr.form]="formId" icon="check" [loading]="busy()">
           {{ user() ? 'Save user' : 'Add user' }}
         </button>
       </ng-container>
-    </app-modal>
+    </app-offcanvas>
   `,
 })
 export class UserForm extends FormModal {

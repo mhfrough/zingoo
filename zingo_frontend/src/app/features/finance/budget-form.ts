@@ -1,7 +1,7 @@
 import { ChangeDetectionStrategy, Component, computed, inject, input, signal } from '@angular/core';
 import { FormControl, ReactiveFormsModule, Validators } from '@angular/forms';
 import { forkJoin } from 'rxjs';
-import { Btn, Field, Modal } from '../../ui';
+import { Btn, Field, Offcanvas } from '../../ui';
 import { FormModal } from '../ops/form-modal';
 import { FinanceApi } from './finance.api';
 import { Budget } from './models';
@@ -13,10 +13,10 @@ import { Budget } from './models';
 @Component({
   selector: 'app-budget-form',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [ReactiveFormsModule, Modal, Field, Btn],
+  imports: [ReactiveFormsModule, Offcanvas, Field, Btn],
   template: `
-    <app-modal [(open)]="open" size="sm" [title]="only() ? 'Edit ' + only()!.name + ' budget' : 'Edit all investment allocations'"
-               subtitle="PKR allocated to each cost center.">
+    <app-offcanvas #oc [(open)]="open" [title]="only() ? 'Edit ' + only()!.name + ' budget' : 'Edit all investment allocations'"
+               subtitle="PKR allocated to each cost center." size="lg" [dirty]="form.dirty">
       @if (error()) {
         <div class="notice" data-tone="danger" role="alert">{{ error() }}</div>
       }
@@ -27,11 +27,11 @@ import { Budget } from './models';
           </app-field>
         }
       </form>
-      <ng-container modalFooter>
-        <button appBtn type="button" (click)="close()">Cancel</button>
+      <ng-container offcanvasFooter>
+        <button appBtn type="button" (click)="oc.requestClose()">Cancel</button>
         <button appBtn variant="primary" type="submit" [attr.form]="formId" icon="check" [loading]="busy()">Save allocation</button>
       </ng-container>
-    </app-modal>
+    </app-offcanvas>
   `,
 })
 export class BudgetForm extends FormModal {

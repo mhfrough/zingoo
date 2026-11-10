@@ -1,6 +1,6 @@
 import { ChangeDetectionStrategy, Component, inject, input } from '@angular/core';
 import { ReactiveFormsModule, Validators } from '@angular/forms';
-import { Btn, Field, Modal } from '../../ui';
+import { Btn, Field, Offcanvas } from '../../ui';
 import { FormModal } from '../ops/form-modal';
 import { LedgerApi } from './ledger.api';
 import { ACCOUNT_TYPES, Account } from './models';
@@ -12,10 +12,10 @@ import { ACCOUNT_TYPES, Account } from './models';
 @Component({
   selector: 'app-account-form',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [ReactiveFormsModule, Modal, Field, Btn],
+  imports: [ReactiveFormsModule, Offcanvas, Field, Btn],
   template: `
-    <app-modal [(open)]="open" size="sm" [title]="account() ? 'Rename account' : 'Add an account'"
-               subtitle="The chart of accounts is what every posting lands in.">
+    <app-offcanvas #oc [(open)]="open" [title]="account() ? 'Rename account' : 'Add an account'"
+               subtitle="The chart of accounts is what every posting lands in." size="lg" [dirty]="form.dirty">
       @if (error()) {
         <div class="notice" data-tone="danger" role="alert">{{ error() }}</div>
       }
@@ -35,13 +35,13 @@ import { ACCOUNT_TYPES, Account } from './models';
           <input type="text" formControlName="name" maxlength="80" />
         </app-field>
       </form>
-      <ng-container modalFooter>
-        <button appBtn type="button" (click)="close()">Cancel</button>
+      <ng-container offcanvasFooter>
+        <button appBtn type="button" (click)="oc.requestClose()">Cancel</button>
         <button appBtn variant="primary" type="submit" [attr.form]="formId" icon="check" [loading]="busy()">
           {{ account() ? 'Save name' : 'Add account' }}
         </button>
       </ng-container>
-    </app-modal>
+    </app-offcanvas>
   `,
 })
 export class AccountForm extends FormModal {

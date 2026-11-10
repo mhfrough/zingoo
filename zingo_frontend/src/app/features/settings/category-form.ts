@@ -1,6 +1,6 @@
 import { ChangeDetectionStrategy, Component, computed, inject, input } from '@angular/core';
 import { ReactiveFormsModule, Validators } from '@angular/forms';
-import { Btn, Field, Modal } from '../../ui';
+import { Btn, Field, Offcanvas } from '../../ui';
 import { CategoryRow } from '../finance/models';
 import { FormModal } from '../ops/form-modal';
 import { SettingsApi } from './settings.api';
@@ -12,10 +12,10 @@ import { SettingsApi } from './settings.api';
 @Component({
   selector: 'app-category-form',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [ReactiveFormsModule, Modal, Field, Btn],
+  imports: [ReactiveFormsModule, Offcanvas, Field, Btn],
   template: `
-    <app-modal [(open)]="open" size="sm" [title]="category() ? 'Rename ' + category()!.name : 'Add ' + kindWord() + ' category'"
-               [subtitle]="category() ? 'Documents and the ledger account follow the new name.' : 'It becomes available on new invoices and bills.'">
+    <app-offcanvas #oc [(open)]="open" [title]="category() ? 'Rename ' + category()!.name : 'Add ' + kindWord() + ' category'"
+               [subtitle]="category() ? 'Documents and the ledger account follow the new name.' : 'It becomes available on new invoices and bills.'" size="lg" [dirty]="form.dirty">
       @if (error()) {
         <div class="notice" data-tone="danger" role="alert">{{ error() }}</div>
       }
@@ -24,13 +24,13 @@ import { SettingsApi } from './settings.api';
           <input type="text" formControlName="name" maxlength="80" />
         </app-field>
       </form>
-      <ng-container modalFooter>
-        <button appBtn type="button" (click)="close()">Cancel</button>
+      <ng-container offcanvasFooter>
+        <button appBtn type="button" (click)="oc.requestClose()">Cancel</button>
         <button appBtn variant="primary" type="submit" [attr.form]="formId" icon="check" [loading]="busy()">
           {{ category() ? 'Rename' : 'Add category' }}
         </button>
       </ng-container>
-    </app-modal>
+    </app-offcanvas>
   `,
 })
 export class CategoryForm extends FormModal {

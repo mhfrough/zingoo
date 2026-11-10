@@ -1,6 +1,6 @@
 import { ChangeDetectionStrategy, Component, inject } from '@angular/core';
 import { ReactiveFormsModule, Validators } from '@angular/forms';
-import { Btn, Field, Modal } from '../../ui';
+import { Btn, Field, Offcanvas } from '../../ui';
 import { FormModal } from '../ops/form-modal';
 import { FinanceApi } from './finance.api';
 
@@ -8,9 +8,9 @@ import { FinanceApi } from './finance.api';
 @Component({
   selector: 'app-cost-center-form',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [ReactiveFormsModule, Modal, Field, Btn],
+  imports: [ReactiveFormsModule, Offcanvas, Field, Btn],
   template: `
-    <app-modal [(open)]="open" size="sm" title="New investment cost center" subtitle="It appears in the budgets and in every stream list.">
+    <app-offcanvas #oc [(open)]="open" title="New investment cost center" subtitle="It appears in the budgets and in every stream list." size="lg" [dirty]="form.dirty">
       @if (error()) {
         <div class="notice" data-tone="danger" role="alert">{{ error() }}</div>
       }
@@ -22,11 +22,11 @@ import { FinanceApi } from './finance.api';
           <span class="money-input"><span class="money-input__cur">PKR</span><input type="number" formControlName="budget" min="0" step="1000" /></span>
         </app-field>
       </form>
-      <ng-container modalFooter>
-        <button appBtn type="button" (click)="close()">Cancel</button>
+      <ng-container offcanvasFooter>
+        <button appBtn type="button" (click)="oc.requestClose()">Cancel</button>
         <button appBtn variant="primary" type="submit" [attr.form]="formId" icon="plus" [loading]="busy()">Add cost center</button>
       </ng-container>
-    </app-modal>
+    </app-offcanvas>
   `,
 })
 export class CostCenterForm extends FormModal {

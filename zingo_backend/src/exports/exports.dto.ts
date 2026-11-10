@@ -2,7 +2,6 @@ import { PartialType } from '@nestjs/swagger';
 import {
   IsDateString, IsIn, IsInt, IsNotEmpty, IsNumber, IsOptional, IsPositive, IsString, IsUUID, Min,
 } from 'class-validator';
-import { INCOTERMS, PAY_METHODS } from '../common/enums';
 
 /** A container quote. Costs are in the invoice currency. */
 export class CreateExportDto {
@@ -11,7 +10,7 @@ export class CreateExportDto {
   @IsString() @IsNotEmpty() country: string;
   @IsOptional() @IsString() port?: string;
   @IsString() @IsNotEmpty() container: string;
-  @IsIn([...INCOTERMS]) incoterm: (typeof INCOTERMS)[number];
+  @IsString() @IsNotEmpty() incoterm: string;
   @IsUUID() productId: string;
   @IsInt() @Min(1) cartons: number;
   @IsString() @IsNotEmpty() currency: string;
@@ -42,7 +41,7 @@ export class ExportReceiptDto {
   @IsNumber() @IsPositive() foreignAmount: number;
   /** PKR per 1 unit on the day the money arrived */
   @IsNumber() @IsPositive() fxRate: number;
-  @IsOptional() @IsIn([...PAY_METHODS]) method?: string;
+  @IsOptional() @IsString() method?: string;
   @IsOptional() @IsString() note?: string;
 }
 
@@ -50,6 +49,6 @@ export class ExportReceiptDto {
 export class ExportCostPaymentDto {
   @IsDateString() date: string;
   @IsNumber() @IsPositive() amount: number;
-  @IsOptional() @IsIn([...PAY_METHODS]) method?: string;
+  @IsOptional() @IsString() method?: string;
   @IsOptional() @IsString() note?: string;
 }

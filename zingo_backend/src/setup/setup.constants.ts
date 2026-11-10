@@ -18,6 +18,7 @@ export const DEFAULT_SETTINGS = {
   paymentCycles: [15, 30, 45, 60],
   defaultPaymentCycle: 30,
   docPrefixes: { sales: 'SO', batch: 'B', finance: 'FIN', accounting: 'ACC', export: 'EXP' },
+  agingBuckets: [30, 60, 90],
 };
 
 export const CURRENCIES = [
@@ -69,4 +70,20 @@ export const STARTER_ACCOUNTS: [string, string, AccountType][] = [
   ['5300', 'Tax Expense', 'Expense'], ['5400', 'Depreciation Expense', 'Expense'],
   ...EXPENSE_CATEGORIES.map((c, i): [string, string, AccountType] => [String(6000 + i * 10), `Expense · ${c}`, 'Expense']),
   ...INCOME_CATEGORIES.map((c, i): [string, string, AccountType] => [String(4500 + i * 10), `Income · ${c}`, 'Revenue']),
+];
+
+/** Starting payment methods. Editable on Settings & Data. */
+export const PAYMENT_METHODS = ['Bank Transfer', 'Cash', 'Cheque', 'Other'];
+
+/**
+ * Starting Incoterms with the cost lines the seller carries (the client prototype's rules).
+ * Bank charges and other costs are always the seller's, so they are not listed. Editable on Settings & Data.
+ */
+export const INCOTERM_DEFAULTS: { code: string; description: string; flags: Record<string, boolean> }[] = [
+  { code: 'EXW', description: 'Buyer organizes most of the carriage', flags: { origin: false, ocean: false, insurance: false, destination: false, duty: false } },
+  { code: 'FOB', description: 'Seller delivers the goods on board the vessel and pays the origin costs', flags: { origin: true, ocean: false, insurance: false, destination: false, duty: false } },
+  { code: 'CFR', description: 'Seller also pays the ocean freight', flags: { origin: true, ocean: true, insurance: false, destination: false, duty: false } },
+  { code: 'CIF', description: 'Seller also pays the ocean freight and the marine insurance', flags: { origin: true, ocean: true, insurance: true, destination: false, duty: false } },
+  { code: 'DAP', description: 'Seller delivers to the named place, import duty not included', flags: { origin: true, ocean: true, insurance: true, destination: true, duty: false } },
+  { code: 'DDP', description: 'Seller delivers with import duty and import clearance paid', flags: { origin: true, ocean: true, insurance: true, destination: true, duty: true } },
 ];

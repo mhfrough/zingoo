@@ -1,6 +1,6 @@
 import { PartialType } from '@nestjs/swagger';
 import { IsDateString, IsIn, IsInt, IsNumber, IsOptional, IsPositive, IsString, IsUUID, Min } from 'class-validator';
-import { PAY_METHODS, QC_STATUS } from '../common/enums';
+import { QC_STATUS } from '../common/enums';
 
 export class CreateBatchDto {
   @IsDateString() date: string;
@@ -19,6 +19,6 @@ export class CreateMfrPaymentDto {
   @IsUUID() batchId: string;
   @IsDateString() date: string;
   @IsNumber() @IsPositive() amount: number;
-  @IsOptional() @IsIn([...PAY_METHODS]) method?: string;
+  @IsOptional() @IsString() method?: string;
   @IsOptional() @IsString() note?: string;
 }

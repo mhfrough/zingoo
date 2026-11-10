@@ -1,16 +1,5 @@
 /** Shapes returned by the export container endpoints. */
 
-export type Incoterm = 'EXW' | 'FOB' | 'CFR' | 'CIF' | 'DAP' | 'DDP';
-
-export const INCOTERMS: { code: Incoterm; text: string }[] = [
-  { code: 'EXW', text: 'Buyer organizes most of the carriage' },
-  { code: 'FOB', text: 'Seller delivers the goods on board the vessel and pays the origin costs' },
-  { code: 'CFR', text: 'Seller also pays the ocean freight' },
-  { code: 'CIF', text: 'Seller also pays the ocean freight and the marine insurance' },
-  { code: 'DAP', text: 'Seller delivers to the named place, import duty not included' },
-  { code: 'DDP', text: 'Seller delivers with import duty and import clearance paid' },
-];
-
 export interface ContainerType {
   code: string;
   maxCartons: number;
@@ -37,7 +26,7 @@ export interface ExportRow {
   country: string;
   port: string | null;
   container: string;
-  incoterm: Incoterm;
+  incoterm: string;
   productId: string;
   product: { id: string; sku: string; name: string };
   cartons: number;

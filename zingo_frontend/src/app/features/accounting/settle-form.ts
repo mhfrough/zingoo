@@ -1,11 +1,11 @@
 import { ChangeDetectionStrategy, Component, inject, input } from '@angular/core';
 import { ReactiveFormsModule, Validators } from '@angular/forms';
+import { SettingsStore } from '../../core/settings.store';
 import { fmtMoney } from '../../shared/format';
 import { Btn, Field, Modal } from '../../ui';
 import { FinanceApi } from '../finance/finance.api';
 import { AccountingDoc } from '../finance/models';
 import { FormModal } from '../ops/form-modal';
-import { PAY_METHODS } from '../ops/models';
 
 const today = () => new Date().toISOString().slice(0, 10);
 
@@ -34,7 +34,7 @@ const today = () => new Date().toISOString().slice(0, 10);
         </app-field>
         <app-field label="Payment method" [wide]="true">
           <select formControlName="method">
-            @for (m of methods; track m) {
+            @for (m of methods(); track m) {
               <option [value]="m">{{ m }}</option>
             }
           </select>
@@ -53,7 +53,7 @@ const today = () => new Date().toISOString().slice(0, 10);
 export class SettleForm extends FormModal {
   readonly doc = input<AccountingDoc | null>(null);
   readonly formId = 'form-settle';
-  protected methods = PAY_METHODS;
+  protected methods = inject(SettingsStore).paymentMethods;
   protected money = fmtMoney;
   private fin = inject(FinanceApi);
 

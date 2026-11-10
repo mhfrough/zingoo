@@ -4,7 +4,8 @@ import { DataSource, EntityManager } from 'typeorm';
 import { JournalSource } from '../common/enums';
 import { round2 } from '../common/numeric.transformer';
 import { Collection, SalesOrder } from '../distribution/distribution.entities';
-import { shipmentMath } from '../exports/export-math';
+import { flagsFor, shipmentMath } from '../exports/export-math';
+import { LookupsService } from '../setup/lookups.service';
 import { ExportCostPayment, ExportReceipt, ExportShipment } from '../exports/exports.entities';
 import { AccountingDocument, AccountingSettlement, Approval, FinanceEntry } from '../finance/finance.entities';
 import { ManufacturerPayment, ProductionBatch } from '../manufacturing/manufacturing.entities';
@@ -53,6 +54,7 @@ export class PostingService implements OnModuleInit {
   constructor(
     private readonly ledger: LedgerService,
     private readonly settings: SettingsService,
+    private readonly lookups: LookupsService,
     @InjectDataSource() private readonly db: DataSource,
   ) {}
 
@@ -217,7 +219,7 @@ export class PostingService implements OnModuleInit {
     let rows: LedgerRow[] = [];
     if (x.status === 'Shipped') {
       const s = await this.settings.get(em);
-      const m = shipmentMath(x, x.packsPerCarton ?? x.product.packsPerCarton ?? s.packsPerCarton, Number(x.unitCost ?? 0));
+      const m = shipmentMath(x, x.packsPerCarton ?? x.product.packsPerCarton ?? s.packsPerCarton, Number(x.unitCost ?? 0), flagsFor(await this.lookups.incotermFlags(em), x.incoterm));
       const date = x.shipDate ?? x.date;
       const fx = { currency: x.currency, fxRate: x.fxRate };
       rows = [

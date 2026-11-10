@@ -1,6 +1,7 @@
 import { ChangeDetectionStrategy, Component, computed, inject, input } from '@angular/core';
 import { takeUntilDestroyed, toSignal } from '@angular/core/rxjs-interop';
 import { ReactiveFormsModule, Validators } from '@angular/forms';
+import { SettingsStore } from '../../core/settings.store';
 import { fmtAmount2, fmtMoney, fmtPct } from '../../shared/format';
 import { Btn, Field, Modal } from '../../ui';
 import { Currency } from '../finance/models';
@@ -8,7 +9,7 @@ import { FormModal } from '../ops/form-modal';
 import { Product } from '../ops/models';
 import { QuoteInputs, quoteEstimate } from './export-math';
 import { ExportsApi } from './exports.api';
-import { ContainerType, ExportRow, INCOTERMS } from './models';
+import { ContainerType, ExportRow } from './models';
 
 const today = () => new Date().toISOString().slice(0, 10);
 
@@ -48,8 +49,8 @@ const COSTS = [
         </app-field>
         <app-field label="Sale term (Incoterm)" [required]="true">
           <select formControlName="incoterm">
-            @for (t of terms; track t.code) {
-              <option [value]="t.code">{{ t.code }}</option>
+            @for (t of terms(); track t) {
+              <option [value]="t">{{ t }}</option>
             }
           </select>
         </app-field>
@@ -107,7 +108,13 @@ export class ExportForm extends FormModal {
   readonly defaultIncoterm = input('FOB');
   readonly packsPerCarton = input(432);
   readonly formId = 'form-export';
-  protected terms = INCOTERMS;
+  private store = inject(SettingsStore);
+  /** active Incoterms, plus the one a quote already uses even if it was switched off since */
+  protected terms = computed(() => {
+    const list = this.store.incoterms().map((t) => t.code);
+    const cur = this.quote()?.incoterm;
+    return cur && !list.includes(cur) ? [...list, cur] : list;
+  });
   protected costs = COSTS;
   protected money = fmtMoney;
   protected amount = fmtAmount2;
@@ -146,7 +153,7 @@ export class ExportForm extends FormModal {
     const p = this.products().find((x) => x.id === v.productId);
     const packs = Number(p?.packsPerCarton ?? this.packsPerCarton());
     const perPack = p ? Number(p.manufacturerRate) + Number(p.packagingRate) + Number(p.printingRate) + Number(p.inboundRate) : 0;
-    return quoteEstimate(v as unknown as QuoteInputs, packs, perPack * packs);
+    return quoteEstimate(v as unknown as QuoteInputs, packs, perPack * packs, this.store.incotermFlags()[v.incoterm ?? ""]);
   });
 
   constructor() {

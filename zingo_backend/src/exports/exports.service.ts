@@ -6,9 +6,10 @@ import { StockService } from '../catalog/stock.service';
 import { round2 } from '../common/numeric.transformer';
 import { nextRef } from '../common/ref';
 import { PostingService } from '../ledger/posting.service';
+import { LookupsService } from '../setup/lookups.service';
 import { ContainerType, Currency, Setting } from '../setup/setup.entities';
 import { SettingsService } from '../setup/setup.service';
-import { shipmentMath } from './export-math';
+import { flagsFor, shipmentMath } from './export-math';
 import { CreateExportDto, ExportCostPaymentDto, ExportReceiptDto, UpdateExportDto } from './exports.dto';
 import { ExportCostPayment, ExportReceipt, ExportShipment } from './exports.entities';
 
@@ -25,6 +26,7 @@ export class ExportsService {
     private readonly posting: PostingService,
     private readonly settings: SettingsService,
     private readonly stock: StockService,
+    private readonly lookups: LookupsService,
   ) {}
 
   /** factory cost per carton: the released-batch average, else the planning rates x packs */
@@ -39,7 +41,7 @@ export class ExportsService {
     const p = x.product ?? (await em.findOneOrFail(Product, { where: { id: x.productId } }));
     const packs = x.packsPerCarton ?? p.packsPerCarton ?? s.packsPerCarton;
     const unitCost = x.unitCost ?? (await this.planningUnitCost(em, p, packs));
-    const m = shipmentMath(x, packs, unitCost);
+    const m = shipmentMath(x, packs, unitCost, flagsFor(await this.lookups.incotermFlags(em), x.incoterm));
     const [paid] = await em.query(`SELECT COALESCE(SUM("foreignAmount"), 0)::float8 AS v FROM export_receipts WHERE "shipmentId" = $1`, [x.id]);
     const [costPaid] = await em.query(`SELECT COALESCE(SUM(amount), 0)::float8 AS v FROM export_cost_payments WHERE "shipmentId" = $1`, [x.id]);
     const collected = round2(paid.v);
@@ -78,7 +80,7 @@ export class ExportsService {
   }
 
   /** the currency and container must be set up, and the rate must be positive */
-  private async check(em: EntityManager, d: { currency?: string; container?: string; productId?: string }) {
+  private async check(em: EntityManager, d: { currency?: string; container?: string; productId?: string; incoterm?: string }) {
     if (d.currency && !(await em.findOne(Currency, { where: { code: d.currency } }))) {
       throw new BadRequestException(`Currency ${d.currency} is not set up.`);
     }
@@ -88,6 +90,7 @@ export class ExportsService {
     if (d.productId && !(await em.findOne(Product, { where: { id: d.productId } }))) {
       throw new BadRequestException('Choose an existing product.');
     }
+    if (d.incoterm) await this.lookups.assertActive('INCOTERM', d.incoterm, em);
   }
 
   create(dto: CreateExportDto, opts: { refNo?: string } = {}) {
@@ -147,6 +150,7 @@ export class ExportsService {
     return this.db.transaction(async (em) => {
       const x = await this.findOne(id, em);
       if (x.status !== 'Shipped') throw new BadRequestException('Ship the container before collecting payment.');
+      await this.lookups.assertActive('PAY_METHOD', dto.method, em);
       if (dto.foreignAmount > x.due + 0.001) {
         throw new BadRequestException(`Enter an amount within the open balance of ${x.currency} ${x.due}.`);
       }
@@ -162,6 +166,7 @@ export class ExportsService {
     return this.db.transaction(async (em) => {
       const x = await this.findOne(id, em);
       if (x.status !== 'Shipped') throw new BadRequestException('Ship the container before paying its costs.');
+      await this.lookups.assertActive('PAY_METHOD', dto.method, em);
       if (dto.amount > x.costDue + 0.01) {
         throw new BadRequestException(`Enter an amount within the open export costs of PKR ${x.costDue}.`);
       }

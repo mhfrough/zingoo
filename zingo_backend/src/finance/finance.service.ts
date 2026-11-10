@@ -4,6 +4,7 @@ import { DataSource, EntityManager } from 'typeorm';
 import { round2 } from '../common/numeric.transformer';
 import { nextRef } from '../common/ref';
 import { PostingService } from '../ledger/posting.service';
+import { LookupsService } from '../setup/lookups.service';
 import { Currency } from '../setup/setup.entities';
 import { SettingsService } from '../setup/setup.service';
 import {
@@ -111,6 +112,7 @@ export class AccountingService {
     @InjectDataSource() private readonly db: DataSource,
     private readonly posting: PostingService,
     private readonly settings: SettingsService,
+    private readonly lookups: LookupsService,
   ) {}
 
   private async paidOf(em: EntityManager, id: string): Promise<number> {
@@ -218,6 +220,7 @@ export class AccountingService {
     return this.db.transaction(async (em) => {
       const a = await em.findOne(AccountingDocument, { where: { id } });
       if (!a) throw new NotFoundException('Document not found');
+      await this.lookups.assertActive('PAY_METHOD', dto.method, em);
       const st = await this.posting.accountingState(em, a);
       if (!st.approved) throw new BadRequestException('Approve the expense bill before posting a payment.');
       const due = round2(Number(a.amount) - (await this.paidOf(em, id)));

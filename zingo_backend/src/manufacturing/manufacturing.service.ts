@@ -4,6 +4,7 @@ import { DataSource, EntityManager } from 'typeorm';
 import { nextRef } from '../common/ref';
 import { round2 } from '../common/numeric.transformer';
 import { PostingService } from '../ledger/posting.service';
+import { LookupsService } from '../setup/lookups.service';
 import { SettingsService } from '../setup/setup.service';
 import { CreateBatchDto, CreateMfrPaymentDto, UpdateBatchDto } from './manufacturing.dto';
 import { ManufacturerPayment, ProductionBatch } from './manufacturing.entities';
@@ -99,6 +100,7 @@ export class MfrPaymentsService {
   constructor(
     @InjectDataSource() private readonly db: DataSource,
     private readonly posting: PostingService,
+    private readonly lookups: LookupsService,
   ) {}
 
   list() {
@@ -109,6 +111,7 @@ export class MfrPaymentsService {
     return this.db.transaction(async (em) => {
       const batch = await em.findOne(ProductionBatch, { where: { id: dto.batchId } });
       if (!batch) throw new NotFoundException('Batch not found');
+      await this.lookups.assertActive('PAY_METHOD', dto.method, em);
       if (batch.status !== 'Released') throw new BadRequestException('Only released batches can be paid.');
 
       const [row] = await em.query(`SELECT COALESCE(SUM(amount), 0)::float8 AS paid FROM manufacturer_payments WHERE "batchId" = $1`, [batch.id]);

@@ -142,6 +142,17 @@ export interface Settings {
   containerSize: string;
   /** default Incoterm for export quotes */
   defaultIncoterm: string;
+  companyName: string;
+  baseCurrency: string;
+  /** month the financial year starts (1-12) */
+  fiscalMonth: number;
+  /** locale for numbers and amounts, e.g. en-PK */
+  numberFormat: string;
+  salesTaxRate: number;
+  /** reference prefixes: sales, batch, finance, accounting, export */
+  docPrefixes: Record<string, string>;
+  /** upper day limits of the aged-receivable buckets */
+  agingBuckets: number[];
 }
 
 export const PAY_METHODS = ['Bank Transfer', 'Cash', 'Cheque', 'Other'] as const;

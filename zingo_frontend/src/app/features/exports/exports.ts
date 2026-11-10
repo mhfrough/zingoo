@@ -1,6 +1,7 @@
 import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
 import { rxResource } from '@angular/core/rxjs-interop';
 import { AuthService } from '../../core/auth.service';
+import { SettingsStore } from '../../core/settings.store';
 import { downloadCsv } from '../../shared/csv';
 import { errorText } from '../../shared/errors';
 import { Tone, fmtAmount2, fmtDate, fmtMoney, fmtNumber, fmtPct } from '../../shared/format';
@@ -13,7 +14,7 @@ import { ExportCollectForm } from './export-collect-form';
 import { ExportCostForm } from './export-cost-form';
 import { ExportForm } from './export-form';
 import { ExportsApi } from './exports.api';
-import { ContainerType, ExportCostPayment, ExportReceipt, ExportRow, INCOTERMS } from './models';
+import { ContainerType, ExportCostPayment, ExportReceipt, ExportRow } from './models';
 
 /** documents the buyer and the authorities ask for; a reminder, not customs advice */
 const CHECKLIST = [
@@ -52,7 +53,11 @@ export class Exports {
 
   protected canWrite = computed(() => this.auth.can('exports'));
   protected tab = signal('shipments');
-  protected terms = INCOTERMS;
+  private store = inject(SettingsStore);
+  /** every Incoterm from Settings & Data, with the cost lines the seller carries */
+  protected terms = computed(() => this.store.lookups().filter((l) => l.list === "INCOTERM"));
+  protected carries = (flags: Record<string, boolean>) =>
+    ["origin", "ocean", "insurance", "destination", "duty"].filter((k) => flags[k]).join(", ") || "nothing beyond bank charges";
   protected checklist = CHECKLIST;
   protected money = fmtMoney;
   protected number = fmtNumber;

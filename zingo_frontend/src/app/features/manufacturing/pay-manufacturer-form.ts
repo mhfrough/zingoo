@@ -1,9 +1,10 @@
-import { ChangeDetectionStrategy, Component, input } from '@angular/core';
+import { ChangeDetectionStrategy, Component, input, inject } from '@angular/core';
 import { ReactiveFormsModule, Validators } from '@angular/forms';
+import { SettingsStore } from '../../core/settings.store';
 import { fmtMoney } from '../../shared/format';
 import { Btn, Field, Modal } from '../../ui';
 import { FormModal } from '../ops/form-modal';
-import { Batch, PAY_METHODS } from '../ops/models';
+import { Batch } from '../ops/models';
 
 const today = () => new Date().toISOString().slice(0, 10);
 
@@ -29,7 +30,7 @@ const today = () => new Date().toISOString().slice(0, 10);
         </app-field>
         <app-field label="Method" [wide]="true">
           <select formControlName="method">
-            @for (m of methods; track m) {
+            @for (m of methods(); track m) {
               <option [value]="m">{{ m }}</option>
             }
           </select>
@@ -46,7 +47,7 @@ const today = () => new Date().toISOString().slice(0, 10);
 export class PayManufacturerForm extends FormModal {
   readonly batch = input<Batch | null>(null);
   readonly formId = 'form-pay-manufacturer';
-  protected methods = PAY_METHODS;
+  protected methods = inject(SettingsStore).paymentMethods;
   protected money = fmtMoney;
 
   readonly form = this.fb.nonNullable.group({

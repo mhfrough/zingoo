@@ -62,6 +62,10 @@ export class Setting {
   /** reference prefixes: { sales: 'SO', batch: 'B', finance: 'FIN', accounting: 'ACC', export: 'EXP' } */
   @Column({ type: 'jsonb' })
   docPrefixes: Record<string, string>;
+
+  /** upper day limits of the aged-receivable buckets, e.g. [30, 60, 90] = 1-30, 31-60, 61-90, over 90 days */
+  @Column({ type: 'jsonb', default: () => "'[30,60,90]'" })
+  agingBuckets: number[];
 }
 
 @Entity('currencies')
@@ -118,4 +122,29 @@ export class ContainerType {
 
   @Column({ type: 'int' })
   maxCartons: number;
+}
+
+/** The editable pick-lists (payment methods, Incoterms). The code is stored on documents, so it never changes; the rest can. */
+@Entity('lookups')
+@Unique(['list', 'code'])
+export class Lookup extends AppEntity {
+  /** PAY_METHOD or INCOTERM */
+  @Column({ type: 'varchar', length: 20 })
+  list: string;
+
+  @Column({ type: 'varchar', length: 40 })
+  code: string;
+
+  @Column({ type: 'varchar', length: 250, default: '' })
+  description: string;
+
+  /** Incoterms: which cost lines the seller carries ({ origin, ocean, insurance, destination, duty }) */
+  @Column({ type: 'jsonb', default: () => "'{}'" })
+  flags: Record<string, boolean>;
+
+  @Column({ default: true })
+  active: boolean;
+
+  @Column({ type: 'int', default: 0 })
+  sortOrder: number;
 }

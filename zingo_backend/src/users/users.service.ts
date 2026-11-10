@@ -1,4 +1,4 @@
-import { Injectable, Logger, OnApplicationBootstrap } from '@nestjs/common';
+import { BadRequestException, ConflictException, Injectable, Logger, NotFoundException, OnApplicationBootstrap } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
 import * as bcrypt from 'bcrypt';
@@ -52,6 +52,70 @@ export class UsersService implements OnApplicationBootstrap {
 
   findById(id: string) {
     return this.repo.findOne({ where: { id } });
+  }
+
+  /** a user as the users screen sees it: never the password hash */
+  private view(u: User) {
+    const { password: _hash, ...rest } = u;
+    return rest;
+  }
+
+  async list() {
+    const rows = await this.repo.find({ relations: ['distributor'], order: { name: 'ASC' } });
+    return rows.map((u) => ({ ...this.view(u), distributorName: u.distributor?.name ?? null, distributor: undefined }));
+  }
+
+  /** a login made from the users screen */
+  async add(dto: { name: string; email: string; password: string; role: Role; seat?: Seat; distributorId?: string }) {
+    const email = dto.email.trim().toLowerCase();
+    if (await this.findByEmail(email)) throw new ConflictException('A user with this email already exists.');
+    if (dto.role === 'Distributor' && !dto.distributorId) throw new BadRequestException('Choose which distributor this login belongs to.');
+    const u = await this.createUser({
+      email, name: dto.name.trim(), password: dto.password, role: dto.role,
+      seat: dto.role === 'Admin' || dto.role === 'Finance' ? dto.seat : 'None',
+      distributorId: dto.role === 'Distributor' ? dto.distributorId : null,
+    });
+    return this.view(u);
+  }
+
+  /**
+   * Change a login. The root account keeps its role, seat and active status, nobody can switch off or demote
+   * their own account here, and at least one active Admin always remains.
+   */
+  async edit(id: string, patch: { name?: string; role?: Role; seat?: Seat; status?: 'Active' | 'Disabled'; distributorId?: string | null }, actorId: string) {
+    const u = await this.repo.findOne({ where: { id } });
+    if (!u) throw new NotFoundException('User not found');
+    const role = patch.role ?? u.role;
+    const status = patch.status ?? u.status;
+    const losesAdmin = u.role === 'Admin' && u.status === 'Active' && (role !== 'Admin' || status !== 'Active');
+    if (u.isRoot && (role !== 'Admin' || status !== 'Active' || (patch.seat !== undefined && patch.seat !== 'Both'))) {
+      throw new BadRequestException('The root account keeps the Admin role, seat Both and active status.');
+    }
+    if (id === actorId && (role !== u.role || status !== 'Active')) {
+      throw new BadRequestException('You cannot switch off or demote your own account.');
+    }
+    if (losesAdmin && (await this.repo.count({ where: { role: 'Admin', status: 'Active' } })) <= 1) {
+      throw new BadRequestException('At least one active Admin must remain.');
+    }
+    if (role === 'Distributor' && !(patch.distributorId ?? u.distributorId)) {
+      throw new BadRequestException('Choose which distributor this login belongs to.');
+    }
+    Object.assign(u, {
+      ...(patch.name !== undefined ? { name: patch.name.trim() } : {}),
+      role,
+      status,
+      seat: role === 'Admin' || role === 'Finance' ? (patch.seat ?? u.seat) : 'None',
+      distributorId: role === 'Distributor' ? (patch.distributorId ?? u.distributorId) : null,
+    });
+    return this.view(await this.repo.save(u));
+  }
+
+  async resetPassword(id: string, password: string) {
+    const u = await this.repo.findOne({ where: { id } });
+    if (!u) throw new NotFoundException('User not found');
+    u.password = await bcrypt.hash(password, 10);
+    await this.repo.save(u);
+    return { reset: true };
   }
 
   async createUser(data: {

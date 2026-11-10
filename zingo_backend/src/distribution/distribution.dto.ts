@@ -1,6 +1,5 @@
 import { PartialType } from '@nestjs/swagger';
 import { IsBoolean, IsDateString, IsIn, IsInt, IsNumber, IsOptional, IsPositive, IsString, IsUUID, Min, MinLength } from 'class-validator';
-import { PAY_METHODS } from '../common/enums';
 
 export class CreateOrderDto {
   @IsDateString() date: string;
@@ -23,7 +22,7 @@ export class CreateCollectionDto {
   @IsUUID() orderId: string;
   @IsDateString() date: string;
   @IsNumber() @IsPositive() amount: number;
-  @IsOptional() @IsIn([...PAY_METHODS]) method?: string;
+  @IsOptional() @IsString() method?: string;
   @IsOptional() @IsString() note?: string;
   @IsOptional() @IsBoolean() isAdvance?: boolean;
 }

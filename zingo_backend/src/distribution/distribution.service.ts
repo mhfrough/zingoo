@@ -6,6 +6,7 @@ import { round2 } from '../common/numeric.transformer';
 import { nextRef } from '../common/ref';
 import { PostingService } from '../ledger/posting.service';
 import { AuditLog } from '../portal/portal.entities';
+import { LookupsService } from '../setup/lookups.service';
 import { Setting } from '../setup/setup.entities';
 import { SettingsService } from '../setup/setup.service';
 import { CreateCollectionDto, CreateOrderDto, UpdateOrderDto } from './distribution.dto';
@@ -175,6 +176,7 @@ export class CollectionsService {
     @InjectDataSource() private readonly db: DataSource,
     private readonly posting: PostingService,
     private readonly settings: SettingsService,
+    private readonly lookups: LookupsService,
   ) {}
 
   list() {
@@ -186,6 +188,7 @@ export class CollectionsService {
     return this.db.transaction(async (em) => {
       const order = await em.findOne(SalesOrder, { where: { id: dto.orderId }, relations: ['product'] });
       if (!order) throw new NotFoundException('Order not found');
+      await this.lookups.assertActive('PAY_METHOD', dto.method, em);
       if (order.status !== 'Dispatched') throw new BadRequestException('Only dispatched orders accept payments.');
 
       const s = await this.settings.get(em);

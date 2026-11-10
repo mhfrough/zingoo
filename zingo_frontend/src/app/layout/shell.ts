@@ -8,6 +8,7 @@ import {
 } from '@angular/router';
 import { filter, map } from 'rxjs';
 import { AuthService } from '../core/auth.service';
+import { SettingsStore } from '../core/settings.store';
 import { NAV, NAV_GROUPS, visibleNav } from '../portal.config';
 import { CONNECTION_STATUS, ConnectionStatus, IconComponent, Tag } from '../ui';
 import { prefersReducedMotion } from '../ui/motion';
@@ -21,6 +22,8 @@ import { prefersReducedMotion } from '../ui/motion';
 })
 export class Shell {
   protected auth = inject(AuthService);
+  /** loads the company settings and pick-lists once after sign-in, so every page and form can use them */
+  private store = inject(SettingsStore);
   private router = inject(Router);
 
   /** realtime connection state for the top bar pill (hidden until the platform layer provides CONNECTION_STATUS) */

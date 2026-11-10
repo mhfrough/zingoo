@@ -1,5 +1,5 @@
-import { IsBoolean, IsIn, IsInt, IsNotEmpty, IsNumber, IsOptional, IsString, MaxLength, Min } from 'class-validator';
-import { ACCOUNT_TYPES, INCOTERMS } from '../common/enums';
+import { IsArray, IsBoolean, IsIn, IsInt, IsNotEmpty, IsNumber, IsObject, IsOptional, IsPositive, IsString, Length, MaxLength, Min } from 'class-validator';
+import { ACCOUNT_TYPES } from '../common/enums';
 
 export class UpdateSettingsDto {
   @IsOptional() @IsString() @IsNotEmpty() companyName?: string;
@@ -12,11 +12,15 @@ export class UpdateSettingsDto {
   @IsOptional() @IsString() signatoryB?: string;
   @IsOptional() @IsInt() @Min(0) lowStockCartons?: number;
   @IsOptional() @IsString() containerSize?: string;
-  @IsOptional() @IsIn([...INCOTERMS]) defaultIncoterm?: string;
+  @IsOptional() @IsString() defaultIncoterm?: string;
   @IsOptional() @IsNumber() @Min(0) salesTaxRate?: number;
   @IsOptional() @IsNumber() @Min(0) profitAllocationPerPack?: number;
   @IsOptional() @IsInt({ each: true }) paymentCycles?: number[];
   @IsOptional() @IsInt() @Min(1) defaultPaymentCycle?: number;
+  /** reference prefixes, e.g. { sales: 'SO', batch: 'B', finance: 'FIN', accounting: 'ACC', export: 'EXP' } */
+  @IsOptional() @IsObject() docPrefixes?: Record<string, string>;
+  /** upper day limits of the aged-receivable buckets, e.g. [30, 60, 90] */
+  @IsOptional() @IsArray() @IsInt({ each: true }) @Min(1, { each: true }) agingBuckets?: number[];
 }
 
 export class CreateCostCenterDto {
@@ -39,4 +43,52 @@ export class CreateAccountDto {
 export class UpdateAccountDto {
   @IsOptional() @IsString() @IsNotEmpty() @MaxLength(80) name?: string;
   @IsOptional() @IsBoolean() active?: boolean;
+}
+
+/** Add an entry to an editable pick-list. */
+export class CreateLookupDto {
+  @IsIn(['PAY_METHOD', 'INCOTERM']) list: 'PAY_METHOD' | 'INCOTERM';
+  @IsString() @IsNotEmpty() @MaxLength(40) code: string;
+  @IsOptional() @IsString() @MaxLength(250) description?: string;
+  @IsOptional() @IsObject() flags?: Record<string, boolean>;
+}
+
+/** The code never changes; the text, the seller's cost lines and the on/off switch can. */
+export class UpdateLookupDto {
+  @IsOptional() @IsString() @MaxLength(250) description?: string;
+  @IsOptional() @IsObject() flags?: Record<string, boolean>;
+  @IsOptional() @IsBoolean() active?: boolean;
+}
+
+export class CreateCurrencyDto {
+  @IsString() @Length(3, 3) code: string;
+  @IsString() @IsNotEmpty() @MaxLength(60) name: string;
+  @IsString() @IsNotEmpty() @MaxLength(8) symbol: string;
+  /** PKR per 1 unit */
+  @IsNumber() @IsPositive() rate: number;
+}
+
+export class UpdateCurrencyDto {
+  @IsOptional() @IsString() @IsNotEmpty() @MaxLength(60) name?: string;
+  @IsOptional() @IsString() @IsNotEmpty() @MaxLength(8) symbol?: string;
+  @IsOptional() @IsNumber() @IsPositive() rate?: number;
+}
+
+export class CreateContainerDto {
+  @IsString() @IsNotEmpty() @MaxLength(10) code: string;
+  @IsInt() @Min(1) maxCartons: number;
+}
+
+export class UpdateContainerDto {
+  @IsInt() @Min(1) maxCartons: number;
+}
+
+/** Income and expense categories (cost centers have their own endpoint because of the budget). */
+export class CreateCategoryDto {
+  @IsIn(['INCOME', 'EXPENSE']) kind: 'INCOME' | 'EXPENSE';
+  @IsString() @IsNotEmpty() @MaxLength(80) name: string;
+}
+
+export class RenameCategoryDto {
+  @IsString() @IsNotEmpty() @MaxLength(80) name: string;
 }

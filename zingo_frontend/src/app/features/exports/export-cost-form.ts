@@ -1,9 +1,9 @@
 import { ChangeDetectionStrategy, Component, inject, input } from '@angular/core';
 import { ReactiveFormsModule, Validators } from '@angular/forms';
+import { SettingsStore } from '../../core/settings.store';
 import { fmtMoney } from '../../shared/format';
 import { Btn, Field, Modal } from '../../ui';
 import { FormModal } from '../ops/form-modal';
-import { PAY_METHODS } from '../ops/models';
 import { ExportsApi } from './exports.api';
 import { ExportRow } from './models';
 
@@ -30,7 +30,7 @@ const today = () => new Date().toISOString().slice(0, 10);
         </app-field>
         <app-field label="Payment method" [wide]="true">
           <select formControlName="method">
-            @for (m of methods; track m) {
+            @for (m of methods(); track m) {
               <option [value]="m">{{ m }}</option>
             }
           </select>
@@ -47,7 +47,7 @@ const today = () => new Date().toISOString().slice(0, 10);
 export class ExportCostForm extends FormModal {
   readonly shipment = input<ExportRow | null>(null);
   readonly formId = 'form-export-cost';
-  protected methods = PAY_METHODS;
+  protected methods = inject(SettingsStore).paymentMethods;
   protected money = fmtMoney;
   private exportsApi = inject(ExportsApi);
 

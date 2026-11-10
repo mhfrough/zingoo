@@ -2,7 +2,7 @@ import { BadRequestException, ConflictException, Injectable, NotFoundException }
 import { InjectRepository } from '@nestjs/typeorm';
 import { Subject } from 'rxjs';
 import { EntityManager, Repository } from 'typeorm';
-import { Account, Category, ContainerType, Currency, Setting } from './setup.entities';
+import { Account, Category, ContainerType, Currency, Lookup, Setting } from './setup.entities';
 import { DEFAULT_SETTINGS } from './setup.constants';
 
 @Injectable()
@@ -20,6 +20,24 @@ export class SettingsService {
 
   async update(patch: Partial<Setting>) {
     const current = await this.get();
+    const em = this.repo.manager;
+    if (patch.containerSize && !(await em.findOne(ContainerType, { where: { code: patch.containerSize } }))) {
+      throw new BadRequestException(`Container type ${patch.containerSize} is not set up.`);
+    }
+    if (patch.defaultIncoterm && !(await em.findOne(Lookup, { where: { list: 'INCOTERM', code: patch.defaultIncoterm, active: true } }))) {
+      throw new BadRequestException(`${patch.defaultIncoterm} is not an active Incoterm.`);
+    }
+    if (patch.docPrefixes) {
+      const bad = Object.entries(patch.docPrefixes).find(([, v]) => !/^[A-Za-z]{1,6}$/.test(String(v)));
+      if (bad) throw new BadRequestException('A document prefix is 1 to 6 letters, for example SO.');
+      patch = { ...patch, docPrefixes: { ...current.docPrefixes, ...patch.docPrefixes } };
+    }
+    if (patch.agingBuckets) {
+      const b = patch.agingBuckets;
+      if (b.length < 1 || b.length > 6 || b.some((v, i) => i > 0 && v <= b[i - 1])) {
+        throw new BadRequestException('Aging limits must be 1 to 6 day counts, each larger than the one before.');
+      }
+    }
     const next = await this.repo.save(this.repo.merge(current, { ...patch, id: 1 }));
     this.changed$.next();
     return next;
@@ -100,6 +118,60 @@ export class CategoriesService {
     row.budget = budget;
     return this.repo.save(row);
   }
+
+  /** add an income or expense category (it becomes available on new invoices and bills) */
+  async create(kind: 'INCOME' | 'EXPENSE', name: string) {
+    const clean = name.trim();
+    if (!clean) throw new BadRequestException('Enter a name.');
+    if (await this.repo.findOne({ where: { kind, name: clean } })) throw new ConflictException('This category already exists.');
+    return this.repo.save(this.repo.create({ kind, name: clean, budget: 0 }));
+  }
+
+  /** how many documents use a category name (cost centers: finance entries; income / expense: accounting documents) */
+  private async usage(kind: Category['kind'], name: string): Promise<number> {
+    const [r] = kind === 'COST_CENTER'
+      ? await this.repo.query('SELECT COUNT(*)::int AS n FROM finance_entries WHERE category = $1', [name])
+      : await this.repo.query('SELECT COUNT(*)::int AS n FROM accounting_documents WHERE category = $1 AND kind = $2', [name, kind === 'INCOME' ? 'Income' : 'Expense']);
+    return r.n;
+  }
+
+  /**
+   * Rename a category. Documents that used the old name follow it, and so does its ledger account
+   * ("Expense · Old" becomes "Expense · New") unless another category still uses that account.
+   */
+  async rename(id: string, name: string) {
+    const clean = name.trim();
+    if (!clean) throw new BadRequestException('Enter a name.');
+    return this.repo.manager.transaction(async (em) => {
+      const row = await em.findOne(Category, { where: { id } });
+      if (!row) throw new NotFoundException('Category not found');
+      if (row.name === clean) return row;
+      if (await em.findOne(Category, { where: { kind: row.kind, name: clean } })) throw new ConflictException('A category with this name already exists.');
+      const old = row.name;
+      if (row.kind === 'COST_CENTER') {
+        await em.query('UPDATE finance_entries SET category = $1 WHERE category = $2', [clean, old]);
+      } else {
+        await em.query('UPDATE accounting_documents SET category = $1 WHERE category = $2 AND kind = $3', [clean, old, row.kind === 'INCOME' ? 'Income' : 'Expense']);
+      }
+      const family = row.kind === 'INCOME' ? ['INCOME'] : ['COST_CENTER', 'EXPENSE'];
+      const sharing = await em.query('SELECT COUNT(*)::int AS n FROM categories WHERE name = $1 AND id <> $2 AND kind = ANY($3)', [old, id, family]);
+      const prefix = row.kind === 'INCOME' ? 'Income' : 'Expense';
+      const target = await em.findOne(Account, { where: { name: `${prefix} · ${clean}` } });
+      if (!sharing[0].n && !target) await em.update(Account, { name: `${prefix} · ${old}` }, { name: `${prefix} · ${clean}` });
+      row.name = clean;
+      return em.save(row);
+    });
+  }
+
+  /** a category that documents already use cannot be deleted (rename it instead) */
+  async remove(id: string) {
+    const row = await this.repo.findOne({ where: { id } });
+    if (!row) throw new NotFoundException('Category not found');
+    const used = await this.usage(row.kind, row.name);
+    if (used) throw new ConflictException(`${used} document(s) use "${row.name}". Rename it instead of deleting it.`);
+    await this.repo.remove(row);
+    return { deleted: true };
+  }
 }
 
 @Injectable()
@@ -115,5 +187,64 @@ export class CatalogListsService {
 
   containerList() {
     return this.containers.find({ order: { code: 'ASC' } });
+  }
+
+  /** add a currency; its rate is PKR per 1 unit */
+  async addCurrency(dto: { code: string; name: string; symbol: string; rate: number }) {
+    const code = dto.code.trim().toUpperCase();
+    if (await this.currencies.findOne({ where: { code } })) throw new ConflictException('This currency already exists.');
+    return this.currencies.save(this.currencies.create({ ...dto, code }));
+  }
+
+  /** change a name, symbol or rate; PKR is the base currency and always 1 */
+  async updateCurrency(code: string, patch: { name?: string; symbol?: string; rate?: number }) {
+    const c = await this.currencies.findOne({ where: { code } });
+    if (!c) throw new NotFoundException('Currency not found');
+    if (code === 'PKR' && patch.rate !== undefined && Math.abs(patch.rate - 1) > 0.000001) {
+      throw new BadRequestException('PKR is the base currency; its rate is always 1.');
+    }
+    return this.currencies.save(this.currencies.merge(c, patch));
+  }
+
+  /** a currency that documents, products or manufacturers use cannot be deleted */
+  async removeCurrency(code: string) {
+    if (code === 'PKR') throw new BadRequestException('PKR is the base currency and cannot be deleted.');
+    const c = await this.currencies.findOne({ where: { code } });
+    if (!c) throw new NotFoundException('Currency not found');
+    const [r] = await this.currencies.query(
+      `SELECT (SELECT COUNT(*) FROM accounting_documents WHERE currency = $1) + (SELECT COUNT(*) FROM export_shipments WHERE currency = $1)
+            + (SELECT COUNT(*) FROM journal_vouchers WHERE currency = $1) + (SELECT COUNT(*) FROM products WHERE currency = $1)
+            + (SELECT COUNT(*) FROM manufacturers WHERE currency = $1) AS n`,
+      [code],
+    );
+    if (Number(r.n)) throw new ConflictException('This currency is used by existing records. Change its rate instead of deleting it.');
+    await this.currencies.remove(c);
+    return { deleted: true };
+  }
+
+  async addContainer(dto: { code: string; maxCartons: number }) {
+    const code = dto.code.trim().toUpperCase();
+    if (await this.containers.findOne({ where: { code } })) throw new ConflictException('This container type already exists.');
+    return this.containers.save(this.containers.create({ code, maxCartons: dto.maxCartons }));
+  }
+
+  async updateContainer(code: string, maxCartons: number) {
+    const c = await this.containers.findOne({ where: { code } });
+    if (!c) throw new NotFoundException('Container type not found');
+    c.maxCartons = maxCartons;
+    return this.containers.save(c);
+  }
+
+  /** a container type used by a quote or set as the default cannot be deleted */
+  async removeContainer(code: string) {
+    const c = await this.containers.findOne({ where: { code } });
+    if (!c) throw new NotFoundException('Container type not found');
+    const [r] = await this.containers.query(
+      `SELECT (SELECT COUNT(*) FROM export_shipments WHERE container = $1) + (SELECT COUNT(*) FROM settings WHERE "containerSize" = $1) AS n`,
+      [code],
+    );
+    if (Number(r.n)) throw new ConflictException('This container type is in use (a quote or the default). Change that first.');
+    await this.containers.remove(c);
+    return { deleted: true };
   }
 }

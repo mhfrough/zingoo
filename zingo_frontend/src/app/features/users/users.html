@@ -1,0 +1,62 @@
+<app-page-header eyebrow="Zingoo · Zen Foods" title="Users & roles"
+  description="Who can sign in, what they can open and change, and who can sign for approvals.">
+  @if (canEdit()) {
+    <ng-container pageActions>
+      <button appBtn variant="primary" icon="plus" (click)="openUser()">Add user</button>
+    </ng-container>
+  }
+</app-page-header>
+
+<div class="stack">
+  <div class="grid-auto">
+    <app-kpi label="Active users" [value]="number(active())" icon="users" tone="accent" [foot]="number(disabled()) + ' switched off'" />
+    <app-kpi label="Admins" [value]="number(admins())" icon="shield-check" tone="info" foot="Can change settings and users" />
+    <app-kpi label="Signatories" [value]="number(signers())" icon="key" tone="success" foot="Can sign approvals" />
+    <app-kpi label="Roles" [value]="number(roles.length)" icon="lock" tone="warning" foot="Fixed by how the app works" />
+  </div>
+
+  <app-tabs [tabs]="tabs()" [(active)]="tab" ariaLabel="Users sections">
+    <ng-template appTabPanel="people">
+      <div class="card" data-flush>
+        <div class="card__head">
+          <div><h2>People</h2><p>Each login has one role. Admin and Finance can also hold a signing seat.</p></div>
+        </div>
+        <div class="card__body">
+          <app-data-table [columns]="columns" [rows]="users.value() ?? []" [actions]="actions" [loading]="users.isLoading()"
+            [error]="users.error() ? 'The server did not answer.' : null" searchPlaceholder="Search users"
+            emptyTitle="No users" emptyText="Add the first user." (retry)="reload()" (action)="onAction($event)" />
+        </div>
+      </div>
+    </ng-template>
+
+    <ng-template appTabPanel="roles">
+      <div class="stack">
+        <div class="card" data-flush>
+          <div class="card__head">
+            <div><h2>Pages each role can open</h2><p>The menu a person sees is built from this</p></div>
+          </div>
+          <div class="card__body">
+            <app-data-table [columns]="roleColumns()" [rows]="pageRows()" [searchable]="false" [loading]="access.isLoading()"
+              emptyTitle="No data" emptyText="The access matrix could not be loaded." />
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card__head">
+            <div><h2>Who can change what</h2><p>Reading is separate: a role that can open a page can always see it</p></div>
+          </div>
+          <div class="card__body">
+            <ul class="lines">
+              @for (w of writeRows(); track w.group) {
+                <li><span>{{ w.label }}</span><strong>{{ w.roles.join(', ') }}</strong></li>
+              }
+            </ul>
+          </div>
+        </div>
+      </div>
+    </ng-template>
+  </app-tabs>
+</div>
+
+<app-user-form [(open)]="userOpen" [user]="editing()" [distributors]="distributors.value() ?? []" (saved)="reload()" />
+<app-password-form [(open)]="passwordOpen" [user]="target()" />

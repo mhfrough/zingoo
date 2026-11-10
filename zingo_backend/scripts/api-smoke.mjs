@@ -258,5 +258,89 @@ ok('setting it again changes it (one rate per distributor and SKU)', again.json?
 ok('Manufacturing cannot set an agreed rate -> 403', (await call(T.factory, 'PUT', '/distributor-rates', { distributorId: dists[0].id, productId: sku.id, rate: 1 })).status === 403);
 ok('delete an agreed rate', (await call(T.sales, 'DELETE', `/distributor-rates/${setRate.json.id}`)).status === 200);
 
+
+// ── Settings & Data: lists, currencies, containers, categories, assumptions ──
+const lk = (await call(T.owner, 'GET', '/lookups')).json;
+ok('payment methods and Incoterms are database lists (4 + 6 entries)', lk.filter((l) => l.list === 'PAY_METHOD').length === 4 && lk.filter((l) => l.list === 'INCOTERM').length === 6);
+ok('only Admin can add a list entry -> 403', (await call(T.finance, 'POST', '/lookups', { list: 'PAY_METHOD', code: 'Easypaisa' })).status === 403);
+const newPm = await call(T.owner, 'POST', '/lookups', { list: 'PAY_METHOD', code: 'Easypaisa' });
+ok('Admin adds a payment method', newPm.status === 201 && newPm.json?.active === true, JSON.stringify(newPm.json).slice(0, 100));
+ok('adding the same entry twice -> 409', (await call(T.owner, 'POST', '/lookups', { list: 'PAY_METHOD', code: 'Easypaisa' })).status === 409);
+const p6doc = (await call(T.finance, 'POST', '/accounting-documents', { date: '2026-11-10', kind: 'Income', category: 'Services', foreignAmount: 1000, party: 'Lookup test' })).json;
+ok('a new payment method is accepted on a receipt', (await call(T.finance, 'POST', `/accounting-documents/${p6doc.id}/settle`, { date: '2026-11-10', amount: 100, method: 'Easypaisa' })).status === 201);
+ok('an unknown payment method -> 400', (await call(T.finance, 'POST', `/accounting-documents/${p6doc.id}/settle`, { date: '2026-11-10', amount: 100, method: 'Barter' })).status === 400);
+await call(T.owner, 'PATCH', `/lookups/${newPm.json.id}`, { active: false });
+ok('a switched-off payment method is refused', (await call(T.finance, 'POST', `/accounting-documents/${p6doc.id}/settle`, { date: '2026-11-10', amount: 100, method: 'Easypaisa' })).status === 400);
+const cifRow = lk.find((l) => l.list === 'INCOTERM' && l.code === 'CIF');
+const exQuote = (await call(T.exporter, 'POST', '/exports', { ...quote, cartons: 5, incoterm: 'CIF' })).json;
+ok('CIF seller costs follow the default rule (origin + ocean + insurance + bank fees = 1,550)', exQuote.costs.seller === 1550, JSON.stringify(exQuote.costs));
+await call(T.owner, 'PATCH', `/lookups/${cifRow.id}`, { flags: { origin: true, ocean: true, insurance: false, destination: false, duty: false } });
+const exQuote2 = (await call(T.exporter, 'GET', `/exports/${exQuote.id}`)).json;
+ok('editing the Incoterm rule changes the costing (no insurance -> 1,350)', exQuote2.costs.seller === 1350, JSON.stringify(exQuote2.costs));
+await call(T.owner, 'PATCH', `/lookups/${cifRow.id}`, { flags: cifRow.flags });
+await call(T.exporter, 'DELETE', `/exports/${exQuote.id}`);
+ok('an unknown Incoterm on a quote -> 400', (await call(T.exporter, 'POST', '/exports', { ...quote, incoterm: 'XYZ' })).status === 400);
+
+const eur = await call(T.owner, 'POST', '/currencies', { code: 'sar', name: 'Saudi Riyal', symbol: 'SAR', rate: 74.5 });
+ok('Admin adds a currency (code upper-cased)', eur.status === 201 && eur.json?.code === 'SAR');
+ok('the new currency rate can be changed', Number((await call(T.owner, 'PATCH', '/currencies/SAR', { rate: 75 })).json?.rate) === 75);
+ok('PKR must stay at rate 1 -> 400', (await call(T.owner, 'PATCH', '/currencies/PKR', { rate: 2 })).status === 400);
+ok('PKR cannot be deleted -> 400', (await call(T.owner, 'DELETE', '/currencies/PKR')).status === 400);
+ok('a currency in use cannot be deleted -> 409', (await call(T.owner, 'DELETE', '/currencies/USD')).status === 409);
+ok('an unused currency can be deleted', (await call(T.owner, 'DELETE', '/currencies/SAR')).status === 200);
+
+ok('add a container type', (await call(T.owner, 'POST', '/container-types', { code: '45HC', maxCartons: 2600 })).status === 201);
+ok('change its planning cartons', (await call(T.owner, 'PATCH', '/container-types/45HC', { maxCartons: 2700 })).json?.maxCartons === 2700);
+ok('the default container cannot be deleted -> 409', (await call(T.owner, 'DELETE', '/container-types/40HC')).status === 409);
+ok('an unused container type can be deleted', (await call(T.owner, 'DELETE', '/container-types/45HC')).status === 200);
+
+const newCat = await call(T.owner, 'POST', '/categories', { kind: 'EXPENSE', name: 'Insurance' });
+ok('Admin adds an expense category', newCat.status === 201);
+ok('a duplicate category -> 409', (await call(T.owner, 'POST', '/categories', { kind: 'EXPENSE', name: 'Insurance' })).status === 409);
+const catBill = (await call(T.finance, 'POST', '/accounting-documents', { date: '2026-11-10', kind: 'Expense', category: 'Insurance', foreignAmount: 1000, party: 'Insurer' })).json;
+ok('a category that documents use cannot be deleted -> 409', (await call(T.owner, 'DELETE', `/categories/${newCat.json.id}`)).status === 409);
+ok('renaming a category moves its documents', (await call(T.owner, 'PATCH', `/categories/${newCat.json.id}`, { name: 'Insurance & Cover' })).json?.name === 'Insurance & Cover'
+  && (await call(T.finance, 'GET', `/accounting-documents/${catBill.id}`)).json?.category === 'Insurance & Cover');
+const cat2 = await call(T.owner, 'POST', '/categories', { kind: 'INCOME', name: 'Scrap sales' });
+ok('an unused category can be deleted', (await call(T.owner, 'DELETE', `/categories/${cat2.json.id}`)).status === 200);
+
+ok('a document prefix must be letters -> 400', (await call(T.owner, 'PATCH', '/settings', { docPrefixes: { sales: '12' } })).status === 400);
+ok('an unknown default container -> 400', (await call(T.owner, 'PATCH', '/settings', { containerSize: '99XX' })).status === 400);
+ok('a non-increasing aging list -> 400', (await call(T.owner, 'PATCH', '/settings', { agingBuckets: [60, 30] })).status === 400);
+await call(T.owner, 'PATCH', '/settings', { agingBuckets: [15, 45] });
+const ag = (await call(T.owner, 'GET', '/reports/aged-receivables')).json;
+ok('aging buckets follow the setting (15, 45)', ag.buckets.map((b) => b.label).join('|') === 'Not yet due|1-15 days|16-45 days|Over 45 days', ag.buckets.map((b) => b.label).join('|'));
+await call(T.owner, 'PATCH', '/settings', { agingBuckets: [30, 60, 90] });
+await call(T.owner, 'PATCH', '/settings', { docPrefixes: { sales: 'SX' } });
+const sx = await call(T.sales, 'POST', '/orders', { date: '2026-11-10', distributorId: dists[0].id, productId: sku.id, cartons: 1, rate: 6.25 });
+ok('a changed document prefix applies to the next order (SX-)', String(sx.json?.refNo).startsWith('SX-'), JSON.stringify(sx.json).slice(0, 100));
+await call(T.sales, 'DELETE', `/orders/${sx.json?.id}`);
+await call(T.owner, 'PATCH', '/settings', { docPrefixes: { sales: 'SO' } });
+
+// ── Users & Roles ──
+const ul = await call(T.owner, 'GET', '/users');
+ok('Admin lists users, never the password', ul.status === 200 && ul.json.length >= 8 && ul.json.every((u) => u.password === undefined));
+ok('Viewer can read the user list', (await call(T.audit, 'GET', '/users')).status === 200);
+ok('Finance cannot read users -> 403', (await call(T.finance, 'GET', '/users')).status === 403);
+ok('Viewer cannot add a user -> 403', (await call(T.audit, 'POST', '/users', { name: 'x', email: 'x@example.test', password: 'Passw0rd!x', role: 'Viewer' })).status === 403);
+const nu = await call(T.owner, 'POST', '/users', { name: 'Smoke User', email: 'smoke@example.test', password: 'Passw0rd!x', role: 'Finance', seat: 'B' });
+ok('Admin adds a user', nu.status === 201 && nu.json?.seat === 'B' && nu.json?.password === undefined, JSON.stringify(nu.json).slice(0, 100));
+ok('the same email twice -> 409', (await call(T.owner, 'POST', '/users', { name: 'Again', email: 'SMOKE@example.test', password: 'Passw0rd!x', role: 'Viewer' })).status === 409);
+ok('a short password -> 400', (await call(T.owner, 'POST', '/users', { name: 'S', email: 's2@example.test', password: 'short', role: 'Viewer' })).status === 400);
+ok('a Distributor login needs a distributor -> 400', (await call(T.owner, 'POST', '/users', { name: 'D', email: 'd3@example.test', password: 'Passw0rd!x', role: 'Distributor' })).status === 400);
+ok('the new user can sign in', (await call(null, 'POST', '/auth/login', { email: 'smoke@example.test', password: 'Passw0rd!x' })).status === 201);
+ok('Admin changes the role (seat is cleared for Viewer)', (await call(T.owner, 'PATCH', `/users/${nu.json.id}`, { role: 'Viewer' })).json?.seat === 'None');
+await call(T.owner, 'POST', `/users/${nu.json.id}/reset-password`, { password: 'NewPassw0rd!y' });
+ok('a reset password works and the old one does not', (await call(null, 'POST', '/auth/login', { email: 'smoke@example.test', password: 'NewPassw0rd!y' })).status === 201
+  && (await call(null, 'POST', '/auth/login', { email: 'smoke@example.test', password: 'Passw0rd!x' })).status === 401);
+await call(T.owner, 'PATCH', `/users/${nu.json.id}`, { status: 'Disabled' });
+ok('a disabled user cannot sign in', (await call(null, 'POST', '/auth/login', { email: 'smoke@example.test', password: 'NewPassw0rd!y' })).status === 401);
+const ownerId = ul.json.find((u) => u.email === 'owner@example.test').id;
+ok('nobody can switch off their own account -> 400', (await call(T.owner, 'PATCH', `/users/${ownerId}`, { status: 'Disabled' })).status === 400);
+const rootUser = ul.json.find((u) => u.isRoot);
+if (rootUser) ok('the root account cannot be demoted -> 400', (await call(T.owner, 'PATCH', `/users/${rootUser.id}`, { role: 'Viewer' })).status === 400);
+const access = (await call(T.audit, 'GET', '/users/access')).json;
+ok('the permission matrix is readable', access?.pages?.Admin?.includes('settings') && access?.writes?.finance?.includes('Finance'));
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

@@ -49,8 +49,8 @@
             </div>
             <div class="card__body">
               <ul class="terms">
-                @for (t of terms; track t.code) {
-                  <li><strong class="mono">{{ t.code }}</strong><span>{{ t.text }}</span></li>
+                @for (t of terms(); track t.id) {
+                  <li [class.is-off]="!t.active"><strong class="mono">{{ t.code }}</strong><span>{{ t.description }} <em>Seller carries: {{ carries(t.flags) }}.</em></span></li>
                 }
               </ul>
             </div>

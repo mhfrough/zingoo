@@ -128,13 +128,19 @@ export class ReportsService {
 
   /** open receivables by how far past due they are, as of today */
   async agedReceivables() {
-    const { rows } = await this.receivables();
+    const [{ rows }, s] = await Promise.all([this.receivables(), this.settings.get()]);
     const asOf = new Date().toISOString().slice(0, 10);
     const day = 86_400_000;
-    const buckets = ['Not yet due', '1-30 days', '31-60 days', '61-90 days', 'Over 90 days'];
+    // the day limits come from Settings & Data, e.g. [30, 60, 90] -> 1-30, 31-60, 61-90, over 90
+    const limits = (s.agingBuckets?.length ? s.agingBuckets : [30, 60, 90]).map(Number);
+    const buckets = [
+      'Not yet due',
+      ...limits.map((hi, i) => `${i === 0 ? 1 : limits[i - 1] + 1}-${hi} days`),
+      `Over ${limits[limits.length - 1]} days`,
+    ];
     const aged = rows.map((r) => {
       const overdue = Math.floor((Date.parse(asOf) - Date.parse(String(r.dueDate).slice(0, 10))) / day);
-      const bucket = overdue <= 0 ? 0 : overdue <= 30 ? 1 : overdue <= 60 ? 2 : overdue <= 90 ? 3 : 4;
+      const bucket = overdue <= 0 ? 0 : (limits.findIndex((hi) => overdue <= hi) + 1 || limits.length + 1);
       return { ...r, daysOverdue: Math.max(0, overdue), bucket: buckets[bucket], bucketIndex: bucket };
     });
     return {

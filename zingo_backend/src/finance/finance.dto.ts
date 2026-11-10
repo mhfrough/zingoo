@@ -2,7 +2,7 @@ import { PartialType } from '@nestjs/swagger';
 import {
   IsDateString, IsIn, IsNotEmpty, IsNumber, IsOptional, IsPositive, IsString, IsUUID, Min,
 } from 'class-validator';
-import { DOC_KINDS, FINANCE_TYPES, FUNDING, PAY_METHODS } from '../common/enums';
+import { DOC_KINDS, FINANCE_TYPES, FUNDING } from '../common/enums';
 
 export class CreateFinanceDto {
   @IsDateString() date: string;
@@ -38,7 +38,7 @@ export class UpdateAccountingDto extends PartialType(CreateAccountingDto) {}
 export class SettleDto {
   @IsDateString() date: string;
   @IsNumber() @IsPositive() amount: number;
-  @IsOptional() @IsIn([...PAY_METHODS]) method?: string;
+  @IsOptional() @IsString() method?: string;
   @IsOptional() @IsString() note?: string;
 }
 

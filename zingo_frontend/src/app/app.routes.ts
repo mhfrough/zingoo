@@ -13,6 +13,8 @@ const BUILT: Record<string, () => Promise<unknown>> = {
   pricing: () => import('./features/pricing/pricing').then((m) => m.Pricing),
   exports: () => import('./features/exports/exports').then((m) => m.Exports),
   ledger: () => import('./features/ledger/ledger').then((m) => m.Ledger),
+  settings: () => import('./features/settings/settings').then((m) => m.Settings),
+  users: () => import('./features/users/users').then((m) => m.Users),
 };
 
 export const routes: Routes = [

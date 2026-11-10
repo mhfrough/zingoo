@@ -103,3 +103,7 @@ export const pageKey = (n: NavItem) => n.page ?? n.path;
  */
 export const visibleNav = (pages: string[] | undefined): NavItem[] =>
   pages ? NAV.filter((n) => pages.includes(pageKey(n))) : NAV;
+
+/** The first page a role can open (where it lands after signing in): Overview for staff, the partner portal for a distributor. */
+export const homePath = (pages: string[] | undefined): string =>
+  `/admin/${(pages ? NAV.find((n) => pages.includes(pageKey(n))) : NAV[0])?.path ?? 'overview'}`;

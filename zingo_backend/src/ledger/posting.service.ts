@@ -4,6 +4,7 @@ import { DataSource, EntityManager } from 'typeorm';
 import { JournalSource } from '../common/enums';
 import { round2 } from '../common/numeric.transformer';
 import { Collection, SalesOrder } from '../distribution/distribution.entities';
+import { CreditNote } from '../portal/portal.entities';
 import { flagsFor, shipmentMath } from '../exports/export-math';
 import { LookupsService } from '../setup/lookups.service';
 import { ExportCostPayment, ExportReceipt, ExportShipment } from '../exports/exports.entities';
@@ -32,6 +33,9 @@ export const ACC = {
   EXPORT_COSTS_PAYABLE: 'Export Costs Payable',
   FX_GAIN: 'FX Gain',
   FX_LOSS: 'FX Loss',
+  CUSTOMER_ADVANCES: 'Customer Advances',
+  SALES_RETURNS: 'Sales Returns & Allowances',
+  DIST_CREDIT_PAYABLE: 'Distributor Credit Payable',
 } as const;
 
 export interface ApprovalState {
@@ -135,6 +139,7 @@ export class PostingService implements OnModuleInit {
       rows = [
         ...this.pair(date, 'Distribution', o.refNo, `Distributor invoice · ${o.distributor.name}`, ACC.AR, ACC.SALES, billed),
         ...this.pair(date, 'Distribution', o.refNo, `COGS · ${o.product.sku}`, ACC.COGS, ACC.INVENTORY, o.cartons * Number(o.unitCost ?? 0)),
+        ...this.pair(date, 'Distribution', o.refNo, `Apply advances paid before dispatch · ${o.distributor.name}`, ACC.CUSTOMER_ADVANCES, ACC.AR, await this.advancesOf(em, id)),
       ];
     }
     await this.ledger.replace(em, 'ORDER', id, rows);
@@ -144,7 +149,30 @@ export class PostingService implements OnModuleInit {
     const c = await em.findOne(Collection, { where: { id }, relations: ['order'] });
     if (!c) return;
     await this.ledger.replace(em, 'COLLECTION', id,
-      this.pair(c.date, 'Distribution', c.refNo, `Distributor collection · ${c.order.refNo}`, ACC.CASH, ACC.AR, c.amount));
+      this.pair(c.date, 'Distribution', c.refNo,
+        c.isAdvance ? `Distributor advance · ${c.order.refNo}` : `Distributor collection · ${c.order.refNo}`,
+        ACC.CASH, c.isAdvance ? ACC.CUSTOMER_ADVANCES : ACC.AR, c.amount));
+  }
+
+  /** money a distributor paid before the order was dispatched */
+  private async advancesOf(em: EntityManager, orderId: string): Promise<number> {
+    const [r] = await em.query(`SELECT COALESCE(SUM(amount), 0)::float8 AS v FROM collections WHERE "orderId" = $1 AND "isAdvance" = true`, [orderId]);
+    return round2(r.v);
+  }
+
+  /**
+   * An approved damage / shortage claim. The part that fits inside the open invoice reduces the receivable;
+   * anything beyond it is credit owed back to the distributor. Both are booked against Sales Returns & Allowances.
+   */
+  async syncCreditNote(em: EntityManager, id: string) {
+    const c = await em.findOne(CreditNote, { where: { id }, relations: ['order'] });
+    if (!c) return;
+    const refund = round2(Number(c.refund));
+    const applied = round2(Number(c.amount) - refund);
+    await this.ledger.replace(em, 'CREDIT_NOTE', id, [
+      ...this.pair(c.date, 'Distributor Portal', c.refNo, `Approved damaged / missing credit · ${c.order.refNo}`, ACC.SALES_RETURNS, ACC.AR, applied),
+      ...this.pair(c.date, 'Distributor Portal', c.refNo, `Distributor refund / credit due · ${c.order.refNo}`, ACC.SALES_RETURNS, ACC.DIST_CREDIT_PAYABLE, refund),
+    ]);
   }
 
   // ───────────── finance ─────────────

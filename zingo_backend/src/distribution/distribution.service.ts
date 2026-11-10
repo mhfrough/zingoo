@@ -43,21 +43,31 @@ export class OrdersService {
     return Object.fromEntries(rows.map((r) => [r.orderId, r.total]));
   }
 
+  /** invoice value cancelled by approved credit notes, per order */
+  private async creditedMap(em: EntityManager): Promise<Record<string, number>> {
+    const rows: { orderId: string; total: number }[] = await em.query(
+      `SELECT "orderId", SUM(amount - refund)::float8 AS total FROM credit_notes GROUP BY "orderId"`,
+    );
+    return Object.fromEntries(rows.map((r) => [r.orderId, r.total]));
+  }
+
   /** what each distributor still owes on dispatched orders (the "exposure" before a new order) */
   private async openByDistributor(em: EntityManager): Promise<Record<string, number>> {
     const rows: { id: string; open: number }[] = await em.query(`
       SELECT o."distributorId" AS id,
-             COALESCE(SUM(GREATEST(0, o.cartons * o."packsPerCarton" * o.rate - COALESCE(c.paid, 0))), 0)::float8 AS open
+             COALESCE(SUM(GREATEST(0, o.cartons * o."packsPerCarton" * o.rate - COALESCE(c.paid, 0) - COALESCE(k.credited, 0))), 0)::float8 AS open
         FROM sales_orders o
         LEFT JOIN (SELECT "orderId", SUM(amount) AS paid FROM collections GROUP BY "orderId") c ON c."orderId" = o.id
+        LEFT JOIN (SELECT "orderId", SUM(amount - refund) AS credited FROM credit_notes GROUP BY "orderId") k ON k."orderId" = o.id
        WHERE o.status = 'Dispatched'
        GROUP BY o."distributorId"`);
     return Object.fromEntries(rows.map((r) => [r.id, round2(r.open)]));
   }
 
-  private decorate(o: SalesOrder, s: Setting, collected: Record<string, number>, open: Record<string, number>) {
+  private decorate(o: SalesOrder, s: Setting, collected: Record<string, number>, open: Record<string, number>, credits: Record<string, number> = {}) {
     const billed = billedOf(o, s);
     const paid = round2(collected[o.id] ?? 0);
+    const credited = round2(credits[o.id] ?? 0);
     const terms = o.paymentTermsDays ?? o.distributor?.paymentDays ?? s.defaultPaymentCycle;
 
     // Credit hold: a draft order may not push the distributor over the credit limit.
@@ -70,7 +80,8 @@ export class OrdersService {
       ...o,
       billed,
       collected: paid,
-      outstanding: o.status === 'Dispatched' ? Math.max(0, round2(billed - paid)) : 0,
+      credited,
+      outstanding: o.status === 'Dispatched' ? Math.max(0, round2(billed - paid - credited)) : 0,
       paymentTermsDays: terms,
       dueDate: o.dueDate ?? datePlus(o.dispatchDate ?? o.date, terms),
       creditLimit: limit,
@@ -81,19 +92,20 @@ export class OrdersService {
 
   async list() {
     const em = this.db.manager;
-    const [rows, s, collected, open] = await Promise.all([
+    const [rows, s, collected, open, credits] = await Promise.all([
       em.find(SalesOrder, { relations: ['distributor', 'product'], order: { date: 'DESC', refNo: 'DESC' } }),
       this.settings.get(),
       this.collectedMap(em),
       this.openByDistributor(em),
+      this.creditedMap(em),
     ]);
-    return rows.map((o) => this.decorate(o, s, collected, open));
+    return rows.map((o) => this.decorate(o, s, collected, open, credits));
   }
 
   async findOne(id: string, em: EntityManager = this.db.manager) {
     const o = await em.findOne(SalesOrder, { where: { id }, relations: ['distributor', 'product'] });
     if (!o) throw new NotFoundException('Order not found');
-    return this.decorate(o, await this.settings.get(em), await this.collectedMap(em), await this.openByDistributor(em));
+    return this.decorate(o, await this.settings.get(em), await this.collectedMap(em), await this.openByDistributor(em), await this.creditedMap(em));
   }
 
   create(dto: CreateOrderDto, opts: { refNo?: string } = {}) {
@@ -185,22 +197,29 @@ export class CollectionsService {
 
   /** Records money received. It cannot be more than what the distributor still owes on the order. */
   create(dto: CreateCollectionDto, opts: { refNo?: string } = {}) {
-    return this.db.transaction(async (em) => {
+    return this.db.transaction((em) => this.createInTransaction(em, dto, opts.refNo));
+  }
+
+  /** the same, inside a transaction the caller already holds (the partner portal confirms an advice this way) */
+  async createInTransaction(em: EntityManager, dto: CreateCollectionDto, refNoGiven?: string) {
+    {
       const order = await em.findOne(SalesOrder, { where: { id: dto.orderId }, relations: ['product'] });
       if (!order) throw new NotFoundException('Order not found');
       await this.lookups.assertActive('PAY_METHOD', dto.method, em);
-      if (order.status !== 'Dispatched') throw new BadRequestException('Only dispatched orders accept payments.');
+      // before dispatch the money is an advance, held as a customer liability until the invoice exists
+      const isAdvance = order.status !== 'Dispatched';
 
       const s = await this.settings.get(em);
       const [{ paid }] = await em.query(`SELECT COALESCE(SUM(amount), 0)::float8 AS paid FROM collections WHERE "orderId" = $1`, [order.id]);
-      const due = round2(billedOf(order, s) - Number(paid));
+      const [{ credited }] = await em.query(`SELECT COALESCE(SUM(amount - refund), 0)::float8 AS credited FROM credit_notes WHERE "orderId" = $1`, [order.id]);
+      const due = round2(billedOf(order, s) - Number(paid) - Number(credited));
       if (due <= 0) throw new BadRequestException('This order is already fully paid.');
       if (dto.amount > due + 0.001) throw new BadRequestException(`Payment cannot exceed the outstanding amount of PKR ${due}.`);
 
-      const refNo = opts.refNo ?? (await nextRef(em, Collection, 'RC', 2));
-      const c = await em.save(em.create(Collection, { ...dto, refNo, method: dto.method ?? 'Bank Transfer' }));
+      const refNo = refNoGiven ?? (await nextRef(em, Collection, 'RC', 2));
+      const c = await em.save(em.create(Collection, { ...dto, refNo, method: dto.method ?? 'Bank Transfer', isAdvance }));
       await this.posting.syncCollection(em, c.id);
       return c;
-    });
+    }
   }
 }

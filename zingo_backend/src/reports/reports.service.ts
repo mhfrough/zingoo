@@ -55,7 +55,7 @@ export class ReportsService {
     for (const r of rows) {
       if (r.type === 'Revenue') {
         const v = r.credit - r.debit;
-        if (r.name === 'Sales Revenue' || r.name === 'Export Sales Revenue') sales += v; else other += v;
+        if (['Sales Revenue', 'Export Sales Revenue', 'Sales Returns & Allowances'].includes(r.name)) sales += v; else other += v;
         income[r.name] = round2(v);
       } else if (r.type === 'COGS') {
         cogs += r.debit - r.credit;

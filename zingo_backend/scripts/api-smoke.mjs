@@ -342,5 +342,107 @@ if (rootUser) ok('the root account cannot be demoted -> 400', (await call(T.owne
 const access = (await call(T.audit, 'GET', '/users/access')).json;
 ok('the permission matrix is readable', access?.pages?.Admin?.includes('settings') && access?.writes?.finance?.includes('Finance'));
 
+
+// ── Distributor partner portal ──
+const p7prof = await call(T.dist, 'GET', '/portal/profile');
+ok('a distributor login sees its own profile', p7prof.status === 200 && p7prof.json?.distributor?.name && p7prof.json?.paymentMethods?.includes('Bank Transfer'), JSON.stringify(p7prof.json).slice(0, 100));
+const p7me = p7prof.json?.distributor?.id;
+const p7others = (await call(T.owner, 'GET', '/distributors')).json.filter((d) => d.id !== p7me);
+const p7spy = await call(T.dist, 'GET', `/portal/orders?distributorId=${p7others[0].id}`);
+ok('a distributor cannot look at another distributor (the query is ignored)', p7spy.status === 200 && p7spy.json.every((o) => o.distributorId === p7me));
+ok('a distributor cannot open the staff approval desk -> 403', (await call(T.dist, 'GET', '/portal/desk')).status === 403);
+ok('Viewer cannot open the portal -> 403', (await call(T.audit, 'GET', '/portal/profile')).status === 403);
+ok('Manufacturing cannot open the portal -> 403', (await call(T.factory, 'GET', '/portal/profile')).status === 403);
+const p7sku = (await call(T.owner, 'GET', '/products')).json.find((p) => p.stockCartons >= 6);
+ok('a product has stock for the portal test', !!p7sku);
+ok('a request with a delivery date before the request date -> 400', (await call(T.dist, 'POST', '/portal/requests', { date: '2026-11-10', productId: p7sku.id, cartons: 3, requestedDate: '2026-11-01' })).status === 400);
+const p7req = await call(T.dist, 'POST', '/portal/requests', { date: '2026-11-10', productId: p7sku.id, cartons: 3, requestedDate: '2026-11-15', poRef: 'PO-77' });
+ok('a distributor files a stock request', p7req.status === 201 && p7req.json?.status === 'Requested', JSON.stringify(p7req.json).slice(0, 100));
+ok('a distributor cannot accept its own request -> 403', (await call(T.dist, 'POST', `/portal/requests/${p7req.json.id}/accept`, {})).status === 403);
+ok('the approval desk lists it for staff', (await call(T.sales, 'GET', '/portal/desk')).json?.requests?.some((r) => r.id === p7req.json.id));
+const p7acc = await call(T.sales, 'POST', `/portal/requests/${p7req.json.id}/accept`, { advancePct: 20 });
+ok('staff accept it into a draft sales order with the price locked', p7acc.status === 201 && p7acc.json?.order?.status === 'Draft' && p7acc.json?.order?.poRef === 'PO-77', JSON.stringify(p7acc.json).slice(0, 140));
+const p7order = p7acc.json.order;
+ok('accepting twice -> 400', (await call(T.sales, 'POST', `/portal/requests/${p7req.json.id}/accept`, {})).status === 400);
+const p7rej = await call(T.dist, 'POST', '/portal/requests', { date: '2026-11-10', productId: p7sku.id, cartons: 1 });
+ok('rejecting without a reason -> 400', (await call(T.sales, 'POST', `/portal/requests/${p7rej.json.id}/reject`, {})).status === 400);
+ok('staff reject a request with a reason', (await call(T.sales, 'POST', `/portal/requests/${p7rej.json.id}/reject`, { note: 'Out of stock this week' })).status === 201);
+
+// advance payment before dispatch
+const p7bill = Math.round(p7order.cartons * p7sku.packsPerCarton * Number(p7order.rate) * 100) / 100;
+ok('an advice above the pro-forma -> 400', (await call(T.dist, 'POST', '/portal/advices', { orderId: p7order.id, date: '2026-11-10', amount: p7bill + 1 })).status === 400);
+ok('an advice with an unknown payment method -> 400', (await call(T.dist, 'POST', '/portal/advices', { orderId: p7order.id, date: '2026-11-10', amount: 1000, method: 'Barter' })).status === 400);
+ok('an attachment of the wrong type -> 400', (await call(T.dist, 'POST', '/portal/advices', { orderId: p7order.id, date: '2026-11-10', amount: 1000, proofName: 'x.exe', proofMime: 'application/x-msdownload', proofData: 'AAAA' })).status === 400);
+const p7adv = await call(T.dist, 'POST', '/portal/advices', { orderId: p7order.id, date: '2026-11-10', amount: 5000, bankRef: 'UTR-1', proofName: 'slip.png', proofMime: 'image/png', proofData: 'iVBORw0KGgo=' });
+ok('a distributor reports an advance payment', p7adv.status === 201 && p7adv.json?.status === 'Submitted' && p7adv.json?.isAdvance === true, JSON.stringify(p7adv.json).slice(0, 120));
+ok('a second advice cannot exceed what is still open (pending reserves it)', (await call(T.dist, 'POST', '/portal/advices', { orderId: p7order.id, date: '2026-11-10', amount: p7bill - 4000 })).status === 400);
+const p7cashA = (await call(T.owner, 'GET', '/reports/dashboard')).json.cash;
+ok('an unconfirmed advice does not touch cash', p7cashA === (await call(T.owner, 'GET', '/reports/dashboard')).json.cash);
+ok('Distribution cannot confirm money -> 403', (await call(T.sales, 'POST', `/portal/advices/${p7adv.json.id}/confirm`)).status === 403);
+ok('the distributor can open its own proof', (await call(T.dist, 'GET', `/portal/advices/${p7adv.json.id}/proof`)).json?.mime === 'image/png');
+const p7conf = await call(T.finance, 'POST', `/portal/advices/${p7adv.json.id}/confirm`);
+ok('Finance confirms the advice', p7conf.status === 201 && p7conf.json?.collection?.isAdvance === true, JSON.stringify(p7conf.json).slice(0, 120));
+ok('confirming raises cash by the advance', (await call(T.owner, 'GET', '/reports/dashboard')).json.cash === p7cashA + 5000);
+const p7tb1 = (await call(T.owner, 'GET', '/reports/trial-balance')).json;
+ok('the advance is held as a customer advance (liability)', Math.abs(-(p7tb1.accounts.find((a) => a.name === 'Customer Advances')?.net ?? 0) - 5000) < 0.01);
+ok('confirming twice -> 400', (await call(T.finance, 'POST', `/portal/advices/${p7adv.json.id}/confirm`)).status === 400);
+const p7disp = await call(T.sales, 'POST', `/orders/${p7order.id}/dispatch`);
+ok('dispatch the accepted order', p7disp.status === 201 && p7disp.json?.status === 'Dispatched', JSON.stringify(p7disp.json).slice(0, 100));
+const p7tb2 = (await call(T.owner, 'GET', '/reports/trial-balance')).json;
+ok('dispatch applies the advance to the invoice (advances back to zero)', Math.abs(p7tb2.accounts.find((a) => a.name === 'Customer Advances')?.net ?? 0) < 0.01 && p7tb2.balanced === true);
+ok('the order is billed less the advance', Math.abs(p7disp.json.outstanding - (p7bill - 5000)) < 0.01, `${p7disp.json.outstanding} vs ${p7bill - 5000}`);
+
+// delivery and claim
+ok('good + damaged + missing must equal the shipped cartons -> 400', (await call(T.dist, 'POST', '/portal/receipts', { orderId: p7order.id, date: '2026-11-12', goodCartons: 1, damagedCartons: 1, missingCartons: 0, condition: 'Damaged', reason: 'x' })).status === 400);
+ok('a discrepancy needs an explanation -> 400', (await call(T.dist, 'POST', '/portal/receipts', { orderId: p7order.id, date: '2026-11-12', goodCartons: 2, damagedCartons: 1, missingCartons: 0, condition: 'Damaged' })).status === 400);
+const p7other = (await call(T.owner, 'GET', '/orders')).json.find((o) => o.distributorId !== p7me && o.status === 'Dispatched');
+ok('a distributor cannot receive another distributor\'s order -> 404', (await call(T.dist, 'POST', '/portal/receipts', { orderId: p7other.id, date: '2026-11-12', goodCartons: p7other.cartons, damagedCartons: 0, missingCartons: 0, condition: 'Good' })).status === 404);
+const p7rec = await call(T.dist, 'POST', '/portal/receipts', { orderId: p7order.id, date: '2026-11-12', goodCartons: 2, damagedCartons: 1, missingCartons: 0, condition: 'Damaged', reason: 'One carton crushed', receivedBy: 'Store keeper' });
+ok('a delivery with a damaged carton becomes a claim', p7rec.status === 201 && p7rec.json?.status === 'Disputed' && p7rec.json?.claimValue === Math.round(p7sku.packsPerCarton * Number(p7order.rate) * 100) / 100, JSON.stringify(p7rec.json).slice(0, 140));
+ok('a second receipt for the same order -> 400', (await call(T.dist, 'POST', '/portal/receipts', { orderId: p7order.id, date: '2026-11-12', goodCartons: 3, damagedCartons: 0, missingCartons: 0, condition: 'Good' })).status === 400);
+ok('a distributor cannot approve its own claim -> 403', (await call(T.dist, 'POST', `/portal/receipts/${p7rec.json.id}/approve`)).status === 403);
+const p7ar0 = (await call(T.owner, 'GET', '/reports/trial-balance')).json.accounts.find((a) => a.name === 'Accounts Receivable').net;
+const p7cn = await call(T.sales, 'POST', `/portal/receipts/${p7rec.json.id}/approve`);
+ok('staff approve the claim: a credit note is posted', p7cn.status === 201 && Number(p7cn.json?.refund) === 0 && Number(p7cn.json?.amount) === p7rec.json.claimValue, JSON.stringify(p7cn.json).slice(0, 120));
+const p7tb3 = (await call(T.owner, 'GET', '/reports/trial-balance')).json;
+ok('the credit note reduces receivables and books a sales return', Math.abs((p7ar0 - p7tb3.accounts.find((a) => a.name === 'Accounts Receivable').net) - p7rec.json.claimValue) < 0.01 && p7tb3.accounts.find((a) => a.name === 'Sales Returns & Allowances').net > 0 && p7tb3.balanced === true);
+ok('the order balance drops by the credit', Math.abs((await call(T.owner, 'GET', `/orders`)).json.find((o) => o.id === p7order.id).outstanding - (p7bill - 5000 - p7rec.json.claimValue)) < 0.01);
+ok('approving the same claim again -> 400', (await call(T.sales, 'POST', `/portal/receipts/${p7rec.json.id}/approve`)).status === 400);
+
+// a claim on an order that is already paid: the whole credit is owed back
+const p7req2 = (await call(T.dist, 'POST', '/portal/requests', { date: '2026-11-10', productId: p7sku.id, cartons: 2 })).json;
+const p7o2 = (await call(T.sales, 'POST', `/portal/requests/${p7req2.id}/accept`, {})).json.order;
+await call(T.sales, 'POST', `/orders/${p7o2.id}/dispatch`);
+const p7bill2 = Math.round(p7o2.cartons * p7sku.packsPerCarton * Number(p7o2.rate) * 100) / 100;
+const p7adv2 = (await call(T.dist, 'POST', '/portal/advices', { orderId: p7o2.id, date: '2026-11-13', amount: p7bill2 })).json;
+await call(T.finance, 'POST', `/portal/advices/${p7adv2.id}/confirm`);
+const p7rec2 = (await call(T.dist, 'POST', '/portal/receipts', { orderId: p7o2.id, date: '2026-11-14', goodCartons: 1, damagedCartons: 0, missingCartons: 1, condition: 'Other', reason: 'One carton short' })).json;
+const p7cn2 = (await call(T.finance, 'POST', `/portal/receipts/${p7rec2.id}/approve`)).json;
+ok('a claim on a fully paid order is all refund (credit owed back)', Number(p7cn2.refund) === Number(p7cn2.amount) && Number(p7cn2.refund) > 0, JSON.stringify(p7cn2).slice(0, 120));
+const p7tb4 = (await call(T.owner, 'GET', '/reports/trial-balance')).json;
+ok('the refund is booked as credit payable to the distributor', Math.abs(-(p7tb4.accounts.find((a) => a.name === 'Distributor Credit Payable')?.net ?? 0) - Number(p7cn2.refund)) < 0.01 && p7tb4.balanced === true);
+const p7rej2 = (await call(T.dist, 'POST', '/portal/requests', { date: '2026-11-10', productId: p7sku.id, cartons: 1 })).json;
+const p7o3 = (await call(T.sales, 'POST', `/portal/requests/${p7rej2.id}/accept`, {})).json.order;
+await call(T.sales, 'POST', `/orders/${p7o3.id}/dispatch`);
+const p7rec3 = (await call(T.dist, 'POST', '/portal/receipts', { orderId: p7o3.id, date: '2026-11-14', goodCartons: 0, damagedCartons: 1, missingCartons: 0, condition: 'Wet', reason: 'Rain damage' })).json;
+ok('rejecting a claim needs a reason -> 400', (await call(T.sales, 'POST', `/portal/receipts/${p7rec3.id}/reject`, {})).status === 400);
+ok('staff reject a claim with a reason', (await call(T.sales, 'POST', `/portal/receipts/${p7rec3.id}/reject`, { note: 'Waybill shows full delivery' })).status === 201);
+
+// statement, rates, profile
+const p7st = (await call(T.dist, 'GET', '/portal/statement')).json;
+ok('the statement lists invoices, advances and credit notes with a running balance',
+  ['Invoice', 'Advance', 'Credit note'].every((k) => p7st.entries.some((e) => e.kind === k)) && p7st.closing === p7st.entries.at(-1).balance, JSON.stringify(p7st.entries.map((e) => e.kind)));
+await call(T.sales, 'PUT', '/distributor-rates', { distributorId: p7me, productId: p7sku.id, rate: 5.5 });
+const p7rates = (await call(T.dist, 'GET', '/portal/rates')).json;
+ok('the agreed rate shows on the distributor\'s price list', p7rates.find((r) => r.productId === p7sku.id)?.agreed === true && p7rates.find((r) => r.productId === p7sku.id)?.rate === 5.5);
+const p7req4 = (await call(T.dist, 'POST', '/portal/requests', { date: '2026-11-10', productId: p7sku.id, cartons: 1 })).json;
+const p7o4 = (await call(T.sales, 'POST', `/portal/requests/${p7req4.id}/accept`, {})).json.order;
+ok('a new request starts from the agreed rate', Number(p7o4.rate) === 5.5, String(p7o4.rate));
+const p7after = (await call(T.dist, 'GET', '/portal/profile')).json;
+ok('the profile counts deliveries still to acknowledge', typeof p7after.toAcknowledge === 'number' && p7after.creditHeld > 0, JSON.stringify(p7after).slice(0, 160));
+const p7desk = (await call(T.finance, 'GET', '/portal/desk')).json;
+ok('the desk shows the audit trail', p7desk.audit.some((a) => a.event === 'Credit note approved'));
+ok('the books still balance after the portal flows', (await call(T.owner, 'GET', '/reports/trial-balance')).json.balanced === true);
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

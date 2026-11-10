@@ -24,7 +24,7 @@ export const EXPORT_STATUS = ['Quote', 'Shipped'] as const;
 /** What a ledger line came from (used to replace the lines when the document changes). */
 export type RefType =
   | 'BATCH' | 'MFR_PAYMENT' | 'ORDER' | 'COLLECTION' | 'FINANCE' | 'ACC_DOC' | 'ACC_SETTLEMENT'
-  | 'EXPORT' | 'EXPORT_RECEIPT' | 'EXPORT_COST' | 'VOUCHER';
+  | 'EXPORT' | 'EXPORT_RECEIPT' | 'EXPORT_COST' | 'VOUCHER' | 'CREDIT_NOTE';
 
 export type JournalSource =
-  | 'Manufacturing' | 'Distribution' | 'Investment' | 'Accounting' | 'Exports' | 'Manual Voucher';
+  | 'Manufacturing' | 'Distribution' | 'Investment' | 'Accounting' | 'Exports' | 'Manual Voucher' | 'Distributor Portal';

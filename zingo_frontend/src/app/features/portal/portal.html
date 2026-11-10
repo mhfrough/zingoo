@@ -1,0 +1,238 @@
+<app-page-header eyebrow="Zingoo · Zen Foods" title="Distributor partner portal"
+  description="Order requests, deliveries and claims, payments, prices and your statement in one place.">
+  <ng-container pageActions>
+    <button appBtn variant="primary" icon="plus" (click)="requestOpen.set(true)">Request stock</button>
+    <button appBtn icon="download" (click)="downloadStatement()">Statement CSV</button>
+  </ng-container>
+</app-page-header>
+
+<div class="stack">
+  @if (profile.value(); as p) {
+    <div class="card hero">
+      <div class="hero__main">
+        <span class="hero__eyebrow">{{ isDistributor() ? 'Your account' : 'Viewing distributor' }}</span>
+        <h2>{{ p.distributor.name }}</h2>
+        <p class="muted">{{ p.distributor.address || p.distributor.region }}</p>
+        <ul class="hero__facts">
+          <li><span>Credit terms</span><strong>{{ p.distributor.paymentDays }} days</strong></li>
+          <li><span>Advance guide</span><strong>{{ pct(p.distributor.advancePct) }}</strong></li>
+          <li><span>Credit limit</span><strong>{{ money(p.creditLimit) }}</strong></li>
+        </ul>
+      </div>
+      @if (!isDistributor()) {
+        <div class="hero__pick">
+          <label for="portal-dist">Distributor</label>
+          <select id="portal-dist" [value]="dist() ?? ''" (change)="selected.set($any($event.target).value)">
+            @for (d of distributors.value() ?? []; track d.id) {
+              <option [value]="d.id" [selected]="d.id === dist()">{{ d.name }} · {{ d.region }}</option>
+            }
+          </select>
+        </div>
+      }
+    </div>
+
+    <div class="grid-auto">
+      <app-kpi label="Account outstanding" [value]="money(p.openBalance)" icon="wallet" tone="accent"
+        [foot]="p.overdue > 0 ? money(p.overdue) + ' overdue' : 'Nothing overdue'" />
+      <app-kpi label="Available credit" [value]="money(p.availableCredit)" icon="shield-check" tone="success" [foot]="'Credit limit ' + money(p.creditLimit)" />
+      <app-kpi label="Payments awaiting Zingo" [value]="money(p.pendingAdvices)" icon="clock" tone="warning" [foot]="number(p.pendingAdviceCount) + ' not yet verified'" />
+      <app-kpi label="Deliveries to acknowledge" [value]="number(p.toAcknowledge)" icon="truck" tone="info" [foot]="number(p.acknowledged) + ' acknowledged'" />
+    </div>
+  }
+
+  <app-tabs [tabs]="tabs()" [(active)]="tab" ariaLabel="Portal sections">
+    <ng-template appTabPanel="dashboard">
+      <div class="two-col">
+        <div class="card" data-flush>
+          <div class="card__head"><div><h2>Upcoming and overdue invoices</h2><p>Instalments stay linked to their invoice and due date</p></div></div>
+          <div class="card__body">
+            <app-data-table [columns]="invoiceColumns" [rows]="upcoming()" [actions]="payAction" [searchable]="false" [loading]="orders.isLoading()"
+              emptyTitle="Nothing to pay" emptyText="Dispatched invoices with a balance appear here." (action)="onOrderAction($event)" />
+          </div>
+        </div>
+        <div class="stack">
+          <div class="card">
+            <div class="card__head"><div><h2>What needs attention</h2><p>Your open tasks and account position</p></div></div>
+            <div class="card__body">
+              @if (profile.value(); as p) {
+                <ul class="lines">
+                  <li><span>Open debt</span><strong class="mono">{{ money(p.openBalance) }}</strong></li>
+                  <li><span>Past due</span><strong class="mono">{{ money(p.overdue) }}</strong></li>
+                  <li><span>Deliveries to acknowledge</span><strong class="mono">{{ number(p.toAcknowledge) }}</strong></li>
+                  <li><span>Payments awaiting verification</span><strong class="mono">{{ money(p.pendingAdvices) }}</strong></li>
+                  <li><span>Advances held for undispatched orders</span><strong class="mono">{{ money(p.advancesHeld) }}</strong></li>
+                  <li><span>Credit owed back to you</span><strong class="mono">{{ money(p.creditHeld) }}</strong></li>
+                </ul>
+              }
+            </div>
+          </div>
+          <div class="card" data-flush>
+            <div class="card__head"><div><h2>Recent requests</h2><p>Zingo reviews each one before an order is made</p></div></div>
+            <div class="card__body">
+              <app-data-table [columns]="requestColumns" [rows]="requests.value() ?? []" [searchable]="false" [loading]="requests.isLoading()"
+                emptyTitle="No requests yet" emptyText="Use Request stock to ask for more." />
+            </div>
+          </div>
+        </div>
+      </div>
+    </ng-template>
+
+    <ng-template appTabPanel="orders">
+      <div class="stack">
+        <div class="card" data-flush>
+          <div class="card__head">
+            <div><h2>Orders and vouchers</h2><p>The price and terms are fixed when a request becomes an order</p></div>
+            <button appBtn size="sm" icon="plus" (click)="requestOpen.set(true)">Request stock</button>
+          </div>
+          <div class="card__body">
+            <app-data-table [columns]="orderColumns" [rows]="orders.value() ?? []" [actions]="orderActions" [loading]="orders.isLoading()"
+              [error]="orders.error() ? 'The server did not answer.' : null" searchPlaceholder="Search orders"
+              emptyTitle="No orders yet" emptyText="Request stock to start." (retry)="reload()" (action)="onOrderAction($event)" />
+          </div>
+        </div>
+        <div class="card" data-flush>
+          <div class="card__head"><div><h2>Stock requests</h2><p>Zingo accepts them into orders or says why not</p></div></div>
+          <div class="card__body">
+            <app-data-table [columns]="requestColumns" [rows]="requests.value() ?? []" [loading]="requests.isLoading()" searchPlaceholder="Search requests"
+              emptyTitle="No requests yet" emptyText="Use Request stock to ask for more." />
+          </div>
+        </div>
+      </div>
+    </ng-template>
+
+    <ng-template appTabPanel="cargo">
+      <div class="stack">
+        <div class="card" data-flush>
+          <div class="card__head"><div><h2>Delivery receipts</h2><p>Confirm what arrived. Damaged or missing cartons become a claim.</p></div></div>
+          <div class="card__body">
+            <app-data-table [columns]="cargoColumns" [rows]="shipped()" [actions]="cargoActions" [loading]="orders.isLoading()"
+              searchPlaceholder="Search shipments" emptyTitle="Nothing shipped yet" emptyText="Dispatched orders appear here." (action)="onOrderAction($event)" />
+          </div>
+        </div>
+        <div class="card" data-flush>
+          <div class="card__head"><div><h2>Damage and shortage claims</h2><p>An approved claim becomes a credit note against the invoice</p></div></div>
+          <div class="card__body">
+            <app-data-table [columns]="claimColumns" [rows]="claims()" [actions]="claimActions" [loading]="receipts.isLoading()" [searchable]="false"
+              emptyTitle="No claims" emptyText="Every delivery arrived complete." (action)="onClaimAction($event)" />
+          </div>
+        </div>
+      </div>
+    </ng-template>
+
+    <ng-template appTabPanel="payments">
+      <div class="stack">
+        <div class="notice">
+          <span>
+            <strong>A payment advice is not cash.</strong> Report what you paid with the bank reference and a receipt; it counts once
+            Zingo has checked it. You can pay in parts, and pay ahead of dispatch.
+          </span>
+        </div>
+        <div class="card" data-flush>
+          <div class="card__head">
+            <div><h2>Invoices and balances</h2><p>Billed, paid, credited and still open per order</p></div>
+            <button appBtn size="sm" icon="banknote" (click)="openPay()">Report a payment</button>
+          </div>
+          <div class="card__body">
+            <app-data-table [columns]="billColumns" [rows]="orders.value() ?? []" [actions]="payAction" [loading]="orders.isLoading()"
+              searchPlaceholder="Search orders" emptyTitle="No orders yet" emptyText="Invoices appear here." (action)="onOrderAction($event)" />
+          </div>
+        </div>
+        <div class="card" data-flush>
+          <div class="card__head"><div><h2>Payment advices</h2><p>What you reported and what Zingo made of it</p></div></div>
+          <div class="card__body">
+            <app-data-table [columns]="adviceColumns" [rows]="advices.value() ?? []" [actions]="adviceActions" [loading]="advices.isLoading()"
+              searchPlaceholder="Search payments" emptyTitle="No payments reported" emptyText="Use Report a payment after you pay." (action)="onAdviceAction($event)" />
+          </div>
+        </div>
+      </div>
+    </ng-template>
+
+    <ng-template appTabPanel="rates">
+      <div class="stack">
+        <div class="card" data-flush>
+          <div class="card__head"><div><h2>Your SKU prices</h2><p>The agreed price per pack, or the standard price where nothing is agreed</p></div></div>
+          <div class="card__body">
+            <app-data-table [columns]="rateColumns" [rows]="rates.value() ?? []" [loading]="rates.isLoading()" searchPlaceholder="Search SKUs"
+              emptyTitle="No products" emptyText="Products appear here." />
+          </div>
+        </div>
+        <div class="notice">
+          <span>
+            The retail spread is not your net profit: it leaves out delivery, sales force, storage, damage, tax, discounts and retailer terms.
+            An order keeps the price it was accepted at; later price changes do not change past invoices.
+          </span>
+        </div>
+      </div>
+    </ng-template>
+
+    <ng-template appTabPanel="statement">
+      <div class="stack">
+        <div class="card" data-flush>
+          <div class="card__head">
+            <div><h2>Account statement</h2><p>Invoices, advances, collections and credit notes with a running balance</p></div>
+            <button appBtn size="sm" icon="download" (click)="downloadStatement()">Statement CSV</button>
+          </div>
+          <div class="card__body">
+            <app-data-table [columns]="entryColumns" [rows]="statement.value()?.entries ?? []" [loading]="statement.isLoading()"
+              searchPlaceholder="Search the statement" emptyTitle="No entries yet" emptyText="Invoices and payments appear here." />
+          </div>
+        </div>
+        <div class="card" data-flush>
+          <div class="card__head"><div><h2>Invoices and pro-formas</h2><p>Download a voucher for any order</p></div></div>
+          <div class="card__body">
+            <app-data-table [columns]="invoiceSummaryColumns" [rows]="statement.value()?.invoices ?? []" [actions]="voucherAction" [loading]="statement.isLoading()"
+              [searchable]="false" emptyTitle="No orders yet" emptyText="Orders appear here." (action)="onStatementVoucher($event)" />
+          </div>
+        </div>
+      </div>
+    </ng-template>
+
+    @if (canManage()) {
+      <ng-template appTabPanel="desk">
+        <div class="stack">
+          <div class="card" data-flush>
+            <div class="card__head">
+              <div><h2>Requests to accept <app-tag [tone]="(desk.value()?.requests?.length ?? 0) ? 'warning' : 'success'">{{ desk.value()?.requests?.length ?? 0 }}</app-tag></h2><p>Accepting creates a draft sales order with the price and terms locked</p></div>
+            </div>
+            <div class="card__body">
+              <app-data-table [columns]="deskRequestColumns" [rows]="desk.value()?.requests ?? []" [actions]="deskRequestActions" [searchable]="false"
+                [loading]="desk.isLoading()" emptyTitle="No requests waiting" emptyText="New distributor requests appear here." (action)="onRequestAction($event)" />
+            </div>
+          </div>
+          <div class="card" data-flush>
+            <div class="card__head">
+              <div><h2>Payments to verify <app-tag [tone]="(desk.value()?.advices?.length ?? 0) ? 'warning' : 'success'">{{ desk.value()?.advices?.length ?? 0 }}</app-tag></h2><p>Only a confirmed payment reaches cash and the ledger{{ canFinance() ? '' : ' (Finance or Admin confirms)' }}</p></div>
+            </div>
+            <div class="card__body">
+              <app-data-table [columns]="deskAdviceColumns" [rows]="desk.value()?.advices ?? []" [actions]="deskAdviceActions" [searchable]="false"
+                [loading]="desk.isLoading()" emptyTitle="No payments waiting" emptyText="Reported payments appear here." (action)="onDeskAdvice($event)" />
+            </div>
+          </div>
+          <div class="card" data-flush>
+            <div class="card__head">
+              <div><h2>Claims to review <app-tag [tone]="(desk.value()?.claims?.length ?? 0) ? 'warning' : 'success'">{{ desk.value()?.claims?.length ?? 0 }}</app-tag></h2><p>Approving posts a credit note</p></div>
+            </div>
+            <div class="card__body">
+              <app-data-table [columns]="deskClaimColumns" [rows]="desk.value()?.claims ?? []" [actions]="deskClaimActions" [searchable]="false"
+                [loading]="desk.isLoading()" emptyTitle="No claims waiting" emptyText="Damage and shortage claims appear here." (action)="onDeskClaim($event)" />
+            </div>
+          </div>
+          <div class="card" data-flush>
+            <div class="card__head"><div><h2>Activity</h2><p>Who did what in the portal</p></div></div>
+            <div class="card__body">
+              <app-data-table [columns]="auditColumns" [rows]="desk.value()?.audit ?? []" [searchable]="false" [loading]="desk.isLoading()"
+                emptyTitle="No activity yet" emptyText="Portal actions are logged here." />
+            </div>
+          </div>
+        </div>
+      </ng-template>
+    }
+  </app-tabs>
+</div>
+
+<app-request-form [(open)]="requestOpen" [rates]="rates.value() ?? []" [distributorId]="dist()" (saved)="reload()" />
+<app-receipt-form [(open)]="receiptOpen" [order]="receiving()" [distributorId]="dist()" (saved)="reload()" />
+<app-advice-form [(open)]="adviceOpen" [orders]="orders.value() ?? []" [methods]="profile.value()?.paymentMethods ?? ['Bank Transfer']" [orderId]="payingOrder()" [distributorId]="dist()" (saved)="reload()" />
+<app-accept-form [(open)]="acceptOpen" [req]="accepting()" [cycles]="profile.value()?.paymentCycles ?? [15, 30, 45, 60]"
+  [defaultTerms]="profile.value()?.distributor?.paymentDays ?? 30" (saved)="reload()" />
+<app-reason-form [(open)]="reasonOpen" [heading]="reasonHeading()" [subject]="reasonSubject()" [actionLabel]="reasonLabel()" [run]="reasonRun()" (saved)="reload()" />

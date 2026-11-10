@@ -2,6 +2,7 @@ import { ChangeDetectionStrategy, Component, ElementRef, inject, signal, viewChi
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { Router } from '@angular/router';
 import { AuthService } from '../core/auth.service';
+import { homePath } from '../portal.config';
 import { Btn, Field, IconComponent, PasswordField } from '../ui';
 
 const REMEMBER_KEY = 'zingoo.rememberedEmail';
@@ -73,7 +74,7 @@ export class Login {
     this.auth.login(email, password).subscribe({
       next: () => {
         writeRemembered(remember ? email : null);
-        this.router.navigate(['/admin/overview']);
+        this.router.navigate([homePath(this.auth.user()?.pages)]);
       },
       error: (err) => {
         this.loading.set(false);

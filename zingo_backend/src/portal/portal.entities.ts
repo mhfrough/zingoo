@@ -46,6 +46,10 @@ export class PortalRequest extends DocEntity {
 
   @Column({ type: 'uuid', nullable: true })
   orderId: string | null;
+
+  /** staff note when the request is rejected */
+  @Column({ type: 'text', nullable: true })
+  reviewNote: string | null;
 }
 
 /** Proof of delivery filed by the distributor, with damaged / missing cartons. */
@@ -82,9 +86,16 @@ export class CargoReceipt extends DocEntity {
   @Column({ type: 'text', nullable: true })
   reason: string | null;
 
-  /** name / path of the uploaded evidence file */
+  /** name of the uploaded evidence file */
   @Column({ type: 'varchar', length: 250, nullable: true })
   evidence: string | null;
+
+  @Column({ type: 'varchar', length: 60, nullable: true })
+  evidenceMime: string | null;
+
+  /** the evidence file, base64 (kept small: 450 KB at most) */
+  @Column({ type: 'text', nullable: true })
+  evidenceData: string | null;
 
   @Column({ type: 'varchar', length: 12, default: 'Accepted' })
   status: 'Accepted' | 'Disputed' | 'Approved' | 'Rejected';
@@ -120,6 +131,24 @@ export class PaymentAdvice extends DocEntity {
 
   @Column({ type: 'varchar', length: 250, nullable: true })
   proof: string | null;
+
+  @Column({ type: 'varchar', length: 60, nullable: true })
+  proofMime: string | null;
+
+  /** the receipt or screenshot, base64 (450 KB at most) */
+  @Column({ type: 'text', nullable: true })
+  proofData: string | null;
+
+  @Column({ type: 'text', nullable: true })
+  note: string | null;
+
+  /** staff note when the advice is rejected */
+  @Column({ type: 'text', nullable: true })
+  reviewNote: string | null;
+
+  /** the collection created when staff confirmed this advice */
+  @Column({ type: 'uuid', nullable: true })
+  collectionId: string | null;
 
   @Column({ type: 'varchar', length: 12, default: 'Submitted' })
   status: 'Submitted' | 'Confirmed' | 'Rejected';

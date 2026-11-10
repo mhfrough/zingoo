@@ -31,7 +31,11 @@ export class SettingsStore {
   private auth = inject(AuthService);
 
   private tick = signal(0);
-  private params = computed(() => (this.auth.user() ? { user: this.auth.user()!.id, tick: this.tick() } : undefined));
+  /** a distributor login has no access to the company settings, so nothing is loaded for it (its portal sends what it needs) */
+  private params = computed(() => {
+    const u = this.auth.user();
+    return u && u.role !== 'Distributor' ? { user: u.id, tick: this.tick() } : undefined;
+  });
 
   readonly settingsRes = rxResource({ params: () => this.params(), stream: () => this.api.get<Settings>('settings') });
   readonly lookupsRes = rxResource({ params: () => this.params(), stream: () => this.api.get<Lookup[]>('lookups') });

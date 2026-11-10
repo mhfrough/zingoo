@@ -1,0 +1,209 @@
+<app-page-header eyebrow="Zingoo · Zen Foods" title="Income & expenses"
+  description="Invoices, bills, collections, payments and the management profit and loss.">
+  <ng-container pageActions>
+    @if (canWrite()) {
+      <button appBtn variant="primary" icon="plus" (click)="openDoc('Income')">Add income</button>
+      <button appBtn icon="plus" (click)="openDoc('Expense')">Add expense</button>
+    }
+    <button appBtn icon="download" (click)="exportCsv()">Accounting CSV</button>
+  </ng-container>
+</app-page-header>
+
+<div class="stack">
+  <div class="notice">
+    <span>
+      <strong>One entry, one accounting effect.</strong>
+      Distributor dispatches and collections, approved investment spending and capital funding post by themselves.
+      Record only extra direct income and supplier bills here, so nothing is counted twice.
+    </span>
+  </div>
+
+  <div class="grid-auto">
+    <app-kpi label="Recognized income" [value]="money(statement.value()?.revenue ?? 0)" icon="trending-up" tone="success"
+      foot="Sales and other income in the period" />
+    <app-kpi label="Net profit (posted)" [value]="money(statement.value()?.netProfit ?? 0)" icon="coins"
+      [tone]="(statement.value()?.netProfit ?? 0) >= 0 ? 'info' : 'danger'" foot="After cost of goods and operating expenses" />
+    <app-kpi label="Cash & bank" [value]="money(flows.value()?.net ?? 0)" icon="wallet" tone="accent"
+      foot="Recorded inflows less outflows" />
+    <app-kpi label="Outstanding payables" [value]="money(payables.value()?.total ?? 0)" icon="clock" tone="warning"
+      [foot]="money(receivables.value()?.total ?? 0) + ' receivable'" />
+  </div>
+
+  <div class="toolbar acc-period">
+    <label for="acc-period">Period</label>
+    <select id="acc-period" [value]="period()" (change)="period.set($any($event.target).value)">
+      @for (o of periodOptions(); track o.value) {
+        <option [value]="o.value" [selected]="o.value === period()">{{ o.label }}</option>
+      }
+    </select>
+  </div>
+
+  <app-tabs [tabs]="tabs()" [(active)]="tab" ariaLabel="Accounting sections">
+    <ng-template appTabPanel="overview">
+      <div class="stack">
+        <div class="two-col">
+          <div class="card">
+            <div class="card__head">
+              <div>
+                <h2>Income statement · {{ period() === 'all' ? 'all dates' : period() }}</h2>
+                <p>Capital investments and asset purchases are not profit or loss</p>
+              </div>
+            </div>
+            <div class="card__body stack">
+              <ul class="lines">
+                <li><span>Trading & export sales revenue</span><strong class="mono">{{ money(statement.value()?.sales ?? 0) }}</strong></li>
+                <li><span>Other / direct income</span><strong class="mono">{{ money(statement.value()?.other ?? 0) }}</strong></li>
+                <li><span>Total revenue</span><strong class="mono">{{ money(statement.value()?.revenue ?? 0) }}</strong></li>
+                <li><span>Cost of goods sold</span><strong class="mono">− {{ money(statement.value()?.cogs ?? 0) }}</strong></li>
+                <li><span>Gross profit</span><strong class="mono">{{ money(statement.value()?.grossProfit ?? 0) }}</strong></li>
+                <li><span>Operating expenses</span><strong class="mono">− {{ money(statement.value()?.operatingExpenses ?? 0) }}</strong></li>
+                <li class="lines__total">
+                  <strong>Net profit / (loss)</strong>
+                  <strong class="mono" [class.positive]="(statement.value()?.netProfit ?? 0) >= 0"
+                    [class.negative]="(statement.value()?.netProfit ?? 0) < 0">{{ money(statement.value()?.netProfit ?? 0) }}</strong>
+                </li>
+              </ul>
+              <p class="muted">
+                Released batch costs estimate inventory and cost of goods sold. This is a management view, not a final accrual,
+                bank reconciliation, tax return or audited balance sheet.
+              </p>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="card__head">
+              <div><h2>Revenue vs. expenditure</h2><p>Breakdown for the selected period</p></div>
+            </div>
+            <div class="card__body stack">
+              <section aria-labelledby="acc-income-h">
+                <h3 id="acc-income-h" class="acc-sub">Income sources</h3>
+                <ul class="shares">
+                  @for (s of incomeShare(); track s.label) {
+                    <li>
+                      <div class="shares__row"><span>{{ s.label }}</span><strong class="mono">{{ money(s.amount) }}</strong></div>
+                      <div class="progress" aria-hidden="true"><div class="progress__bar" [style.width.%]="s.pct"></div></div>
+                    </li>
+                  } @empty {
+                    <li class="muted">No income in this period.</li>
+                  }
+                </ul>
+              </section>
+              <section aria-labelledby="acc-exp-h">
+                <h3 id="acc-exp-h" class="acc-sub">Operating expenses</h3>
+                <ul class="shares">
+                  @for (s of expenseShare(); track s.label) {
+                    <li>
+                      <div class="shares__row"><span>{{ s.label }}</span><strong class="mono">{{ money(s.amount) }}</strong></div>
+                      <div class="progress" aria-hidden="true"><div class="progress__bar progress__bar--over" [style.width.%]="s.pct"></div></div>
+                    </li>
+                  } @empty {
+                    <li class="muted">No expenses in this period.</li>
+                  }
+                </ul>
+              </section>
+            </div>
+          </div>
+        </div>
+
+        <div class="two-col">
+          <div class="card" data-flush>
+            <div class="card__head">
+              <div><h2>Open receivables</h2><p>Distributor and direct invoices · live balances</p></div>
+            </div>
+            <div class="card__body">
+              <app-data-table [columns]="receivableColumns" [rows]="openReceivables()" [actions]="openActions"
+                [loading]="receivables.isLoading()" [searchable]="false" emptyTitle="Nothing to collect"
+                emptyText="Dispatched orders and income invoices appear here until they are paid."
+                [totals]="{ out: money(receivables.value()?.total ?? 0) }" (action)="onOpenAction($event)" />
+            </div>
+          </div>
+          <div class="card" data-flush>
+            <div class="card__head">
+              <div><h2>Bills to pay</h2><p>Approved bills and manufacturer balances still unpaid</p></div>
+            </div>
+            <div class="card__body">
+              <app-data-table [columns]="payableColumns" [rows]="openPayables()" [actions]="openActions"
+                [loading]="payables.isLoading()" [searchable]="false" emptyTitle="Nothing to pay"
+                emptyText="Approved bills and manufacturer balances appear here until they are paid."
+                [totals]="{ out: money(payables.value()?.total ?? 0) }" (action)="onOpenAction($event)" />
+            </div>
+          </div>
+        </div>
+
+        <div class="card" data-flush>
+          <div class="card__head">
+            <div>
+              <h2>Expense approval desk <app-tag [tone]="waiting().length ? 'warning' : 'success'">{{ waiting().length }}</app-tag></h2>
+              <p>The same joint signing rule as Investment & Finance</p>
+            </div>
+          </div>
+          <div class="card__body">
+            <app-data-table [columns]="docColumns" [rows]="waiting()" [actions]="docActions" [loading]="docs.isLoading()"
+              [searchable]="false" emptyTitle="No bills waiting for a signature"
+              emptyText="Expense bills appear here until they have enough signatures." (action)="onDocAction($event)" />
+          </div>
+        </div>
+      </div>
+    </ng-template>
+
+    <ng-template appTabPanel="transactions">
+      <div class="stack">
+        <div class="card" data-flush>
+          <div class="card__head">
+            <div><h2>Income & expense documents</h2><p>Approve bills and settle each document in full or in part</p></div>
+          </div>
+          <div class="card__body">
+            <app-data-table [columns]="docColumns" [rows]="periodDocs()" [actions]="docActions" [loading]="docs.isLoading()"
+              [error]="docs.error() ? 'The server did not answer.' : null" searchPlaceholder="Search documents"
+              emptyTitle="No documents in this period" emptyText="Add an income invoice or an expense bill."
+              (retry)="reload()" (action)="onDocAction($event)" />
+          </div>
+        </div>
+
+        <div class="card" data-flush>
+          <div class="card__head">
+            <div><h2>Receipts & bill payments</h2><p>Each one updates cash and the amount still due</p></div>
+          </div>
+          <div class="card__body">
+            <app-data-table [columns]="settlementColumns" [rows]="periodSettlements()" [loading]="settlements.isLoading()"
+              [error]="settlements.error() ? 'The server did not answer.' : null" searchPlaceholder="Search receipts and payments"
+              emptyTitle="No receipts or payments yet" emptyText="Collect an invoice or pay a bill to see it here."
+              (retry)="reload()" />
+          </div>
+        </div>
+      </div>
+    </ng-template>
+
+    <ng-template appTabPanel="journal">
+      <div class="stack">
+        <div class="card" data-flush>
+          <div class="card__head">
+            <div><h2>Balanced general journal</h2><p>Every posting has equal debits and credits</p></div>
+            <button appBtn size="sm" icon="download" (click)="exportCsv()">Export journal</button>
+          </div>
+          <div class="card__body">
+            <app-data-table [columns]="journalColumns" [rows]="journal.value() ?? []" [totals]="journalTotals()"
+              [loading]="journal.isLoading()" [error]="journal.error() ? 'The server did not answer.' : null"
+              searchPlaceholder="Search the journal" emptyTitle="No postings in this period"
+              emptyText="Postings appear as documents, dispatches and payments are approved." (retry)="reload()" />
+          </div>
+        </div>
+
+        <div class="card" data-flush>
+          <div class="card__head">
+            <div><h2>Cash & bank book</h2><p>Running balance: capital, receipts, approved payments and asset purchases</p></div>
+          </div>
+          <div class="card__body">
+            <app-data-table [columns]="cashColumns" [rows]="cashRows()" [loading]="cashBook.isLoading()"
+              [error]="cashBook.error() ? 'The server did not answer.' : null" searchPlaceholder="Search the cash book"
+              emptyTitle="No cash movements in this period" emptyText="Receipts and payments appear here." (retry)="reload()" />
+          </div>
+        </div>
+      </div>
+    </ng-template>
+  </app-tabs>
+</div>
+
+<app-accounting-doc-form [(open)]="docOpen" [doc]="editingDoc()" [kind]="docKind()" [categories]="docCategories()"
+  [currencies]="currencies.value() ?? []" (saved)="reload()" />
+<app-settle-form [(open)]="settleOpen" [doc]="settling()" (saved)="reload()" />

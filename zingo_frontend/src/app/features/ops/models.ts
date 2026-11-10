@@ -124,12 +124,18 @@ export interface Dashboard {
   latestOrders: { id: string; refNo: string; date: string; distributor: string; sku: string; cartons: number; value: number; status: string }[];
 }
 
+/** Company settings the pages read (the full record has more fields). */
 export interface Settings {
   packsPerCarton: number;
   lowStockCartons: number;
   paymentCycles: number[];
   defaultPaymentCycle: number;
+  /** spend at or above this needs two signatures */
   approvalThreshold: number;
+  /** total capital the business intends to raise */
+  capitalTarget: number;
+  signatoryA: string;
+  signatoryB: string;
 }
 
 export const PAY_METHODS = ['Bank Transfer', 'Cash', 'Cheque', 'Other'] as const;

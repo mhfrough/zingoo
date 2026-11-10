@@ -12,8 +12,8 @@ This plan **replaces my first guess** of the business. The client's v4 model is 
 | 1 Design system | **Done** (2026-11-10). Open `/admin/ui` after login. Production build: initial JS+CSS 89 KB gzipped (the Bootstrap build was far larger). |
 | 2 Schema + data | **Done** (2026-11-10). 29 tables, double-entry posting engine, roles + seats, 42 API paths, client seed. Prototype parity: 12 of 12 checks pass; API rule smoke test: 49 of 49 (`npm run test:api`). |
 | 3 Operations pages | **Done** (2026-11-10). Overview, Manufacturing, Distribution: 7 forms, 8 tables, confirm dialogs, credit hold with Finance override, role-aware menu / buttons / page guard (checked as Admin, Manufacturing and Viewer), root account. 54 API rule checks pass. |
-| 4 Money pages | Next |
-| 5 - 8 | Not started |
+| 4 Money pages | **Done** (2026-11-10). Investment & Finance (capital, two-signature approval desk, budgets, cost centers, capital target) and Income & Expenses (invoices and bills in any currency, part collections and payments, income statement, journal, cash book, period selector, CSV export): 8 forms, 9 tables, confirm dialogs, role-aware buttons (checked as Admin and Viewer), no page scroll at 1440 / 1024 / 820 / 390 / 320. New `GET /reports/cash-flows`; 56 API rule checks pass. |
+| 5 - 8 | Not started (5 Pricing, Exports, General Ledger is next) |
 | 9 Platform upgrade | Queued after phase 8 (the user chose to finish phases 3-8 first). The design session keeps working on the design-system items in 9.2 (U1) in parallel; platform services (U2) and docs (U4) are stopped. |
 
 Phase 2 scope note: tables for exports, manual journal vouchers and the partner portal exist and are seeded where the client had data, but their **endpoints and posting** come with their own phase (5 and 7), so they are tested with real screens. Also deferred to later phases: users / currencies / chart-of-accounts CRUD (6), distributor credit-limit check at dispatch (3), advance and credit-note postings (7).

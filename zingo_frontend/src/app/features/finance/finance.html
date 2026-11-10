@@ -1,0 +1,135 @@
+<app-page-header eyebrow="Zingoo · Zen Foods" title="Investment, cash & controls"
+  description="Capital, spend and the approval desk across every investment stream.">
+  @if (canWrite()) {
+    <ng-container pageActions>
+      <button appBtn variant="primary" icon="plus" (click)="openEntry()">Add finance entry</button>
+      @if (isAdmin()) {
+        <button appBtn icon="edit" (click)="targetOpen.set(true)">Edit capital target</button>
+      }
+    </ng-container>
+  }
+</app-page-header>
+
+<div class="stack">
+  <div class="grid-auto">
+    <app-kpi label="Capital invested" [value]="money(capital())" icon="piggy-bank" tone="accent"
+      [foot]="'of ' + money(settings.value()?.capitalTarget ?? 0) + ' target'" />
+    <app-kpi label="Cash & bank balance" [value]="money(flows.value()?.net ?? 0)" icon="wallet" tone="success"
+      foot="Receipts minus approved spending" />
+    <app-kpi label="Paid spend" [value]="money(paidSpend())" icon="coins" tone="info"
+      [foot]="money(opex()) + ' opex · ' + money(assets()) + ' assets'" />
+    <app-kpi label="Spend awaiting approval" [value]="money(pendingAmount())" icon="clock" tone="warning"
+      [foot]="number(pending().length) + ' approval requests'" />
+  </div>
+
+  <div class="notice">
+    <span>
+      <strong>Joint signing rule.</strong>
+      Below {{ money(settings.value()?.approvalThreshold ?? 0) }}, one signature releases a spend. From that amount, both
+      {{ settings.value()?.signatoryA }} and {{ settings.value()?.signatoryB }} must approve.
+    </span>
+  </div>
+
+  <div class="card">
+    <div class="card__head">
+      <div><h2>Investments by business stream</h2><p>Approved operating expenses and asset purchases count toward the allocations</p></div>
+      @if (isAdmin()) {
+        <div class="cluster">
+          <button appBtn size="sm" icon="plus" (click)="centerOpen.set(true)">New cost center</button>
+          <button appBtn size="sm" icon="edit" (click)="openBudget()">Edit all budgets</button>
+        </div>
+      }
+    </div>
+    <div class="card__body">
+      <div class="streams">
+        @for (b of streamCards(); track b.id) {
+          <div class="stream">
+            <span class="stream__name">{{ b.name }}</span>
+            <strong class="stream__spent mono">{{ money(b.spent) }}</strong>
+            <span class="stream__of">of {{ money(b.budget) }} allocated</span>
+            <div class="progress" role="progressbar" [attr.aria-valuenow]="b.usedPct" aria-valuemin="0" aria-valuemax="100"
+                 [attr.aria-label]="b.name + ' budget used'">
+              <div class="progress__bar" [class.progress__bar--over]="b.usedPct > 100" [style.width.%]="b.usedPct > 100 ? 100 : b.usedPct"></div>
+            </div>
+            @if (isAdmin()) {
+              <button type="button" class="stream__edit" (click)="openBudget(b)">Edit allocation · {{ b.usedPct }}% used</button>
+            } @else {
+              <span class="stream__of">{{ b.usedPct }}% used</span>
+            }
+          </div>
+        } @empty {
+          <p class="muted">No cost centers yet.</p>
+        }
+      </div>
+    </div>
+  </div>
+
+  <div class="two-col">
+    <div class="card">
+      <div class="card__head">
+        <div><h2>Funding & cash reconciliation</h2><p>Live cash movement from the ledger</p></div>
+      </div>
+      <div class="card__body">
+        <ul class="lines">
+          @for (r of flows.value()?.inflows ?? []; track r.label) {
+            <li><span>{{ r.label }}</span><strong class="mono">{{ money(r.amount) }}</strong></li>
+          }
+          @for (r of flows.value()?.outflows ?? []; track r.label) {
+            <li><span>{{ r.label }}</span><strong class="mono">− {{ money(r.amount) }}</strong></li>
+          }
+          <li class="lines__total">
+            <strong>Calculated cash position</strong>
+            <strong class="mono positive">{{ money(flows.value()?.net ?? 0) }}</strong>
+          </li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card__head">
+        <div><h2>Trading snapshot</h2><p>Sales are earned on dispatch; payments are collected separately</p></div>
+      </div>
+      <div class="card__body stack">
+        <ul class="lines">
+          <li><span>Dispatched sales invoiced</span><strong class="mono">{{ money(invoiced()) }}</strong></li>
+          <li><span>Payments collected</span><strong class="mono">{{ money(collected()) }}</strong></li>
+          <li><span>Outstanding receivables</span><strong class="mono">{{ money(receivable()) }}</strong></li>
+          <li><span>Booked operating expenses</span><strong class="mono">{{ money(statement.value()?.operatingExpenses ?? 0) }}</strong></li>
+        </ul>
+        <p class="muted">For profit and loss, receivables and payables in full, see Income & Expenses. These are management figures, not audited accounts.</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="card" data-flush>
+    <div class="card__head">
+      <div>
+        <h2>Approval desk <app-tag [tone]="pending().length ? 'warning' : 'success'">{{ pending().length }}</app-tag></h2>
+        <p>Signatures are recorded separately; a spend counts once it has enough of them</p>
+      </div>
+    </div>
+    <div class="card__body">
+      <app-data-table [columns]="deskColumns" [rows]="pending()" [actions]="deskActions" [loading]="entries.isLoading()"
+        [searchable]="false" emptyTitle="Nothing waiting for a signature" emptyText="Spending requests appear here until they are approved."
+        (action)="onEntryAction($event)" />
+    </div>
+  </div>
+
+  <div class="card" data-flush>
+    <div class="card__head">
+      <div><h2>Investment & paid spending</h2><p>Every finance entry; posted entries are locked</p></div>
+    </div>
+    <div class="card__body">
+      <app-data-table [columns]="entryColumns" [rows]="all()" [actions]="entryActions" [loading]="entries.isLoading()"
+        [error]="entries.error() ? 'The server did not answer.' : null" searchPlaceholder="Search entries"
+        emptyTitle="No finance entries yet" emptyText="Add the first capital or spending entry." (retry)="reload()"
+        (action)="onEntryAction($event)" />
+    </div>
+  </div>
+</div>
+
+<app-finance-entry-form [(open)]="entryOpen" [entry]="editingEntry()" [streams]="streamNames()"
+  [threshold]="settings.value()?.approvalThreshold ?? 50000" (saved)="reload()" />
+<app-budget-form [(open)]="budgetOpen" [centers]="budgets.value() ?? []" [only]="editingBudget()" (saved)="reload()" />
+<app-cost-center-form [(open)]="centerOpen" (saved)="reload()" />
+<app-capital-target-form [(open)]="targetOpen" [current]="settings.value()?.capitalTarget ?? 0" (saved)="reload()" />

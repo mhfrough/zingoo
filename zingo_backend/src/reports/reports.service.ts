@@ -110,6 +110,47 @@ export class ReportsService {
     );
   }
 
+  /**
+   * Where cash came from and where it went, grouped by kind of document
+   * (capital, distributor collections, approved spend, bills paid, manufacturer payments ...).
+   * Built from the "Cash & Bank" lines of the ledger, so it always adds up to the cash balance.
+   */
+  async cashFlows() {
+    const rows: { label: string; cashIn: number; cashOut: number }[] = await this.db.query(`
+      SELECT
+        CASE
+          WHEN l."refType" = 'COLLECTION'     THEN 'Distributor collections'
+          WHEN l."refType" = 'MFR_PAYMENT'    THEN 'Manufacturer payments'
+          WHEN l."refType" = 'EXPORT_RECEIPT' THEN 'Export receipts'
+          WHEN l."refType" = 'EXPORT_COST'    THEN 'Export costs paid'
+          WHEN l."refType" = 'VOUCHER'        THEN 'Journal vouchers'
+          WHEN l."refType" = 'FINANCE' THEN
+            CASE f.type
+              WHEN 'Capital Injection'  THEN 'Capital and partner loans'
+              WHEN 'Other Receipt'      THEN 'Other receipts'
+              WHEN 'Operating Expense'  THEN 'Approved operating expenses'
+              ELSE 'Capital asset purchases'
+            END
+          WHEN l."refType" = 'ACC_SETTLEMENT' THEN
+            CASE d.kind WHEN 'Income' THEN 'Other income collected' ELSE 'Bills paid' END
+          ELSE l."refType"
+        END AS label,
+        COALESCE(SUM(l.debit), 0)::float8  AS "cashIn",
+        COALESCE(SUM(l.credit), 0)::float8 AS "cashOut"
+      FROM ledger_entries l
+      JOIN accounts a ON a.code = l."accountCode" AND a.name = 'Cash & Bank'
+      LEFT JOIN finance_entries f ON l."refType" = 'FINANCE' AND f.id = l."refId"
+      LEFT JOIN accounting_settlements s ON l."refType" = 'ACC_SETTLEMENT' AND s.id = l."refId"
+      LEFT JOIN accounting_documents d ON d.id = s."documentId"
+      GROUP BY 1
+      ORDER BY 1`);
+    const inflows = rows.filter((r) => r.cashIn > 0).map((r) => ({ label: r.label, amount: round2(r.cashIn) }));
+    const outflows = rows.filter((r) => r.cashOut > 0).map((r) => ({ label: r.label, amount: round2(r.cashOut) }));
+    const cashIn = round2(inflows.reduce((n, r) => n + r.amount, 0));
+    const cashOut = round2(outflows.reduce((n, r) => n + r.amount, 0));
+    return { inflows, outflows, cashIn, cashOut, net: round2(cashIn - cashOut) };
+  }
+
   async periods(): Promise<string[]> {
     const rows: { p: string }[] = await this.db.query(`SELECT DISTINCT to_char("entryDate", 'YYYY-MM') AS p FROM ledger_entries ORDER BY p DESC`);
     return rows.map((r) => r.p);

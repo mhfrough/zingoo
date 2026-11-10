@@ -35,6 +35,13 @@ export class ReportsController {
     return this.service.incomeStatement(period);
   }
 
+  @Get('cash-flows')
+  @Read('accounting', 'ledger', 'finance')
+  @ApiOperation({ summary: 'Cash in and out by source, adding up to the cash balance' })
+  cashFlows() {
+    return this.service.cashFlows();
+  }
+
   @Get('periods')
   @Read('accounting', 'ledger', 'finance')
   periods() {

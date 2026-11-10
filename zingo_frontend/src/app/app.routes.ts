@@ -8,6 +8,8 @@ const BUILT: Record<string, () => Promise<unknown>> = {
   overview: () => import('./features/overview/overview').then((m) => m.Overview),
   manufacturing: () => import('./features/manufacturing/manufacturing').then((m) => m.Manufacturing),
   distribution: () => import('./features/distribution/distribution').then((m) => m.Distribution),
+  finance: () => import('./features/finance/finance').then((m) => m.Finance),
+  accounting: () => import('./features/accounting/accounting').then((m) => m.Accounting),
 };
 
 export const routes: Routes = [

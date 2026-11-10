@@ -163,5 +163,9 @@ const cb = (await call(T.owner, 'GET', '/reports/cash-book')).json;
 const finalCash = (await call(T.owner, 'GET', '/reports/dashboard')).json.cash;
 ok('cash book running balance ends at the dashboard cash', cb.at(-1).balance === finalCash, `${cb.at(-1).balance} vs ${finalCash}`);
 
+const flows = (await call(T.owner, 'GET', '/reports/cash-flows')).json;
+ok('cash flows add up to the cash balance', flows?.net === finalCash, `${flows?.net} vs ${finalCash}`);
+ok('cash flows list capital as an inflow', flows?.inflows?.some((r) => r.label === 'Capital and partner loans'));
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

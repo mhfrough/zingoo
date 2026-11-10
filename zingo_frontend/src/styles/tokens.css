@@ -1,0 +1,265 @@
+/*
+  TOKENS - the only place raw values live.
+
+  Tier 1  primitive   raw scale values            --slate-500  --space-4  --radius-md
+  Tier 2  semantic    meaning, built on tier 1    --surface-card  --text-muted  --accent
+  Tier 3  component   per-component knobs         --btn-h  --table-row-pad  --card-pad
+
+  Components may only read tier 2 and tier 3. Re-theming (e.g. dark) = remap tier 2.
+  Rules we follow: one radius scale, one spacing scale, one type scale, no violet.
+*/
+@layer tokens {
+  :root {
+    color-scheme: light;
+
+    /* ───────────── Tier 1 · primitives ───────────── */
+
+    /* neutrals (cool slate, matches the navy sidebar) */
+    --slate-0: #ffffff;
+    --slate-25: #f7f8fb;
+    --slate-50: #f0f3f8;
+    --slate-100: #e5e9f0;
+    --slate-200: #d5dbe6;
+    --slate-300: #bcc5d3;
+    --slate-400: #8c98ac;
+    --slate-450: #7a879c; /* 3.4:1 on white and on slate-25: the border colour of form controls (WCAG 1.4.11) */
+    --slate-500: #5f6c82;
+    --slate-600: #4a566b;
+    --slate-700: #35415a;
+    --slate-800: #202c44;
+    --slate-900: #141f33;
+
+    /* navy (sidebar, dark surfaces) */
+    --navy-950: #0c1727;
+    --navy-900: #111f35;
+    --navy-800: #19294a;
+    --navy-700: #223a5e;
+    --navy-300: #a9b9d0;
+
+    /* brand orange */
+    --orange-50: #fff4ed;
+    --orange-100: #ffe5d3;
+    --orange-300: #ffa66f;
+    --orange-500: #f36a2d;
+    --orange-600: #c9480c;
+    --orange-700: #a93b08;
+
+    /* brand yellow (the "OO" of the logo on dark grounds) */
+    --yellow-400: #ffb42e;
+
+    /* status hues (no violet / lavender anywhere) */
+    --teal-50: #e7f7f2;
+    --teal-100: #c9ece2;
+    --teal-600: #11806b;
+    --teal-700: #0c6554;
+
+    --red-50: #fdeef0;
+    --red-100: #f9d2d8;
+    --red-600: #c0344c;
+    --red-700: #9c2639;
+    --red-800: #7a1c2c;
+
+    --amber-50: #fff6df;
+    --amber-100: #ffe7ad;
+    --amber-600: #a86400;
+    --amber-700: #854e00;
+
+    --blue-50: #eaf3ff;
+    --blue-100: #cfe3ff;
+    --blue-600: #1d63c8;
+    --blue-700: #174f9f;
+
+    /* spacing - 4px base */
+    --space-1: 0.25rem;
+    --space-2: 0.5rem;
+    --space-3: 0.75rem;
+    --space-4: 1rem;
+    --space-5: 1.25rem;
+    --space-6: 1.5rem;
+    --space-8: 2rem;
+    --space-10: 2.5rem;
+    --space-12: 3rem;
+    --space-16: 4rem;
+
+    /* radius - one scale */
+    --radius-sm: 6px;
+    --radius-md: 10px;
+    --radius-lg: 14px;
+    --radius-pill: 999px;
+
+    /* type scale (min 12px) */
+    --text-xs: 0.75rem;
+    --text-sm: 0.8125rem;
+    --text-md: 0.875rem;
+    --text-lg: 1rem;
+    --text-xl: 1.125rem;
+    --text-2xl: 1.375rem;
+    --text-3xl: clamp(1.5rem, 0.9rem + 1.2vw, 1.875rem);
+    --text-kpi: clamp(1.375rem, 1rem + 0.9vw, 1.75rem);
+    --text-display: clamp(1.75rem, 1rem + 2.4vw, 2.875rem);
+
+    --weight-regular: 400;
+    --weight-medium: 500;
+    --weight-semibold: 600;
+    --weight-bold: 700;
+
+    --leading-tight: 1.2;
+    --leading-snug: 1.35;
+    --leading-normal: 1.5;
+
+    --font-sans: 'Geist', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
+    --font-mono: 'Geist Mono', ui-monospace, 'SFMono-Regular', Menlo, Consolas, monospace;
+
+    /* elevation - borders first, shadows only for floating layers */
+    --elev-1: 0 1px 2px rgb(20 31 51 / 0.06);
+    --elev-2: 0 6px 20px rgb(20 31 51 / 0.1);
+    --elev-3: 0 24px 64px rgb(12 23 39 / 0.32);
+
+    /* motion: one easing family, durations 120-320ms (count-up and ambient loops are the only exceptions).
+       Entering things use --ease-out, leaving things use --ease-in, ticks and toggles may overshoot with --ease-pop.
+       prefers-reduced-motion: reduce zeroes every one of these (block at the end of this file). */
+    --dur-fast: 120ms;
+    --dur-base: 200ms;
+    --dur-slow: 320ms;
+    --dur-count: 600ms;
+    --stagger: 40ms;
+    --ease-out: cubic-bezier(0.2, 0.7, 0.2, 1);
+    --ease-in: cubic-bezier(0.5, 0, 0.9, 0.45);
+    --ease-pop: cubic-bezier(0.34, 1.45, 0.5, 1);
+
+    /* z-index */
+    --z-sticky: 10;
+    --z-drawer: 40;
+    --z-modal: 60;
+    --z-toast: 80;
+
+    /* layout */
+    --sidebar-w: 16rem;
+    --topbar-h: 4rem;
+    --content-max: 90rem;
+    --gutter: clamp(1rem, 0.4rem + 2vw, 2rem);
+
+    /* ───────────── Tier 2 · semantic ───────────── */
+
+    --surface-page: var(--slate-25);
+    --surface-card: var(--slate-0);
+    --surface-sunken: var(--slate-50);
+    --border: var(--slate-100);
+    --border-strong: var(--slate-200);
+
+    --text: var(--slate-900);
+    --text-2: var(--slate-600);
+    --text-3: var(--slate-500);
+    --text-inverse: var(--slate-0);
+
+    --accent: var(--orange-600);
+    --accent-hover: var(--orange-700);
+    --accent-soft: var(--orange-50);
+    --accent-text: var(--orange-700);
+    --on-accent: var(--slate-0);
+    --brand: var(--orange-500);
+
+    --focus-ring: 0 0 0 3px color-mix(in srgb, var(--orange-500) 40%, transparent);
+
+    --nav-bg: var(--navy-900);
+    --nav-hover: var(--navy-800);
+    --nav-text: var(--navy-300);
+    --nav-text-strong: var(--slate-0);
+    --nav-line: rgb(255 255 255 / 0.08);
+    --nav-active-bg: color-mix(in srgb, var(--orange-500) 20%, transparent);
+
+    --tone-neutral-bg: var(--slate-50);
+    --tone-neutral-fg: var(--slate-600);
+    --tone-neutral-line: var(--slate-200);
+    --tone-success-bg: var(--teal-50);
+    --tone-success-fg: var(--teal-700);
+    --tone-success-line: var(--teal-100);
+    --tone-warning-bg: var(--amber-50);
+    --tone-warning-fg: var(--amber-700);
+    --tone-warning-line: var(--amber-100);
+    --tone-danger-bg: var(--red-50);
+    --tone-danger-fg: var(--red-700);
+    --tone-danger-line: var(--red-100);
+    --tone-info-bg: var(--blue-50);
+    --tone-info-fg: var(--blue-700);
+    --tone-info-line: var(--blue-100);
+    --tone-accent-bg: var(--orange-50);
+    --tone-accent-fg: var(--orange-700);
+    --tone-accent-line: var(--orange-100);
+
+    --positive: var(--teal-700);
+    --negative: var(--red-700);
+
+    /* form controls: soft fill, 3:1 border (WCAG 1.4.11), animated accent border + ring on focus */
+    --surface-field: var(--slate-25);
+    --surface-field-hover: var(--slate-0);
+    --control-line: var(--slate-450);
+    --control-line-hover: var(--slate-500);
+    --control-line-focus: var(--accent);
+    --control-line-error: var(--red-600);
+    --control-line-success: var(--teal-600);
+    --field-ring: 0 0 0 4px color-mix(in srgb, var(--orange-500) 24%, transparent);
+    --field-ring-error: 0 0 0 4px color-mix(in srgb, var(--red-600) 20%, transparent);
+    --field-ring-success: 0 0 0 4px color-mix(in srgb, var(--teal-600) 20%, transparent);
+
+    /* solid destructive button, used by the confirm dialog */
+    --danger-solid: var(--red-700);
+    --danger-solid-hover: var(--red-800);
+    --success-solid: var(--teal-700);
+
+    /* character counter: calm, then orange, then red */
+    --count-ok: var(--text-3);
+    --count-warn: var(--orange-700);
+    --count-danger: var(--red-700);
+
+    /* scrollbars + scroll-edge shadows */
+    --scroll-size: 10px;
+    --scroll-thumb: var(--slate-300);
+    --scroll-thumb-hover: var(--slate-400);
+    --scroll-shadow: rgb(20 31 51 / 0.16);
+    --scroll-thumb-nav: rgb(255 255 255 / 0.2);
+    --scroll-thumb-nav-hover: rgb(255 255 255 / 0.36);
+    --scroll-shadow-nav: rgb(0 0 0 / 0.38);
+
+    /* skeleton */
+    --skeleton-base: var(--slate-50);
+    --skeleton-shine: var(--slate-100);
+
+    /* ───────────── Tier 3 · component ───────────── */
+
+    --control-h: 2.75rem;
+    --control-h-sm: 2rem;
+    --control-pad: var(--space-3);
+    --field-h-float: 3.5rem;
+
+    --btn-h: var(--control-h);
+    --btn-h-sm: var(--control-h-sm);
+
+    --card-pad: var(--space-5);
+    --card-radius: var(--radius-lg);
+
+    --table-row-pad-y: var(--space-3);
+    --table-cell-pad-x: var(--space-3);
+    --table-head-bg: var(--surface-sunken);
+  }
+
+  /* tablets, phones and touch screens: 44px tap targets (same breakpoint as the drawer menu) */
+  @media (max-width: 1100px), (pointer: coarse) {
+    :root {
+      --control-h: 2.75rem;
+      --control-h-sm: 2.75rem;
+      --card-pad: var(--space-4);
+    }
+  }
+
+  /* reduced motion: every duration collapses to zero, so transitions and animations land instantly */
+  @media (prefers-reduced-motion: reduce) {
+    :root {
+      --dur-fast: 0ms;
+      --dur-base: 0ms;
+      --dur-slow: 0ms;
+      --dur-count: 0ms;
+      --stagger: 0ms;
+    }
+  }
+}

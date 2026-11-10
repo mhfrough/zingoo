@@ -1,0 +1,396 @@
+<app-page-header eyebrow="Design system" title="UI kit specimen"
+  description="Every block in one place: tokens, motion, buttons in every state, inputs, rich text, dialogs, skeletons, scroll areas and the merged-column table.">
+  <button pageActions appBtn intent="create" (click)="modalOpen.set(true)">Open a form</button>
+</app-page-header>
+
+<!-- ───────────── tokens ───────────── -->
+<h2 class="section-title">Colour</h2>
+<div class="grid-auto" style="--grid-min: 8.5rem">
+  @for (s of swatches; track s[0]) {
+    <div class="card">
+      <div class="card__body stack" style="--stack-gap: var(--space-2)">
+        <div [style.background]="'var(--' + s[0] + ')'" style="block-size: 2.5rem; border-radius: var(--radius-sm); border: 1px solid var(--border-strong)"></div>
+        <strong>{{ s[1] }}</strong>
+        <code class="muted">--{{ s[0] }}</code>
+      </div>
+    </div>
+  }
+</div>
+
+<h2 class="section-title">Type: Geist + Geist Mono</h2>
+<div class="card">
+  <div class="card__body stack">
+    @for (s of sizes; track s[0]) {
+      <div class="cluster" style="justify-content: space-between">
+        <span [style.font-size]="'var(' + s[0] + ')'" style="font-weight: 600">Run the entire Zingoo business</span>
+        <code class="muted">{{ s[0] }} · {{ s[1] }}</code>
+      </div>
+    }
+    <div class="cluster">
+      <span class="mono">PKR 1,897,000 · B-1001 · SO-201 · 28,080 packs</span>
+      <span class="muted">figures use Geist Mono with tabular numerals, so columns line up</span>
+    </div>
+  </div>
+</div>
+
+<h2 class="section-title">Motion</h2>
+<div class="card">
+  <div class="card__body stack">
+    <p class="muted">One easing family (ease-out in, ease-in out, a small overshoot for ticks). Durations are tokens; under prefers-reduced-motion every one becomes 0ms and the route transition is skipped.</p>
+    <div class="cluster">
+      @for (d of durations; track d[0]) {
+        <span class="motion-chip">{{ d[0] }} <span class="muted">{{ d[1] }}</span></span>
+      }
+    </div>
+    <div class="cluster">
+      <div class="motion-demo" [attr.data-on]="motionOn() ? '' : null"><app-icon name="truck" [size]="24" /></div>
+      <button appBtn size="sm" (click)="motionOn.set(!motionOn())">Replay move</button>
+    </div>
+  </div>
+</div>
+
+<!-- ───────────── buttons ───────────── -->
+<h2 class="section-title">Buttons: every state</h2>
+<div class="card">
+  <div class="card__body stack" style="--stack-gap: var(--space-6)">
+    @for (v of variants; track v) {
+      <div>
+        <p class="state-label">{{ v }}</p>
+        <div class="state-row">
+          <figure class="state"><button appBtn [variant]="v">Save order</button><figcaption>Default</figcaption></figure>
+          <figure class="state"><button appBtn [variant]="v" data-state="hover">Save order</button><figcaption>Hover (lifts, colour steps)</figcaption></figure>
+          <figure class="state"><button appBtn [variant]="v" data-state="focus">Save order</button><figcaption>Focus-visible</figcaption></figure>
+          <figure class="state"><button appBtn [variant]="v" data-state="active">Save order</button><figcaption>Pressed</figcaption></figure>
+          <figure class="state"><button appBtn [variant]="v" [loading]="true">Save order</button><figcaption>Loading (aria-busy)</figcaption></figure>
+          <figure class="state"><button appBtn [variant]="v" disabled>Save order</button><figcaption>Disabled</figcaption></figure>
+        </div>
+      </div>
+    }
+
+    <div>
+      <p class="state-label">Live: click to see loading, then the success flash</p>
+      <div class="state-row">
+        <button appBtn intent="save" [loading]="saving()" [success]="saved()" (click)="save()">Save order</button>
+        <button appBtn variant="primary" iconEnd="arrow-right" [loading]="saving()" (click)="save()">Continue to payment</button>
+        <button appBtn variant="danger-solid" intent="confirm-delete" [loading]="saving()" (click)="save()">Delete batch</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="card" style="margin-block-start: var(--space-4)">
+  <div class="card__head"><div><h2>Icons on buttons</h2><p>Leading, trailing, icon-only (needs an aria-label) and ready-made intents.</p></div></div>
+  <div class="card__body stack">
+    <div class="state-row">
+      <button appBtn variant="primary" icon="plus">Add batch</button>
+      <button appBtn icon="download">Export CSV</button>
+      <button appBtn variant="primary" iconEnd="arrow-right">Next step</button>
+      <button appBtn icon="undo" iconEnd="chevron-down">Reload</button>
+      <button appBtn iconOnly icon="search" aria-label="Search"></button>
+      <button appBtn iconOnly variant="ghost" icon="edit" aria-label="Edit order"></button>
+      <button appBtn iconOnly variant="danger" icon="trash" aria-label="Delete order"></button>
+    </div>
+    <p class="state-label">intent: the default variant and icon for a common action</p>
+    <div class="state-row">
+      <button appBtn intent="create">Create order</button>
+      <button appBtn intent="save">Save product</button>
+      <button appBtn intent="delete">Delete order</button>
+      <button appBtn intent="send">Send statement</button>
+      <button appBtn intent="download">Download PDF</button>
+      <button appBtn intent="edit">Edit batch</button>
+    </div>
+    <p class="state-label">sizes and full width</p>
+    <div class="state-row">
+      <button appBtn size="lg" variant="primary" iconEnd="arrow-right">Large</button>
+      <button appBtn variant="primary">Medium</button>
+      <button appBtn size="sm" variant="primary">Small</button>
+      <button appBtn size="sm" iconOnly icon="more" variant="ghost" aria-label="More actions"></button>
+    </div>
+    <button appBtn variant="primary" [block]="true" icon="check">Full width on a phone</button>
+    <p class="state-label">tags and icon set</p>
+    <div class="state-row">
+      @for (t of tones; track t) {
+        <app-tag [tone]="t">{{ t }}</app-tag>
+      }
+    </div>
+    <div class="state-row">
+      @for (i of icons; track i) {
+        <span class="btn btn-icon" data-variant="ghost" [title]="i"><app-icon [name]="i" /></span>
+      }
+    </div>
+  </div>
+</div>
+
+<!-- ───────────── inputs ───────────── -->
+<form [formGroup]="demo" (submit)="$event.preventDefault()">
+  <h2 class="section-title">Inputs</h2>
+  <div class="card">
+    <div class="card__head"><div><h2>Text, with states</h2><p>Soft fill, 44px height, 3:1 border. Hover and focus animate the border and ring.</p></div></div>
+    <div class="card__body">
+      <div class="form-grid">
+        <app-field label="Reference" hint="Cheque or transfer number"><input type="text" placeholder="e.g. TRF-20931" /></app-field>
+        <app-field label="Email" icon="mail" hint="With a leading icon"><input type="email" formControlName="email" placeholder="name@company.com" /></app-field>
+        <app-field label="Order date" [required]="true" hint="Native date, styled"><input type="date" value="2026-11-09" /></app-field>
+        <app-field label="Amount to collect">
+          <span class="money-input"><span class="money-input__cur">PKR</span><input type="number" formControlName="amount" /></span>
+        </app-field>
+        <app-field label="Reference (error)" error="Enter the cheque or transfer number" [required]="true"><input type="text" value="" /></app-field>
+        <app-field label="Reference (success)" [success]="true" hint="Matches an open invoice"><input type="text" value="TRF-20931" /></app-field>
+        <app-field label="Reference (disabled)"><input type="text" value="Locked after posting" disabled /></app-field>
+        <app-field label="Reference (read only)"><input type="text" value="SO-201" readonly /></app-field>
+        <app-field label="Distributor (native select)">
+          <select><option>Sindh Central Distributors</option><option>South Route Partners</option><option>Upper Sindh Supply</option></select>
+        </app-field>
+        <app-field label="Loading a record" [loading]="true"><input type="text" /></app-field>
+      </div>
+    </div>
+  </div>
+
+  <div class="card" style="margin-block-start: var(--space-4)">
+    <div class="card__head"><div><h2>Floating labels</h2><p>Opt in with <code>[float]="true"</code>. Used on the sign-in page.</p></div></div>
+    <div class="card__body">
+      <div class="form-grid">
+        <app-field label="Email" [float]="true" icon="mail"><input type="email" value="owner@example.test" /></app-field>
+        <app-field label="Distributor" [float]="true"><input type="text" /></app-field>
+        <app-field label="Amount" [float]="true" error="Enter an amount above zero"><input type="number" /></app-field>
+        <app-field label="Method" [float]="true">
+          <select><option>Bank transfer</option><option>Cash</option></select>
+        </app-field>
+      </div>
+    </div>
+  </div>
+
+  <div class="card" style="margin-block-start: var(--space-4)">
+    <div class="card__head"><div><h2>Custom select, number stepper, search</h2><p>Real combobox with keyboard support; the list floats above dialogs.</p></div></div>
+    <div class="card__body">
+      <div class="form-grid">
+        <app-field label="Payment method" hint="Arrow keys, Enter, Esc, type to jump">
+          <app-select formControlName="method" [options]="methods" placeholder="Choose a method" />
+        </app-field>
+        <app-field label="Distributor" [required]="true" hint="Grouped options">
+          <app-select formControlName="distributor" [options]="distributors" placeholder="Choose a distributor" />
+        </app-field>
+        <app-field label="Cartons" hint="Hold the buttons to repeat">
+          <app-number-input formControlName="cartons" [min]="1" [max]="500" />
+        </app-field>
+        <app-field label="Method (floating)" [float]="true">
+          <app-select formControlName="method" [options]="methods" />
+        </app-field>
+        <app-field label="Search orders" [wide]="true" hint="The x clears the text; Esc clears too">
+          <app-search [(value)]="query" placeholder="Search by order, distributor or SKU" ariaLabel="Search orders" />
+        </app-field>
+      </div>
+    </div>
+  </div>
+
+  <div class="card" style="margin-block-start: var(--space-4)">
+    <div class="card__head"><div><h2>Password with eye</h2><p>Click the eye or press Space / Enter on it. Caps Lock shows a hint.</p></div></div>
+    <div class="card__body">
+      <div class="form-grid">
+        <app-field label="Password" icon="lock" [required]="true"><app-password-field formControlName="password" /></app-field>
+        <app-field label="Password" [float]="true" icon="lock" error="Use at least 8 characters"><app-password-field formControlName="password" /></app-field>
+      </div>
+    </div>
+  </div>
+
+  <h2 class="section-title">Notes and descriptions: rich text with a character counter</h2>
+  <div class="card">
+    <div class="card__body">
+      <p class="muted" style="margin-block-end: var(--space-4)">
+        Standard limits: notes {{ limits.note }}, descriptions {{ limits.description }}. The count sits bottom-right inside the field:
+        grey, orange from 80%, red from 95%. Typing and pasting stop at the limit.
+      </p>
+      <div class="form-grid">
+        <app-field label="Notes" [wide]="true">
+          <app-rich-text formControlName="notes" placeholder="Anything the team should know" [max]="limits.note" />
+        </app-field>
+        <app-field label="Description" hint="Up to {{ limits.description }} characters">
+          <app-rich-text formControlName="description" placeholder="Describe the product" [max]="limits.description" />
+        </app-field>
+        <app-field label="Close to the limit (max 120)">
+          <app-rich-text formControlName="nearLimit" [max]="120" />
+        </app-field>
+        <app-field label="Plain textarea with a counter" [wide]="true" hint="A native textarea with maxlength gets the same counter">
+          <textarea formControlName="plainNote" maxlength="120" rows="3"></textarea>
+        </app-field>
+      </div>
+    </div>
+  </div>
+
+  <h2 class="section-title">Checkbox, radio, switch</h2>
+  <div class="card">
+    <div class="card__body">
+      <div class="form-grid">
+        <div class="stack" style="--stack-gap: var(--space-1)">
+          <label class="check"><input type="checkbox" formControlName="agree" /> <span class="check__text">Include released batches<span class="check__hint">Animated tick</span></span></label>
+          <label class="check"><input type="checkbox" /> <span>Unchecked</span></label>
+          <label class="check"><input type="checkbox" checked disabled /> <span>Disabled, checked</span></label>
+        </div>
+        <div class="stack" style="--stack-gap: var(--space-1)">
+          <label class="check"><input type="radio" name="how" checked /> <span>Bank transfer</span></label>
+          <label class="check"><input type="radio" name="how" /> <span>Cash</span></label>
+          <label class="check"><input type="radio" name="how" /> <span>Cheque</span></label>
+        </div>
+        <div class="stack" style="--stack-gap: var(--space-1)">
+          <label class="check"><input type="checkbox" role="switch" formControlName="hold" /> <span class="check__text">Hold credit<span class="check__hint">Switch, off</span></span></label>
+          <label class="check"><input type="checkbox" role="switch" [checked]="switchOn()" (change)="setSwitch($event)" /> <span>Notify on dispatch: {{ switchOn() ? 'on' : 'off' }}</span></label>
+          <label class="check"><input type="checkbox" role="switch" disabled /> <span>Disabled</span></label>
+        </div>
+      </div>
+    </div>
+  </div>
+</form>
+
+<!-- ───────────── dialogs ───────────── -->
+<h2 class="section-title">Confirm dialog, modal, toast</h2>
+<div class="card">
+  <div class="card__body stack">
+    <p class="muted">Every delete asks first. Danger focus starts on Cancel; Esc and a click outside cancel; Enter presses whichever button has focus.</p>
+    <div class="state-row">
+      <button appBtn variant="danger" icon="trash" (click)="askDelete()">Delete batch…</button>
+      <button appBtn variant="primary" icon="check" (click)="askRelease()">Release batch…</button>
+      <button appBtn (click)="modalOpen.set(true)">Open a form</button>
+    </div>
+    <div class="state-row">
+      <button appBtn (click)="onToast('success')">Success toast</button>
+      <button appBtn (click)="onToast('danger')">Error toast</button>
+      <button appBtn (click)="onToast('warning')">Warning toast</button>
+      <button appBtn (click)="onToast('neutral')">Neutral toast</button>
+    </div>
+  </div>
+</div>
+
+<!-- ───────────── skeletons ───────────── -->
+<h2 class="section-title">Skeleton loading</h2>
+<div class="card">
+  <div class="card__head">
+    <div><h2>Building blocks</h2><p>Same shimmer everywhere; reduced motion shows plain grey.</p></div>
+    <button appBtn size="sm" icon="undo" [loading]="tableLoading()" (click)="reloadTable()">Reload the data below</button>
+  </div>
+  <div class="card__body stack" style="--stack-gap: var(--space-6)">
+    <div class="state-row">
+      <app-skeleton shape="circle" />
+      <app-skeleton shape="button" />
+      <app-skeleton shape="title" width="12rem" />
+    </div>
+    <app-skeleton-text [lines]="3" />
+    <app-skeleton-form [fields]="4" />
+  </div>
+</div>
+<div class="grid-auto" style="--grid-min: 14rem; margin-block-start: var(--space-4)">
+  <app-skeleton-kpi />
+  <app-kpi label="Cash available" [value]="tableLoading() ? '' : 'PKR 1,897,000'" icon="wallet" tone="success" [loading]="tableLoading()" foot="Counts up from 0 when it loads" />
+  <app-kpi label="Warehouse stock" [value]="tableLoading() ? '' : '65 cartons'" icon="boxes" tone="info" [loading]="tableLoading()" foot="28,080 finished packs" />
+  <app-kpi label="Net profit after expenses" [value]="tableLoading() ? '' : 'PKR -20,942'" icon="trending-up" tone="danger" [loading]="tableLoading()" foot="Revenue - COGS - booked expenses" />
+</div>
+<div class="card" style="margin-block-start: var(--space-4)" data-flush>
+  <div class="card__head"><div><h2>Table while loading</h2><p>Real column structure, so the layout does not jump when rows arrive.</p></div></div>
+  <div class="card__body">
+    <app-data-table [columns]="orderColumns" [rows]="orders" [actions]="orderActions" [loading]="tableLoading()"
+      searchPlaceholder="Search orders" (action)="onAction($event)" />
+  </div>
+</div>
+<div class="card" style="margin-block-start: var(--space-4)">
+  <div class="card__head">
+    <div><h2>Whole-page skeleton</h2><p><code>&lt;app-page-skeleton /&gt;</code> while a route loads its data.</p></div>
+    <button appBtn size="sm" (click)="showSkeletonPage.set(!showSkeletonPage())">{{ showSkeletonPage() ? 'Hide page skeleton' : 'Show page skeleton' }}</button>
+  </div>
+  @if (showSkeletonPage()) {
+    <div class="card__body"><app-page-skeleton /></div>
+  }
+</div>
+
+<!-- ───────────── scroll ───────────── -->
+<h2 class="section-title">Scroll</h2>
+<div class="grid-auto" style="--grid-min: 22rem">
+  <div class="card" data-flush>
+    <div class="card__head"><div><h2>Scroll region</h2><p>Thin scrollbar, soft shadow at the edge with more to see, no scroll chaining.</p></div></div>
+    <div class="scroll-region" style="--scroll-max: 14rem">
+      @for (r of listItems; track r.id) {
+        <div class="list-row"><span><strong>{{ r.id }}</strong> <span class="muted">{{ r.who }}</span></span><span class="mono">{{ r.amount.toLocaleString('en-PK') }}</span></div>
+      }
+    </div>
+  </div>
+  <div class="card">
+    <div class="card__head"><div><h2>Page scroll</h2></div></div>
+    <div class="card__body stack">
+      <p>Smooth scrolling, anchors stop below the sticky top bar, the sidebar and dialogs keep their own scroll. After about a screen of scrolling a back-to-top button appears at the bottom left.</p>
+      <p class="muted">The top bar picks up a hairline shadow once the page scrolls under it.</p>
+    </div>
+  </div>
+</div>
+
+<!-- ───────────── kit ───────────── -->
+<h2 class="section-title">KPI cards</h2>
+<div class="grid-auto" style="--grid-min: 14rem">
+  <app-kpi label="Cash available" value="PKR 1,897,000" icon="wallet" tone="success" foot="Capital + receipts - cash disbursements" />
+  <app-kpi label="Warehouse stock" value="65 cartons" icon="boxes" tone="info" foot="28,080 finished packs" />
+  <app-kpi label="Net profit after expenses" value="PKR -20,942" icon="trending-up" tone="danger" foot="Revenue - COGS - booked expenses" />
+  <app-kpi label="Open receivables" value="PKR 55,600" icon="clock" tone="warning" foot="2 pending spending approvals" />
+</div>
+
+<h2 class="section-title">Table: merged columns (shrink the window to see it fold)</h2>
+<div class="card" data-flush>
+  <div class="card__head">
+    <div><h2>Sales order desk</h2><p>6 columns carry 9 fields. Under 900px the product and status fold into the first column. Delete asks first.</p></div>
+    <button appBtn variant="primary" size="sm" icon="plus">New sales order</button>
+  </div>
+  <div class="card__body">
+    <app-data-table [columns]="orderColumns" [rows]="orders" [actions]="orderActions" [totals]="orderTotals"
+      searchPlaceholder="Search orders" (action)="onAction($event)" />
+  </div>
+</div>
+
+<div class="card" style="margin-block-start: var(--space-4)" data-flush>
+  <div class="card__head"><div><h2>Production batches</h2><p>Released batches are locked, so they have no actions.</p></div></div>
+  <div class="card__body">
+    <app-data-table [columns]="batchColumns" [rows]="batches" [actions]="batchActions" [searchable]="false"
+      (action)="onAction($event)" />
+  </div>
+</div>
+
+<h2 class="section-title">Table states</h2>
+<div class="grid-auto" style="--grid-min: 22rem">
+  <div class="card" data-flush>
+    <div class="card__body"><app-data-table [columns]="orderColumns" [rows]="[]" [loading]="true" [searchable]="false" /></div>
+  </div>
+  <div class="card" data-flush>
+    <div class="card__body"><app-data-table [columns]="orderColumns" [rows]="[]" [searchable]="false"
+      emptyTitle="No sales orders yet" emptyText="Create the first order to start invoicing distributors." /></div>
+  </div>
+  <div class="card" data-flush>
+    <div class="card__body"><app-data-table [columns]="orderColumns" [rows]="[]" [searchable]="false"
+      error="The server did not answer." /></div>
+  </div>
+</div>
+
+<h2 class="section-title">Empty state and notice</h2>
+<div class="card">
+  <app-empty-state icon="inbox" title="No collections recorded"
+    text="Receipts you record against dispatched orders will appear here.">
+    <button emptyActions appBtn variant="primary" icon="plus">Record collection</button>
+  </app-empty-state>
+</div>
+<div class="stack" style="margin-block-start: var(--space-4); --stack-gap: var(--space-3)">
+  <div class="notice" data-tone="warning"><app-icon name="alert" /> Spend of PKR 50,000 or more needs both signatures before it counts against cash.</div>
+  <div class="notice" data-tone="danger"><app-icon name="circle-alert" /> Wrong email or password.</div>
+  <div class="notice" data-tone="success"><app-icon name="check-circle" /> Collection of PKR 11,700 recorded against SO-201.</div>
+</div>
+
+<app-modal [(open)]="modalOpen" title="Record collection" subtitle="SO-201 · Sindh Central Distributors · due PKR 11,700">
+  <form id="collect-form" class="form-grid" (submit)="$event.preventDefault(); modalOpen.set(false)">
+    <app-field label="Receipt date" [required]="true"><input type="date" value="2026-11-10" /></app-field>
+    <app-field label="Amount" [required]="true">
+      <span class="money-input"><span class="money-input__cur">PKR</span><input type="number" value="11700" /></span>
+    </app-field>
+    <app-field label="Method">
+      <select><option>Bank Transfer</option><option>Cash</option><option>Cheque</option><option>Other</option></select>
+    </app-field>
+    <app-field label="Reference"><input type="text" /></app-field>
+    <app-field label="Notes" [wide]="true"><textarea maxlength="500" placeholder="Optional"></textarea></app-field>
+  </form>
+  <ng-container modalFooter>
+    <button appBtn type="button" (click)="modalOpen.set(false)">Cancel</button>
+    <button appBtn intent="save" type="submit" form="collect-form">Save collection</button>
+  </ng-container>
+</app-modal>

@@ -1,0 +1,108 @@
+<app-page-header eyebrow="Zingoo · Zen Foods" title="Run the entire Zingoo business"
+  description="One operating view connecting factory output, capital, income, expenses and sales collections.">
+  @if (auth.can('manufacturing')) {
+    <ng-container pageActions>
+      <a appBtn variant="primary" icon="plus" routerLink="/admin/manufacturing" [queryParams]="{ new: 'batch' }">Production batch</a>
+    </ng-container>
+  }
+  @if (auth.can('distribution')) {
+    <ng-container pageActions>
+      <a appBtn icon="plus" routerLink="/admin/distribution" [queryParams]="{ new: 'order' }">Sales order</a>
+    </ng-container>
+  }
+  @if (auth.can('finance')) {
+    <ng-container pageActions>
+      <a appBtn icon="plus" routerLink="/admin/finance">Finance entry</a>
+      <a appBtn icon="plus" routerLink="/admin/accounting">Income or expense</a>
+    </ng-container>
+  }
+</app-page-header>
+
+<div class="stack">
+  @if (data.error()) {
+    <div class="notice" data-tone="danger" role="alert">Could not load the overview. Is the API running?</div>
+  }
+
+  <div class="grid-auto">
+    <app-kpi label="Cash available" [value]="d() ? money(d()!.cash) : '...'" icon="wallet" tone="success"
+      foot="Capital + receipts - cash disbursements" />
+    <app-kpi label="Warehouse stock" [value]="d() ? number(d()!.stockCartons) + ' cartons' : '...'" icon="boxes" tone="info"
+      [foot]="d() ? number(d()!.stockPacks) + ' finished packs' : ''" />
+    <app-kpi label="Net profit after expenses" [value]="d() ? money(d()!.netProfit) : '...'" icon="trending-up"
+      [tone]="d() && d()!.netProfit < 0 ? 'danger' : 'success'" foot="Revenue - COGS - booked expenses" />
+    <app-kpi label="Open receivables" [value]="d() ? money(d()!.openReceivables) : '...'" icon="clock" tone="warning"
+      [foot]="d() ? number(d()!.pendingApprovals) + ' pending spending approvals' : ''" />
+  </div>
+
+  <h2>How your three ends work together</h2>
+  <div class="flows">
+    <a class="flow" routerLink="/admin/manufacturing">
+      <span class="flow__icon"><app-icon name="factory" [size]="22" /></span>
+      <span class="flow__text"><strong>1. Manufacture</strong>Plan, quality-check and release finished cartons into the warehouse.</span>
+      <app-icon class="flow__go" name="arrow-right" [size]="18" />
+    </a>
+    <a class="flow" routerLink="/admin/finance">
+      <span class="flow__icon" data-tone="info"><app-icon name="landmark" [size]="22" /></span>
+      <span class="flow__text"><strong>2. Fund and approve</strong>Track capital and spend across the cost centers, with signatures.</span>
+      <app-icon class="flow__go" name="arrow-right" [size]="18" />
+    </a>
+    <a class="flow" routerLink="/admin/distribution">
+      <span class="flow__icon" data-tone="success"><app-icon name="truck" [size]="22" /></span>
+      <span class="flow__text"><strong>3. Distribute</strong>Dispatch stock to distributors, invoice them and record collections.</span>
+      <app-icon class="flow__go" name="arrow-right" [size]="18" />
+    </a>
+  </div>
+
+  <div class="two-col">
+    <div class="card">
+      <div class="card__head">
+        <div><h2>Operational attention</h2><p>{{ d()?.alerts?.length ?? 0 }} active alerts across the business</p></div>
+        <app-tag [tone]="d()?.alerts?.length ? 'warning' : 'success'">{{ d()?.alerts?.length ?? 0 }} alerts</app-tag>
+      </div>
+      @if (alerts().length) {
+        <ul class="alerts">
+          @for (a of alerts(); track $index) {
+            <li class="alert-row">
+              <span class="alert-row__icon"><app-icon [name]="alertIcon(a)" [size]="16" /></span>
+              <span class="alert-row__text"><strong>{{ a.title }}</strong>{{ a.text }}</span>
+              <a appBtn variant="ghost" size="sm" icon="arrow-right" [routerLink]="'/admin/' + a.page">Open</a>
+            </li>
+          }
+        </ul>
+      } @else {
+        <app-empty-state icon="check-circle" title="All caught up" text="No operational alerts right now." />
+      }
+    </div>
+
+    <div class="card">
+      <div class="card__head">
+        <div><h2>Investment overview</h2><p>Funding against the capital target</p></div>
+      </div>
+      <div class="card__body stack">
+        <div class="duo">
+          <div><span class="muted">Raised</span><strong class="mono">{{ d() ? money(d()!.capitalRaised) : '...' }}</strong></div>
+          <div><span class="muted">Target</span><strong class="mono">{{ d() ? money(d()!.capitalTarget) : '...' }}</strong></div>
+        </div>
+        <div>
+          <div class="progress-label"><span>Capital mobilised</span><strong>{{ raisedPct() }}%</strong></div>
+          <div class="progress" role="progressbar" [attr.aria-valuenow]="raisedPct()" aria-valuemin="0" aria-valuemax="100"
+               aria-label="Capital mobilised">
+            <div class="progress__bar" [style.width.%]="raisedPct()"></div>
+          </div>
+        </div>
+        <p class="muted">Approved spending updates the cash position. Spending that still needs a signature does not reduce cash.</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="card" data-flush>
+    <div class="card__head">
+      <div><h2>Latest distributor orders</h2><p>Most recent sales orders in the system</p></div>
+      <a appBtn size="sm" icon="arrow-right" routerLink="/admin/distribution">View distribution</a>
+    </div>
+    <div class="card__body">
+      <app-data-table [columns]="orderColumns" [rows]="d()?.latestOrders ?? []" [loading]="data.isLoading()"
+        [searchable]="false" emptyTitle="No orders yet" />
+    </div>
+  </div>
+</div>

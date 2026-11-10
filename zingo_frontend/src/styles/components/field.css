@@ -1,0 +1,1247 @@
+@layer components {
+  /*
+    FORMS. A plain <input>, <select> or <textarea> inside <app-field> (or .field / .toolbar) gets the modern look from
+    this file with no template change. Extras are opt-in:
+      <app-field float icon="mail" success counter>    floating label, leading icon, success state, char counter
+      <app-password-field> <app-select> <app-number-input> <app-rich-text> <app-search>
+      <label class="check"><input type="checkbox"> ...      checkbox / radio / role="switch" (animated)
+    Look: soft fill (--surface-field), 44px height, 3:1 border, border + 4px ring animate on focus.
+  */
+
+  /* form layout: 2 columns, collapses to 1; .field--wide spans both */
+  .form-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: var(--space-5) var(--space-4);
+
+    @media (max-width: 640px) {
+      grid-template-columns: minmax(0, 1fr);
+    }
+  }
+
+  .field {
+    --_h: var(--control-h);
+
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+    min-inline-size: 0;
+
+    &.field--wide {
+      grid-column: 1 / -1;
+    }
+
+    &[data-float] {
+      --_h: var(--field-h-float);
+      gap: var(--space-1);
+    }
+  }
+
+  .field__label {
+    font-size: var(--text-sm);
+    font-weight: var(--weight-semibold);
+    color: var(--text-2);
+    cursor: pointer;
+    transition:
+      color var(--dur-fast) var(--ease-out),
+      inset-block-start var(--dur-base) var(--ease-out),
+      font-size var(--dur-base) var(--ease-out);
+  }
+
+  .field:focus-within > .field__label {
+    color: var(--accent-text);
+  }
+
+  .field[data-state='error'] > .field__label {
+    color: var(--negative);
+  }
+
+  .field__req {
+    margin-inline-start: 2px;
+    color: var(--negative);
+  }
+
+  .field__control {
+    position: relative;
+    display: block;
+    min-inline-size: 0;
+  }
+
+  .field__hint,
+  .field__error {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--space-1);
+    font-size: var(--text-xs);
+    line-height: var(--leading-snug);
+  }
+
+  .field__hint {
+    color: var(--text-3);
+  }
+
+  .field__error {
+    font-weight: var(--weight-medium);
+    color: var(--negative);
+    animation: rise var(--dur-base) var(--ease-out) both;
+
+    & > .icon {
+      margin-block-start: 1px;
+    }
+  }
+
+  /* error: the control gives one short shake */
+  .field[data-state='error'] > .field__control {
+    animation: shake var(--dur-slow) var(--ease-out);
+  }
+
+  /* leading icon + trailing status icon */
+  .field__icon,
+  .field__status {
+    position: absolute;
+    inset-block-start: calc(var(--_h) / 2);
+    translate: 0 -50%;
+    color: var(--text-3);
+    pointer-events: none;
+    transition: color var(--dur-fast) var(--ease-out);
+  }
+
+  .field__icon {
+    inset-inline-start: var(--control-pad);
+  }
+
+  .field:focus-within .field__icon {
+    color: var(--accent-text);
+  }
+
+  .field__status {
+    inset-inline-end: var(--status-end, var(--control-pad));
+    animation: pop-in var(--dur-base) var(--ease-pop) both;
+  }
+
+  .field[data-state='error'] .field__status {
+    color: var(--negative);
+  }
+
+  .field[data-state='success'] .field__status {
+    color: var(--positive);
+  }
+
+  /* custom controls already own the trailing edge */
+  .field__control:has(.pw, .select) {
+    --status-end: 3rem;
+  }
+
+  .field__control:has(.stepper) .field__status {
+    display: none;
+  }
+
+  /* ───────────── text controls ───────────── */
+  /* :where() keeps this base at zero specificity, so every component rule below can adjust it */
+  :where(.field, .toolbar) :where(
+      input:not([type='checkbox'], [type='radio'], [type='range'], [type='file'], [type='color'], [type='hidden'], [type='image'], [type='submit'], [type='button'], [type='reset']),
+      select,
+      textarea
+    ),
+  .control {
+    inline-size: 100%;
+    min-block-size: var(--_h, var(--control-h));
+    padding: 0 var(--control-pad);
+    border: 1px solid var(--control-line);
+    border-radius: var(--radius-md);
+    background-color: var(--surface-field);
+    color: var(--text);
+    font-size: var(--text-md);
+    box-shadow: 0 0 0 0 transparent;
+    transition:
+      border-color var(--dur-base) var(--ease-out),
+      background-color var(--dur-base) var(--ease-out),
+      box-shadow var(--dur-base) var(--ease-out);
+
+    &::placeholder {
+      color: var(--text-3);
+      opacity: 1;
+      transition: opacity var(--dur-fast) var(--ease-out);
+    }
+
+    &:hover:not(:disabled, :focus-visible, [readonly]) {
+      border-color: var(--control-line-hover);
+      background-color: var(--surface-field-hover);
+    }
+
+    &:is(:focus, :focus-visible) {
+      border-color: var(--control-line-focus);
+      background-color: var(--surface-field-hover);
+      box-shadow: var(--field-ring);
+      border-radius: var(--radius-md);
+    }
+
+    &:disabled {
+      background-color: var(--surface-sunken);
+      border-color: var(--border-strong);
+      color: var(--text-3);
+      cursor: not-allowed;
+    }
+
+    &[readonly] {
+      background-color: var(--surface-sunken);
+      border-style: dashed;
+    }
+
+    &[aria-invalid='true'],
+    &.ng-invalid.ng-touched {
+      border-color: var(--control-line-error);
+
+      &:is(:focus, :focus-visible) {
+        box-shadow: var(--field-ring-error);
+      }
+    }
+  }
+
+  .field[data-state='success'] :is(input, select, textarea):not([aria-invalid='true']) {
+    border-color: var(--control-line-success);
+
+    &:is(:focus, :focus-visible) {
+      box-shadow: var(--field-ring-success);
+    }
+  }
+
+  .field[data-state='error'] :is(input, select, textarea) {
+    border-color: var(--control-line-error);
+
+    &:is(:focus, :focus-visible) {
+      box-shadow: var(--field-ring-error);
+    }
+  }
+
+  /* room for the leading icon / trailing status icon / single-line counter */
+  .field__control:has(.field__icon) :is(input, select, .select__trigger) {
+    padding-inline-start: 2.75rem;
+  }
+
+  .field[data-state='success']:not([data-multiline]) .field__control:not(:has(.pw, .select, .stepper)) :is(input, select) {
+    padding-inline-end: 2.5rem;
+  }
+
+  /* ───────────── textarea (auto-grows where field-sizing is supported; Field covers the rest) ───────────── */
+  :is(.field, .toolbar) textarea {
+    padding-block: var(--space-3);
+    min-block-size: 6.5rem;
+    max-block-size: 16rem;
+    resize: vertical;
+    line-height: var(--leading-normal);
+    field-sizing: content;
+  }
+
+  .field[data-multiline] textarea {
+    padding-block-end: 1.75rem; /* the counter sits in the bottom-right corner */
+  }
+
+  /* ───────────── native select (progressively upgraded to a fully styled picker where the browser allows) ───────────── */
+  :is(.field, .toolbar) select {
+    appearance: none;
+    padding-inline-end: var(--space-10);
+    /* chevron: a data-URI cannot read tokens, so this one colour is --slate-500 written out */
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%235f6c82' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right var(--space-3) center;
+    background-size: 1rem;
+    cursor: pointer;
+  }
+
+  /* ───────────── number: native spinners hidden (use <app-number-input> for a stepper) ───────────── */
+  :is(.field, .toolbar) input[type='number'] {
+    appearance: textfield;
+    -moz-appearance: textfield;
+
+    &::-webkit-inner-spin-button,
+    &::-webkit-outer-spin-button {
+      appearance: none;
+      margin: 0;
+    }
+  }
+
+  /* ───────────── date / time ───────────── */
+  :is(.field, .toolbar) input:is([type='date'], [type='time'], [type='month'], [type='datetime-local']) {
+    font-family: var(--font-mono);
+    font-variant-numeric: tabular-nums;
+    cursor: text;
+
+    &::-webkit-calendar-picker-indicator {
+      inline-size: 1.125rem;
+      block-size: 1.125rem;
+      padding: 0;
+      border-radius: var(--radius-sm);
+      background: var(--text-3);
+      mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='3' y='4' width='18' height='18' rx='2'/%3E%3Cpath d='M16 2v4M8 2v4M3 10h18'/%3E%3C/svg%3E") center / contain no-repeat;
+      cursor: pointer;
+      transition: background-color var(--dur-fast) var(--ease-out);
+
+      &:hover {
+        background: var(--accent-text);
+      }
+    }
+  }
+
+  /* ───────────── file ───────────── */
+  :is(.field, .toolbar) input[type='file'] {
+    inline-size: 100%;
+    color: var(--text-2);
+    font-size: var(--text-sm);
+
+    &::file-selector-button {
+      margin-inline-end: var(--space-3);
+      padding: var(--space-2) var(--space-4);
+      border: 1px solid var(--border-strong);
+      border-radius: var(--radius-md);
+      background: var(--surface-card);
+      color: var(--text);
+      font-weight: var(--weight-semibold);
+      cursor: pointer;
+      transition: background-color var(--dur-fast) var(--ease-out);
+    }
+
+    &::file-selector-button:hover {
+      background: var(--surface-sunken);
+    }
+  }
+
+  /* ───────────── floating label ───────────── */
+  .field[data-float] {
+    & > .field__label {
+      position: absolute;
+      z-index: 1;
+      inset-inline-start: calc(var(--control-pad) + 1px);
+      inset-block-start: calc(var(--field-h-float) / 2);
+      translate: 0 -50%;
+      max-inline-size: calc(100% - var(--control-pad) * 2);
+      overflow: hidden;
+      font-size: var(--text-md);
+      font-weight: var(--weight-regular);
+      color: var(--text-3);
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      pointer-events: none;
+    }
+
+    &[data-icon] > .field__label {
+      inset-inline-start: 2.75rem;
+    }
+
+    &[data-multiline] > .field__label {
+      inset-block-start: 1.375rem;
+    }
+
+    & :is(input, select, .select__trigger):not([type='checkbox'], [type='radio']) {
+      padding-block-start: 1.25rem;
+      padding-block-end: 0.25rem;
+    }
+
+    & textarea {
+      padding-block-start: 1.625rem;
+    }
+
+    /* label floats up when focused, filled, or the control always shows something (select, date) */
+    &:is(
+        :focus-within,
+        :has(
+          input:not(:placeholder-shown),
+          textarea:not(:placeholder-shown),
+          select,
+          input:is([type='date'], [type='time'], [type='month'], [type='datetime-local']),
+          .select__value:not(.is-placeholder),
+          .select__trigger[aria-expanded='true'],
+          .rte:not([data-empty])
+        )
+      )
+      > .field__label {
+      inset-block-start: 0.5rem;
+      translate: 0 0;
+      font-size: var(--text-xs);
+      font-weight: var(--weight-semibold);
+      color: var(--text-2);
+    }
+
+    &:focus-within > .field__label {
+      color: var(--accent-text);
+    }
+
+    &[data-state='error'] > .field__label {
+      color: var(--negative);
+    }
+  }
+
+  /* ───────────── character counter: calm, orange from 80%, red from 95% ───────────── */
+  .char-count {
+    position: absolute;
+    inset-inline-end: var(--space-3);
+    inset-block-end: var(--space-2);
+    padding: 0 var(--space-1);
+    border-radius: var(--radius-sm);
+    background: var(--surface-field);
+    color: var(--count-ok);
+    font-family: var(--font-mono);
+    font-size: var(--text-xs);
+    font-variant-numeric: tabular-nums;
+    line-height: 1.4;
+    pointer-events: none;
+    transition: color var(--dur-base) var(--ease-out);
+
+    &[data-level='warn'] {
+      color: var(--count-warn);
+    }
+
+    &[data-level='danger'] {
+      color: var(--count-danger);
+      font-weight: var(--weight-bold);
+    }
+
+    &[data-level='full'] {
+      color: var(--count-danger);
+      font-weight: var(--weight-bold);
+      animation: shake var(--dur-slow) var(--ease-out);
+    }
+  }
+
+  .field:not([data-multiline]) .char-count {
+    inset-block-end: auto;
+    inset-block-start: calc(var(--_h) / 2);
+    translate: 0 -50%;
+  }
+
+  .field[data-state='success']:not([data-multiline]) .char-count {
+    inset-inline-end: 2.5rem;
+  }
+
+  /* ───────────── amount input: currency chip on the left ───────────── */
+  .money-input {
+    position: relative;
+    display: block;
+
+    & > .money-input__cur {
+      position: absolute;
+      inset-block: 4px;
+      inset-inline-start: 4px;
+      display: flex;
+      align-items: center;
+      padding-inline: var(--space-2);
+      border-radius: calc(var(--radius-md) - 4px);
+      background: var(--surface-sunken);
+      color: var(--text-2);
+      font-family: var(--font-mono);
+      font-size: var(--text-xs);
+      font-weight: var(--weight-semibold);
+      letter-spacing: 0.04em;
+      pointer-events: none;
+    }
+
+    & > input {
+      padding-inline-start: 4.25rem;
+      font-family: var(--font-mono);
+      font-variant-numeric: tabular-nums;
+    }
+  }
+
+  /* ───────────── checkbox / radio / switch ───────────── */
+  .check {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+    min-block-size: var(--control-h);
+    font-size: var(--text-md);
+    cursor: pointer;
+    user-select: none;
+
+    & .check__text {
+      display: flex;
+      flex-direction: column;
+      min-inline-size: 0;
+    }
+
+    & .check__hint {
+      font-size: var(--text-xs);
+      color: var(--text-3);
+    }
+
+    & > input:is([type='checkbox'], [type='radio']) {
+      appearance: none;
+      display: grid;
+      flex: none;
+      place-content: center;
+      inline-size: 1.25rem;
+      block-size: 1.25rem;
+      margin: 0;
+      border: 1.5px solid var(--control-line);
+      border-radius: var(--radius-sm);
+      background: var(--surface-card);
+      cursor: pointer;
+      transition:
+        background-color var(--dur-fast) var(--ease-out),
+        border-color var(--dur-fast) var(--ease-out),
+        box-shadow var(--dur-base) var(--ease-out),
+        scale var(--dur-fast) var(--ease-out);
+
+      &::after {
+        content: '';
+        inline-size: 0.8rem;
+        block-size: 0.8rem;
+        background: var(--on-accent);
+        mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='3.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M20 6 9 17l-5-5'/%3E%3C/svg%3E") center / contain no-repeat;
+        opacity: 0;
+        clip-path: inset(0 100% 0 0);
+        transition:
+          opacity var(--dur-fast) var(--ease-out),
+          clip-path var(--dur-base) var(--ease-out);
+      }
+
+      &:hover:not(:disabled) {
+        border-color: var(--control-line-hover);
+        background: var(--surface-sunken);
+      }
+
+      &:active:not(:disabled) {
+        scale: 0.92;
+      }
+
+      &:is(:checked, :indeterminate) {
+        border-color: var(--accent);
+        background: var(--accent);
+
+        &:hover:not(:disabled) {
+          border-color: var(--accent-hover);
+          background: var(--accent-hover);
+        }
+
+        &::after {
+          opacity: 1;
+          clip-path: inset(0 0 0 0);
+        }
+      }
+
+      &:indeterminate::after {
+        mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='3.5' stroke-linecap='round'%3E%3Cpath d='M5 12h14'/%3E%3C/svg%3E");
+      }
+
+      &:focus-visible {
+        box-shadow: var(--field-ring);
+        border-radius: var(--radius-sm);
+      }
+
+      &:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+      }
+
+      &[aria-invalid='true'] {
+        border-color: var(--control-line-error);
+      }
+    }
+
+    & > input[type='radio'] {
+      border-radius: 50%;
+
+      &:focus-visible {
+        border-radius: 50%;
+      }
+
+      &::after {
+        inline-size: 0.5rem;
+        block-size: 0.5rem;
+        border-radius: 50%;
+        background: var(--on-accent);
+        mask: none;
+        clip-path: none;
+        scale: 0.2;
+        transition:
+          opacity var(--dur-fast) var(--ease-out),
+          scale var(--dur-base) var(--ease-pop);
+      }
+
+      &:checked::after {
+        scale: 1;
+      }
+    }
+
+    /* switch: <input type="checkbox" role="switch"> */
+    & > input[role='switch'] {
+      appearance: none;
+      position: relative;
+      flex: none;
+      inline-size: 2.5rem;
+      block-size: 1.5rem;
+      margin: 0;
+      border: 0;
+      border-radius: var(--radius-pill);
+      background: var(--control-line);
+      cursor: pointer;
+      transition:
+        background-color var(--dur-base) var(--ease-out),
+        box-shadow var(--dur-base) var(--ease-out);
+
+      &::after {
+        content: '';
+        position: absolute;
+        inset-block-start: 3px;
+        inset-inline-start: 3px;
+        inline-size: 1.125rem;
+        block-size: 1.125rem;
+        border-radius: 50%;
+        background: var(--surface-card);
+        box-shadow: var(--elev-1);
+        transition:
+          translate var(--dur-base) var(--ease-pop),
+          inline-size var(--dur-fast) var(--ease-out);
+      }
+
+      &:hover:not(:disabled) {
+        background: var(--control-line-hover);
+      }
+
+      &:active:not(:disabled)::after {
+        inline-size: 1.375rem;
+      }
+
+      &:checked {
+        background: var(--accent);
+
+        &:hover:not(:disabled) {
+          background: var(--accent-hover);
+        }
+
+        &::after {
+          translate: 1rem 0;
+        }
+
+        &:active:not(:disabled)::after {
+          translate: 0.75rem 0;
+        }
+      }
+
+      &:focus-visible {
+        box-shadow: var(--field-ring);
+        border-radius: var(--radius-pill);
+      }
+
+      &:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+      }
+    }
+
+    &:has(> input:disabled) {
+      color: var(--text-3);
+      cursor: not-allowed;
+    }
+  }
+
+  /* [dir=rtl] switch thumb */
+  [dir='rtl'] .check > input[role='switch']:checked::after {
+    translate: -1rem 0;
+  }
+
+  /* ───────────── search + filters above tables ───────────── */
+  .toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-3);
+
+    & > .toolbar__grow {
+      flex: 1 1 14rem;
+      max-inline-size: 24rem;
+    }
+  }
+
+  .search {
+    position: relative;
+    display: block;
+
+    & > .icon:first-child {
+      position: absolute;
+      inset-inline-start: var(--space-3);
+      inset-block-start: 50%;
+      translate: 0 -50%;
+      color: var(--text-3);
+      pointer-events: none;
+      transition: color var(--dur-fast) var(--ease-out);
+    }
+
+    &:focus-within > .icon:first-child {
+      color: var(--accent-text);
+    }
+
+    & > input {
+      padding-inline-start: 2.5rem;
+      padding-inline-end: 2.5rem;
+    }
+
+    /* the browser's own clear glyph is replaced by .search__clear */
+    & > input[type='search'] {
+      appearance: none;
+
+      &::-webkit-search-cancel-button,
+      &::-webkit-search-decoration {
+        appearance: none;
+        display: none;
+      }
+    }
+
+    & > .search__clear {
+      position: absolute;
+      inset-inline-end: 0;
+      inset-block-start: 50%;
+      display: grid;
+      place-items: center;
+      inline-size: var(--control-h);
+      block-size: var(--control-h);
+      padding: 0;
+      border: 0;
+      border-radius: var(--radius-sm);
+      background: transparent;
+      color: var(--text-3);
+      opacity: 0;
+      scale: 0.7;
+      translate: 0 -50%;
+      pointer-events: none;
+      transition:
+        opacity var(--dur-fast) var(--ease-out),
+        scale var(--dur-base) var(--ease-pop),
+        background-color var(--dur-fast) var(--ease-out),
+        color var(--dur-fast) var(--ease-out);
+
+      &:hover {
+        background: var(--surface-sunken);
+        color: var(--text);
+      }
+    }
+
+    &[data-has-value] > .search__clear {
+      opacity: 1;
+      scale: 1;
+      pointer-events: auto;
+    }
+  }
+
+  /* ───────────── password field: eye toggle ───────────── */
+  .pw {
+    position: relative;
+    display: block;
+
+    & > input {
+      padding-inline-end: 3rem;
+    }
+
+    & .pw__toggle {
+      position: absolute;
+      inset-block-start: calc(var(--_h, var(--control-h)) / 2);
+      inset-inline-end: 2px;
+      display: grid;
+      place-items: center;
+      inline-size: var(--control-h); /* 44px */
+      block-size: var(--control-h);
+      padding: 0;
+      border: 0;
+      border-radius: var(--radius-sm);
+      background: transparent;
+      color: var(--text-3);
+      translate: 0 -50%;
+      transition:
+        background-color var(--dur-fast) var(--ease-out),
+        color var(--dur-fast) var(--ease-out),
+        scale var(--dur-fast) var(--ease-out);
+
+      &:hover {
+        background: var(--surface-sunken);
+        color: var(--text);
+      }
+
+      &:active {
+        scale: 0.92;
+      }
+
+      &[aria-pressed='true'] {
+        color: var(--accent-text);
+      }
+
+      & > .icon {
+        grid-area: 1 / 1;
+        transition:
+          opacity var(--dur-base) var(--ease-out),
+          rotate var(--dur-base) var(--ease-out),
+          scale var(--dur-base) var(--ease-out);
+      }
+
+      /* eye open when hidden, eye struck out when shown: the pair rotates and scales past each other */
+      & > .pw__icon-hide {
+        opacity: 0;
+        rotate: -60deg;
+        scale: 0.5;
+      }
+
+      &[aria-pressed='true'] > .pw__icon-show {
+        opacity: 0;
+        rotate: 60deg;
+        scale: 0.5;
+      }
+
+      &[aria-pressed='true'] > .pw__icon-hide {
+        opacity: 1;
+        rotate: 0deg;
+        scale: 1;
+      }
+    }
+
+    & .pw__caps {
+      display: flex;
+      align-items: center;
+      gap: var(--space-1);
+      margin-block-start: var(--space-1);
+      color: var(--tone-warning-fg);
+      font-size: var(--text-xs);
+      font-weight: var(--weight-medium);
+      animation: rise var(--dur-base) var(--ease-out) both;
+    }
+  }
+
+  /* ───────────── number stepper ───────────── */
+  .stepper {
+    display: flex;
+    align-items: stretch;
+    inline-size: 100%;
+    min-block-size: var(--_h, var(--control-h));
+    border: 1px solid var(--control-line);
+    border-radius: var(--radius-md);
+    background: var(--surface-field);
+    overflow: hidden;
+    transition:
+      border-color var(--dur-base) var(--ease-out),
+      background-color var(--dur-base) var(--ease-out),
+      box-shadow var(--dur-base) var(--ease-out);
+
+    &:hover:not([data-disabled]) {
+      border-color: var(--control-line-hover);
+      background: var(--surface-field-hover);
+    }
+
+    &:focus-within {
+      border-color: var(--control-line-focus);
+      background: var(--surface-field-hover);
+      box-shadow: var(--field-ring);
+    }
+
+    &[data-invalid] {
+      border-color: var(--control-line-error);
+    }
+
+    &[data-disabled] {
+      background: var(--surface-sunken);
+      border-color: var(--border-strong);
+      color: var(--text-3);
+    }
+
+    & > .stepper__input {
+      flex: 1 1 auto;
+      inline-size: 100%;
+      min-inline-size: 0;
+      min-block-size: 0;
+      padding: 0 var(--space-2);
+      border: 0;
+      border-radius: 0;
+      background: transparent;
+      box-shadow: none;
+      color: inherit;
+      font-family: var(--font-mono);
+      font-size: var(--text-md);
+      font-variant-numeric: tabular-nums;
+      text-align: center;
+      appearance: textfield;
+      -moz-appearance: textfield;
+
+      &::-webkit-inner-spin-button,
+      &::-webkit-outer-spin-button {
+        appearance: none;
+        margin: 0;
+      }
+
+      &:focus-visible {
+        box-shadow: none;
+      }
+    }
+
+    & .stepper__btn {
+      display: grid;
+      flex: none;
+      place-items: center;
+      inline-size: var(--control-h);
+      padding: 0;
+      border: 0;
+      background: transparent;
+      color: var(--text-2);
+      transition:
+        background-color var(--dur-fast) var(--ease-out),
+        color var(--dur-fast) var(--ease-out),
+        scale var(--dur-fast) var(--ease-out);
+
+      &:hover:not(:disabled) {
+        background: var(--accent-soft);
+        color: var(--accent-text);
+      }
+
+      &:active:not(:disabled) {
+        scale: 0.88;
+      }
+
+      &:disabled {
+        opacity: 0.35;
+        cursor: not-allowed;
+      }
+
+      &:focus-visible {
+        box-shadow: inset var(--focus-ring);
+        border-radius: 0;
+      }
+    }
+  }
+
+  /* ───────────── custom select (app-select) ───────────── */
+  .select {
+    position: relative;
+    display: block;
+
+    & .select__trigger {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: var(--space-2);
+      inline-size: 100%;
+      min-block-size: var(--_h, var(--control-h));
+      padding: 0 var(--space-3);
+      border: 1px solid var(--control-line);
+      border-radius: var(--radius-md);
+      background: var(--surface-field);
+      color: var(--text);
+      font-size: var(--text-md);
+      text-align: start;
+      transition:
+        border-color var(--dur-base) var(--ease-out),
+        background-color var(--dur-base) var(--ease-out),
+        box-shadow var(--dur-base) var(--ease-out);
+
+      &:hover:not(:disabled) {
+        border-color: var(--control-line-hover);
+        background: var(--surface-field-hover);
+      }
+
+      &:is(:focus-visible, [aria-expanded='true']) {
+        border-color: var(--control-line-focus);
+        background: var(--surface-field-hover);
+        box-shadow: var(--field-ring);
+        border-radius: var(--radius-md);
+      }
+
+      &[aria-invalid='true'] {
+        border-color: var(--control-line-error);
+
+        &:is(:focus-visible, [aria-expanded='true']) {
+          box-shadow: var(--field-ring-error);
+        }
+      }
+
+      &:disabled {
+        background: var(--surface-sunken);
+        border-color: var(--border-strong);
+        color: var(--text-3);
+        cursor: not-allowed;
+      }
+    }
+
+    & .select__value {
+      min-inline-size: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+
+      &.is-placeholder {
+        color: var(--text-3);
+      }
+    }
+
+    & .select__chev {
+      flex: none;
+      color: var(--text-3);
+      transition: rotate var(--dur-base) var(--ease-out);
+    }
+
+    & .select__trigger[aria-expanded='true'] .select__chev {
+      rotate: 180deg;
+      color: var(--accent-text);
+    }
+  }
+
+  /* the list is a popover, so it floats above dialogs and is never clipped by a scrolling body */
+  .select__list {
+    position: fixed;
+    inset: auto;
+    margin: 0;
+    padding: var(--space-1);
+    min-inline-size: var(--select-w, 12rem);
+    max-block-size: var(--select-max-h, 16rem);
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    background: var(--surface-card);
+    color: var(--text);
+    box-shadow: var(--elev-2);
+
+    &:popover-open {
+      animation: pop-in var(--dur-base) var(--ease-out) both;
+    }
+
+    &[data-flip]:popover-open {
+      transform-origin: bottom;
+    }
+
+    &[data-closing] {
+      animation: pop-out var(--dur-fast) var(--ease-in) both;
+    }
+  }
+
+  .select__opt {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    min-block-size: var(--control-h-sm);
+    padding: var(--space-1) var(--space-3);
+    border-radius: var(--radius-sm);
+    font-size: var(--text-md);
+    cursor: pointer;
+    transition: background-color var(--dur-fast) var(--ease-out);
+
+    & > .select__opt-text {
+      flex: 1 1 auto;
+      min-inline-size: 0;
+      display: flex;
+      flex-direction: column;
+    }
+
+    & .select__opt-hint {
+      font-size: var(--text-xs);
+      color: var(--text-3);
+    }
+
+    &.is-active {
+      background: var(--surface-sunken);
+    }
+
+    &[aria-selected='true'] {
+      background: var(--accent-soft);
+      color: var(--accent-text);
+      font-weight: var(--weight-semibold);
+
+      & .select__opt-hint {
+        color: var(--accent-text);
+      }
+    }
+
+    &[aria-disabled='true'] {
+      opacity: 0.45;
+      cursor: not-allowed;
+    }
+  }
+
+  .select__group {
+    padding: var(--space-2) var(--space-3) var(--space-1);
+    color: var(--text-3);
+    font-size: var(--text-xs);
+    font-weight: var(--weight-semibold);
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+  }
+
+  .select__empty {
+    padding: var(--space-3);
+    color: var(--text-3);
+    font-size: var(--text-sm);
+  }
+
+  /* ───────────── rich text editor (app-rich-text) ───────────── */
+  .rte {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    inline-size: 100%;
+    border: 1px solid var(--control-line);
+    border-radius: var(--radius-md);
+    background: var(--surface-field);
+    transition:
+      border-color var(--dur-base) var(--ease-out),
+      background-color var(--dur-base) var(--ease-out),
+      box-shadow var(--dur-base) var(--ease-out);
+
+    &:hover:not([data-disabled], :focus-within) {
+      border-color: var(--control-line-hover);
+      background: var(--surface-field-hover);
+    }
+
+    &:focus-within {
+      border-color: var(--control-line-focus);
+      background: var(--surface-field-hover);
+      box-shadow: var(--field-ring);
+    }
+
+    &[data-invalid] {
+      border-color: var(--control-line-error);
+
+      &:focus-within {
+        box-shadow: var(--field-ring-error);
+      }
+    }
+
+    &[data-disabled] {
+      background: var(--surface-sunken);
+      border-color: var(--border-strong);
+      color: var(--text-3);
+    }
+
+    & > .rte__bar {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 2px;
+      padding: 4px;
+      border-block-end: 1px solid var(--border);
+      border-start-start-radius: calc(var(--radius-md) - 1px);
+      border-start-end-radius: calc(var(--radius-md) - 1px);
+      background: var(--surface-card);
+    }
+
+    & .rte__sep {
+      inline-size: 1px;
+      block-size: 1.25rem;
+      margin-inline: var(--space-1);
+      background: var(--border-strong);
+    }
+
+    & .rte__btn {
+      display: grid;
+      place-items: center;
+      inline-size: var(--control-h-sm);
+      block-size: var(--control-h-sm);
+      padding: 0;
+      border: 0;
+      border-radius: var(--radius-sm);
+      background: transparent;
+      color: var(--text-2);
+      transition:
+        background-color var(--dur-fast) var(--ease-out),
+        color var(--dur-fast) var(--ease-out),
+        scale var(--dur-fast) var(--ease-out);
+
+      &:hover:not(:disabled) {
+        background: var(--surface-sunken);
+        color: var(--text);
+      }
+
+      &:active:not(:disabled) {
+        scale: 0.92;
+      }
+
+      &[aria-pressed='true'] {
+        background: var(--accent-soft);
+        color: var(--accent-text);
+      }
+
+      &:disabled {
+        opacity: 0.4;
+        cursor: not-allowed;
+      }
+    }
+
+    & .rte__link {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: var(--space-2);
+      padding: var(--space-2) var(--space-3);
+      border-block-end: 1px solid var(--border);
+      background: var(--surface-sunken);
+      animation: rise var(--dur-base) var(--ease-out) both;
+
+      & > input {
+        flex: 1 1 12rem;
+        min-inline-size: 0;
+      }
+    }
+
+    & .rte__editor {
+      position: relative;
+      min-block-size: 7rem;
+      max-block-size: 18rem;
+      padding: var(--space-3) var(--space-3) 2rem;
+      overflow-y: auto;
+      overscroll-behavior: contain;
+      outline: none;
+      overflow-wrap: anywhere;
+
+      &:focus-visible {
+        box-shadow: none;
+        border-radius: 0;
+      }
+
+      &[data-empty]::before {
+        content: attr(data-placeholder);
+        position: absolute;
+        color: var(--text-3);
+        pointer-events: none;
+      }
+
+      &[contenteditable='false'] {
+        cursor: not-allowed;
+      }
+    }
+
+    & > .char-count {
+      background: transparent;
+    }
+  }
+
+  /* rendered rich text (editor content and read-only views: <div class="rich" [innerHTML]="note">) */
+  .rich {
+    & > :first-child {
+      margin-block-start: 0;
+    }
+
+    & p {
+      margin-block: 0 var(--space-2);
+    }
+
+    & ul,
+    & ol {
+      margin-block: 0 var(--space-2);
+      padding-inline-start: var(--space-6);
+    }
+
+    & ul {
+      list-style: disc;
+    }
+
+    & ol {
+      list-style: decimal;
+    }
+
+    & li {
+      margin-block: 2px;
+    }
+
+    & strong,
+    & b {
+      font-weight: var(--weight-bold);
+    }
+
+    & a {
+      color: var(--accent-text);
+    }
+  }
+}

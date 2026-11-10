@@ -1,0 +1,26 @@
+/*
+  Zingo design system - entry file.
+  Layer order is fixed here once; later layers win over earlier ones.
+    reset       browser normalisation
+    tokens      every colour / size / radius / shadow (3 tiers, see tokens.css)
+    base        element defaults (html, body, headings, links, focus)
+    components  .btn .tag .card .field .table ...  (native CSS nesting); motion.css holds every keyframe
+    utilities   small helpers (.num .stack .sr-only .scroll-shadow)
+*/
+@layer reset, tokens, base, components, utilities;
+
+@import url('./reset.css');
+@import url('./tokens.css');
+@import url('./base.css');
+
+@import url('./components/motion.css');
+@import url('./components/button.css');
+@import url('./components/field.css');
+@import url('./components/surface.css');
+@import url('./components/overlay.css');
+@import url('./components/table.css');
+@import url('./components/shell.css');
+@import url('./components/auth.css');
+@import url('./components/specimen.css');
+
+@import url('./utilities.css');

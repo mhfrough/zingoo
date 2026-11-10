@@ -1,0 +1,239 @@
+import { Injectable } from '@nestjs/common';
+import { InjectDataSource } from '@nestjs/typeorm';
+import { DataSource } from 'typeorm';
+import { StockService } from '../catalog/stock.service';
+import { round2 } from '../common/numeric.transformer';
+import { OrdersService } from '../distribution/distribution.service';
+import { AccountingService, FinanceService } from '../finance/finance.service';
+import { BatchesService } from '../manufacturing/manufacturing.service';
+import { SettingsService } from '../setup/setup.service';
+
+/** Period filter: 'all' or 'YYYY-MM'. */
+type Period = string;
+
+/**
+ * Read-only reports. Money figures come from the ledger (so they always agree with each other);
+ * stock and approvals come from the documents.
+ */
+@Injectable()
+export class ReportsService {
+  constructor(
+    @InjectDataSource() private readonly db: DataSource,
+    private readonly settings: SettingsService,
+    private readonly stockSvc: StockService,
+    private readonly orders: OrdersService,
+    private readonly batches: BatchesService,
+    private readonly finance: FinanceService,
+    private readonly accounting: AccountingService,
+  ) {}
+
+  /** net balance (debit - credit) of one ledger account */
+  async accountNet(name: string): Promise<number> {
+    const [r] = await this.db.query(
+      `SELECT COALESCE(SUM(l.debit - l.credit), 0)::float8 AS net
+         FROM ledger_entries l JOIN accounts a ON a.code = l."accountCode" WHERE a.name = $1`,
+      [name],
+    );
+    return round2(r.net);
+  }
+
+  // ───────────── income statement ─────────────
+
+  async incomeStatement(period: Period = 'all') {
+    const rows: { name: string; type: string; debit: number; credit: number }[] = await this.db.query(
+      `SELECT a.name, a.type, SUM(l.debit)::float8 AS debit, SUM(l.credit)::float8 AS credit
+         FROM ledger_entries l JOIN accounts a ON a.code = l."accountCode"
+        WHERE $1::text = 'all' OR to_char(l."entryDate", 'YYYY-MM') = $1::text
+        GROUP BY a.name, a.type`,
+      [period],
+    );
+    let sales = 0, other = 0, cogs = 0, opex = 0;
+    const income: Record<string, number> = {};
+    const expenses: Record<string, number> = {};
+    for (const r of rows) {
+      if (r.type === 'Revenue') {
+        const v = r.credit - r.debit;
+        if (r.name === 'Sales Revenue' || r.name === 'Export Sales Revenue') sales += v; else other += v;
+        income[r.name] = round2(v);
+      } else if (r.type === 'COGS') {
+        cogs += r.debit - r.credit;
+      } else if (r.type === 'Expense') {
+        const v = r.debit - r.credit;
+        opex += v;
+        expenses[r.name] = round2(v);
+      }
+    }
+    const revenue = sales + other;
+    return {
+      period,
+      sales: round2(sales), other: round2(other), revenue: round2(revenue), cogs: round2(cogs),
+      grossProfit: round2(revenue - cogs), operatingExpenses: round2(opex), netProfit: round2(revenue - cogs - opex),
+      income, expenses,
+    };
+  }
+
+  // ───────────── books ─────────────
+
+  async trialBalance() {
+    const rows: { code: string; name: string; type: string; debit: number; credit: number }[] = await this.db.query(
+      `SELECT a.code, a.name, a.type,
+              COALESCE(SUM(l.debit), 0)::float8 AS debit, COALESCE(SUM(l.credit), 0)::float8 AS credit
+         FROM accounts a LEFT JOIN ledger_entries l ON l."accountCode" = a.code
+        GROUP BY a.code, a.name, a.type ORDER BY a.code`,
+    );
+    const accounts = rows.map((r) => ({ ...r, debit: round2(r.debit), credit: round2(r.credit), net: round2(r.debit - r.credit) }));
+    const debit = round2(accounts.reduce((s, r) => s + r.debit, 0));
+    const credit = round2(accounts.reduce((s, r) => s + r.credit, 0));
+    return { accounts, totalDebit: debit, totalCredit: credit, balanced: Math.abs(debit - credit) < 0.005 };
+  }
+
+  async cashBook(period: Period = 'all') {
+    const rows: any[] = await this.db.query(
+      `SELECT l.id, to_char(l."entryDate", 'YYYY-MM-DD') AS date, l.reference, l.description, l.source,
+              l.debit::float8 AS "cashIn", l.credit::float8 AS "cashOut"
+         FROM ledger_entries l JOIN accounts a ON a.code = l."accountCode"
+        WHERE a.name = 'Cash & Bank' ORDER BY l."entryDate", l.seq`,
+    );
+    let balance = 0;
+    const all = rows.map((r) => ({ ...r, balance: (balance = round2(balance + r.cashIn - r.cashOut)) }));
+    return period === 'all' ? all : all.filter((r) => r.date.slice(0, 7) === period);
+  }
+
+  journal(period: Period = 'all') {
+    return this.db.query(
+      `SELECT l.id, to_char(l."entryDate", 'YYYY-MM-DD') AS date, l.source, l.reference, l.description,
+              a.code AS "accountCode", a.name AS account, l.debit::float8 AS debit, l.credit::float8 AS credit
+         FROM ledger_entries l JOIN accounts a ON a.code = l."accountCode"
+        WHERE $1::text = 'all' OR to_char(l."entryDate", 'YYYY-MM') = $1::text
+        ORDER BY l."entryDate" DESC, l.seq DESC`,
+      [period],
+    );
+  }
+
+  async periods(): Promise<string[]> {
+    const rows: { p: string }[] = await this.db.query(`SELECT DISTINCT to_char("entryDate", 'YYYY-MM') AS p FROM ledger_entries ORDER BY p DESC`);
+    return rows.map((r) => r.p);
+  }
+
+  // ───────────── stock ─────────────
+
+  async stock() {
+    const [products, stock, s] = await Promise.all([
+      this.db.query(`SELECT id, sku, name, pack, "packsPerCarton", active FROM products ORDER BY sku`),
+      this.stockSvc.stockByProduct(),
+      this.settings.get(),
+    ]);
+    return products.map((p: any) => {
+      const cartons = stock[p.id] ?? 0;
+      const packs = cartons * (p.packsPerCarton || s.packsPerCarton);
+      return { productId: p.id, sku: p.sku, name: p.name, pack: p.pack, cartons, packs, low: cartons < s.lowStockCartons, active: p.active };
+    });
+  }
+
+  // ───────────── money owed ─────────────
+
+  async receivables() {
+    const [orders, docs] = await Promise.all([this.orders.list(), this.accounting.list()]);
+    const rows = [
+      ...orders.filter((o) => o.status === 'Dispatched' && o.outstanding > 0.01).map((o) => ({
+        reference: o.refNo, type: 'Distributor invoice', party: o.distributor.name,
+        date: o.dispatchDate ?? o.date, dueDate: o.dueDate, outstanding: o.outstanding,
+      })),
+      ...docs.filter((d) => d.kind === 'Income' && d.due > 0.01).map((d) => ({
+        reference: d.refNo, type: 'Other income', party: d.party, date: d.date, dueDate: d.dueDate ?? d.date, outstanding: d.due,
+      })),
+    ].sort((a, b) => String(a.dueDate).localeCompare(String(b.dueDate)));
+    return { total: round2(rows.reduce((s, r) => s + r.outstanding, 0)), rows };
+  }
+
+  async payables() {
+    const [docs, batches] = await Promise.all([this.accounting.list(), this.batches.list()]);
+    const rows = [
+      ...docs.filter((d) => d.kind === 'Expense' && d.approved && d.due > 0.01).map((d) => ({
+        reference: d.refNo, type: d.category, party: d.party, dueDate: d.dueDate ?? d.date, outstanding: d.due,
+      })),
+      ...batches.filter((b) => b.status === 'Released' && b.due > 0.01).map((b) => ({
+        reference: b.refNo, type: 'Manufacturer', party: b.manufacturer.name, dueDate: b.date, outstanding: b.due,
+      })),
+    ].sort((a, b) => String(a.dueDate).localeCompare(String(b.dueDate)));
+    return { total: round2(rows.reduce((s, r) => s + r.outstanding, 0)), rows };
+  }
+
+  // ───────────── budgets and alerts ─────────────
+
+  async budgets() {
+    const [centers, entries, docs] = await Promise.all([
+      this.db.query(`SELECT id, name, budget::float8 AS budget FROM categories WHERE kind = 'COST_CENTER' ORDER BY name`),
+      this.finance.list(),
+      this.accounting.list(),
+    ]);
+    return centers.map((c: any) => {
+      const spent = round2(
+        entries.filter((f) => f.category === c.name && f.needsApproval && f.approved).reduce((s, f) => s + Number(f.amount), 0) +
+        docs.filter((d) => d.kind === 'Expense' && d.category === c.name && d.approved).reduce((s, d) => s + Number(d.amount), 0),
+      );
+      return { ...c, spent, usedPct: Math.round((spent / Math.max(1, c.budget)) * 100) };
+    });
+  }
+
+  async alerts() {
+    const [docs, entries, stock, orders, batches] = await Promise.all([
+      this.accounting.list(), this.finance.list(), this.stock(), this.orders.list(), this.batches.list(),
+    ]);
+    const s = await this.settings.get();
+    return [
+      ...docs.filter((d) => d.needsApproval && !d.approved).map((d) => ({
+        kind: 'approval', page: 'accounting', title: `Accounting expense approval · ${d.category}`,
+        text: `PKR ${d.amount} for ${d.party} · ${d.signatures.length}/${d.requiredSignatures} approvals`,
+      })),
+      ...entries.filter((f) => f.needsApproval && !f.approved).map((f) => ({
+        kind: 'approval', page: 'finance', title: `Approval required · ${f.category}`,
+        text: `PKR ${f.amount} for ${f.party} · ${f.signatures.length}/${f.requiredSignatures} approvals`,
+      })),
+      ...stock.filter((p: any) => p.active && p.low).map((p: any) => ({
+        kind: 'stock', page: 'manufacturing', title: `Low stock · ${p.sku}`,
+        text: `${p.cartons} cartons available · replenish below ${s.lowStockCartons}`,
+      })),
+      ...orders.filter((o) => o.status === 'Draft').map((o) => ({
+        kind: 'order', page: 'distribution', title: `Undispatched order · ${o.refNo}`,
+        text: `${o.cartons} cartons for ${o.distributor.name}`,
+      })),
+      ...batches.filter((b) => b.status === 'Planned').map((b) => ({
+        kind: 'batch', page: 'manufacturing', title: `Batch awaiting release · ${b.refNo}`,
+        text: `${b.targetCartons} target cartons · ${b.qc} QC`,
+      })),
+    ];
+  }
+
+  // ───────────── dashboard ─────────────
+
+  async dashboard() {
+    const [cash, ar, ap, profit, stock, alerts, orders, s, capital] = await Promise.all([
+      this.accountNet('Cash & Bank'),
+      this.accountNet('Accounts Receivable'),
+      this.accountNet('Accounts Payable'),
+      this.incomeStatement('all'),
+      this.stock(),
+      this.alerts(),
+      this.orders.list(),
+      this.settings.get(),
+      this.db.query(`SELECT COALESCE(SUM(amount), 0)::float8 AS total FROM finance_entries WHERE type = 'Capital Injection'`),
+    ]);
+    return {
+      cash,
+      stockCartons: stock.reduce((n: number, p: any) => n + p.cartons, 0),
+      stockPacks: stock.reduce((n: number, p: any) => n + p.packs, 0),
+      netProfit: profit.netProfit,
+      openReceivables: ar,
+      payables: round2(-ap),
+      capitalRaised: round2(capital[0].total),
+      capitalTarget: s.capitalTarget,
+      pendingApprovals: alerts.filter((a) => a.kind === 'approval').length,
+      alerts,
+      latestOrders: orders.slice(0, 5).map((o) => ({
+        id: o.id, refNo: o.refNo, date: o.date, distributor: o.distributor.name, sku: o.product.sku,
+        cartons: o.cartons, value: o.billed, status: o.status,
+      })),
+    };
+  }
+}

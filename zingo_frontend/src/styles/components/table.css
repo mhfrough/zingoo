@@ -1,0 +1,221 @@
+@layer components {
+  /*
+    Merged-column data table - never scrolls sideways.
+
+    A column can put extra fields under its main value (.cell__sub), so 11 fields fit in 6 columns.
+    The wrapper is a container, so the table reacts to the space it is given (a narrow panel too):
+      >= 900px   all columns
+      640-899px  priority-3 columns fold into the first column (.cell__fold)
+      <  640px   every row becomes a card of label : value lines
+  */
+  .dt {
+    container: dt / inline-size;
+  }
+
+  .dt__bar {
+    padding: var(--space-4) var(--card-pad);
+    border-block-end: 1px solid var(--border);
+  }
+
+  .table {
+    inline-size: 100%;
+    font-size: var(--text-md);
+
+    & th {
+      padding: var(--space-3) var(--table-cell-pad-x);
+      border-block-end: 1px solid var(--border);
+      background: var(--table-head-bg);
+      color: var(--text-3);
+      font-size: var(--text-xs);
+      font-weight: var(--weight-semibold);
+      letter-spacing: 0.05em;
+      text-align: start;
+      text-transform: uppercase;
+      position: sticky;
+      inset-block-start: var(--topbar-h);
+      z-index: 1;
+
+      &:first-child {
+        border-start-start-radius: calc(var(--card-radius) - 1px);
+      }
+
+      &:last-child {
+        border-start-end-radius: calc(var(--card-radius) - 1px);
+      }
+    }
+
+    & td {
+      padding: var(--table-row-pad-y) var(--table-cell-pad-x);
+      border-block-end: 1px solid var(--border);
+      vertical-align: top;
+      /* break-word (not anywhere): a date or number is never split mid-token */
+      overflow-wrap: break-word;
+    }
+
+    /* rows enter once per load: first 8 only, 40ms apart (--i is set by DataTable; filtering reuses rows, so no replay) */
+    & tbody tr {
+      animation: row-in var(--dur-base) var(--ease-out) both;
+      animation-delay: calc(var(--i, 0) * var(--stagger));
+      transition: background-color var(--dur-fast) var(--ease-out);
+
+      &:nth-child(n + 9),
+      &.is-skeleton {
+        animation: none;
+      }
+
+      &:hover:not(.is-skeleton) {
+        background: var(--surface-page);
+      }
+
+      &:last-child > td {
+        border-block-end: 0;
+      }
+    }
+
+    & .cell__skeleton-sub {
+      margin-block-start: var(--space-2);
+    }
+
+    & :is(th, td)[data-end] {
+      text-align: end;
+    }
+
+    & td[data-end] .cell__main {
+      font-family: var(--font-mono);
+      font-variant-numeric: tabular-nums;
+      white-space: nowrap;
+    }
+
+    & td[data-primary] .cell__main {
+      font-weight: var(--weight-semibold);
+    }
+
+    & .cell__sub {
+      margin-block-start: 2px;
+      font-size: var(--text-xs);
+      color: var(--text-3);
+      line-height: var(--leading-snug);
+    }
+
+    & .cell__fold {
+      display: none;
+      flex-wrap: wrap;
+      gap: var(--space-1) var(--space-4);
+      margin-block-start: var(--space-2);
+      font-size: var(--text-xs);
+      color: var(--text-2);
+
+      & b {
+        font-weight: var(--weight-medium);
+        color: var(--text-3);
+      }
+    }
+
+    & .cell-actions {
+      display: flex;
+      flex-wrap: nowrap;
+      justify-content: flex-end;
+      gap: var(--space-1);
+    }
+
+    & tfoot td {
+      border-block-start: 2px solid var(--border-strong);
+      border-block-end: 0;
+      background: var(--surface-sunken);
+      font-weight: var(--weight-semibold);
+    }
+  }
+
+  /* tablet: fold priority-3 columns */
+  @container dt (max-width: 899px) {
+    .table [data-priority='3'] {
+      display: none;
+    }
+
+    .table .cell__fold {
+      display: flex;
+    }
+  }
+
+  /* phone: one card per row */
+  @container dt (max-width: 639px) {
+    .table,
+    .table tbody,
+    .table tfoot,
+    .table tr {
+      display: block;
+    }
+
+    .table thead {
+      position: absolute;
+      inline-size: 1px;
+      block-size: 1px;
+      overflow: hidden;
+      clip-path: inset(50%);
+    }
+
+    .table tr {
+      padding: var(--space-3) var(--space-4);
+      border-block-end: 1px solid var(--border);
+    }
+
+    .table tbody tr:last-child {
+      border-block-end: 0;
+    }
+
+    .table td,
+    .table td[data-priority='3'] {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: var(--space-4);
+      padding: var(--space-1) 0;
+      border: 0;
+      text-align: end;
+    }
+
+    .table td::before {
+      content: attr(data-label);
+      flex: none;
+      font-size: var(--text-xs);
+      font-weight: var(--weight-medium);
+      color: var(--text-3);
+      text-align: start;
+    }
+
+    .table td[data-primary] {
+      display: block;
+      padding-block-end: var(--space-2);
+      text-align: start;
+    }
+
+    .table td[data-primary]::before,
+    .table td.cell-actions-td::before {
+      display: none;
+    }
+
+    .table td.cell-actions-td {
+      display: block;
+      padding-block-start: var(--space-2);
+    }
+
+    .table .cell-actions {
+      justify-content: flex-start;
+      flex-wrap: wrap;
+    }
+
+    .table .cell__fold {
+      display: none;
+    }
+
+    .table tfoot tr {
+      background: var(--surface-sunken);
+      border-block-start: 2px solid var(--border-strong);
+    }
+
+    .table tfoot td {
+      background: transparent;
+      border: 0;
+    }
+  }
+}

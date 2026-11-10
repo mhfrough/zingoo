@@ -1,0 +1,207 @@
+import { Injectable, OnModuleInit } from '@nestjs/common';
+import { InjectDataSource } from '@nestjs/typeorm';
+import { DataSource, EntityManager } from 'typeorm';
+import { JournalSource } from '../common/enums';
+import { round2 } from '../common/numeric.transformer';
+import { Collection, SalesOrder } from '../distribution/distribution.entities';
+import { AccountingDocument, AccountingSettlement, Approval, FinanceEntry } from '../finance/finance.entities';
+import { ManufacturerPayment, ProductionBatch } from '../manufacturing/manufacturing.entities';
+import { Setting } from '../setup/setup.entities';
+import { SettingsService } from '../setup/setup.service';
+import { LedgerRow, LedgerService } from './ledger.service';
+
+/** Ledger account names (the chart of accounts is looked up by name). */
+export const ACC = {
+  CASH: 'Cash & Bank',
+  AR: 'Accounts Receivable',
+  INVENTORY: 'Inventory · Estimated',
+  FIXED_ASSETS: 'Fixed Assets',
+  AP: 'Accounts Payable',
+  MFR_PAYABLE: 'Manufacturer Payable',
+  PARTNER_LOANS: 'Partner Loans',
+  EQUITY: 'Owner Equity',
+  SALES: 'Sales Revenue',
+  OTHER_INCOME: 'Other Income',
+  COGS: 'Cost of Goods Sold',
+} as const;
+
+export interface ApprovalState {
+  /** does this document need signatures at all */
+  needs: boolean;
+  signed: string[];
+  required: number;
+  approved: boolean;
+}
+
+/**
+ * Turns documents into journal lines. Each sync*() is safe to call again and again:
+ * it works out what the document should look like in the ledger right now and rewrites it.
+ *   - a batch only posts once Released
+ *   - an order only posts once Dispatched
+ *   - spend / bills only post once they have enough signatures
+ */
+@Injectable()
+export class PostingService implements OnModuleInit {
+  constructor(
+    private readonly ledger: LedgerService,
+    private readonly settings: SettingsService,
+    @InjectDataSource() private readonly db: DataSource,
+  ) {}
+
+  onModuleInit() {
+    // a new approval threshold can change which documents count as approved
+    this.settings.changed$.subscribe(() => void this.resyncApprovals());
+  }
+
+  /** two lines, one debit one credit; nothing for a zero amount */
+  private pair(
+    date: string, source: JournalSource, reference: string, description: string,
+    debit: string, credit: string, amount: number, extra: Partial<LedgerRow> = {},
+  ): LedgerRow[] {
+    const n = round2(Number(amount));
+    if (!(n > 0)) return [];
+    return [
+      { date, source, reference, description, account: debit, debit: n, credit: 0, ...extra },
+      { date, source, reference, description, account: credit, debit: 0, credit: n, ...extra },
+    ];
+  }
+
+  // ───────────── approvals ─────────────
+
+  required(amount: number, s: Setting) {
+    return Number(amount) >= Number(s.approvalThreshold) ? 2 : 1;
+  }
+
+  async signatures(em: EntityManager, docType: 'FINANCE' | 'ACCOUNTING', docId: string): Promise<string[]> {
+    const rows = await em.find(Approval, { where: { docType, docId }, order: { seat: 'ASC' } });
+    return rows.map((r) => r.seat);
+  }
+
+  async financeState(em: EntityManager, f: FinanceEntry): Promise<ApprovalState> {
+    const needs = f.type === 'Operating Expense' || f.type === 'Asset Purchase';
+    if (!needs) return { needs, signed: [], required: 0, approved: true };
+    const [s, signed] = await Promise.all([this.settings.get(em), this.signatures(em, 'FINANCE', f.id)]);
+    const required = this.required(f.amount, s);
+    return { needs, signed, required, approved: signed.length >= required };
+  }
+
+  async accountingState(em: EntityManager, a: AccountingDocument): Promise<ApprovalState> {
+    const needs = a.kind === 'Expense';
+    if (!needs) return { needs, signed: [], required: 0, approved: true };
+    const [s, signed] = await Promise.all([this.settings.get(em), this.signatures(em, 'ACCOUNTING', a.id)]);
+    const required = this.required(a.amount, s);
+    return { needs, signed, required, approved: signed.length >= required };
+  }
+
+  // ───────────── manufacturing ─────────────
+
+  async syncBatch(em: EntityManager, id: string) {
+    const b = await em.findOne(ProductionBatch, { where: { id }, relations: ['product'] });
+    if (!b) return;
+    const rows = b.status === 'Released'
+      ? this.pair(b.date, 'Manufacturing', b.refNo, `Factory goods received · ${b.product.sku}`, ACC.INVENTORY, ACC.MFR_PAYABLE, b.cost)
+      : [];
+    await this.ledger.replace(em, 'BATCH', id, rows);
+  }
+
+  async syncMfrPayment(em: EntityManager, id: string) {
+    const p = await em.findOne(ManufacturerPayment, { where: { id }, relations: ['batch'] });
+    if (!p) return;
+    await this.ledger.replace(em, 'MFR_PAYMENT', id,
+      this.pair(p.date, 'Manufacturing', p.refNo, `Factory payable settled · ${p.batch.refNo}`, ACC.MFR_PAYABLE, ACC.CASH, p.amount));
+  }
+
+  // ───────────── distribution ─────────────
+
+  async syncOrder(em: EntityManager, id: string) {
+    const o = await em.findOne(SalesOrder, { where: { id }, relations: ['product', 'distributor'] });
+    if (!o) return;
+    let rows: LedgerRow[] = [];
+    if (o.status === 'Dispatched') {
+      const s = await this.settings.get(em);
+      const date = o.dispatchDate ?? o.date;
+      const packs = o.packsPerCarton || o.product.packsPerCarton || s.packsPerCarton;
+      const billed = round2(o.cartons * packs * Number(o.rate));
+      rows = [
+        ...this.pair(date, 'Distribution', o.refNo, `Distributor invoice · ${o.distributor.name}`, ACC.AR, ACC.SALES, billed),
+        ...this.pair(date, 'Distribution', o.refNo, `COGS · ${o.product.sku}`, ACC.COGS, ACC.INVENTORY, o.cartons * Number(o.unitCost ?? 0)),
+      ];
+    }
+    await this.ledger.replace(em, 'ORDER', id, rows);
+  }
+
+  async syncCollection(em: EntityManager, id: string) {
+    const c = await em.findOne(Collection, { where: { id }, relations: ['order'] });
+    if (!c) return;
+    await this.ledger.replace(em, 'COLLECTION', id,
+      this.pair(c.date, 'Distribution', c.refNo, `Distributor collection · ${c.order.refNo}`, ACC.CASH, ACC.AR, c.amount));
+  }
+
+  // ───────────── finance ─────────────
+
+  async syncFinance(em: EntityManager, id: string) {
+    const f = await em.findOne(FinanceEntry, { where: { id } });
+    if (!f) return;
+    const st = await this.financeState(em, f);
+    let rows: LedgerRow[] = [];
+    if (st.approved) {
+      const n = Number(f.amount);
+      switch (f.type) {
+        case 'Capital Injection':
+          rows = this.pair(f.date, 'Investment', f.refNo, `Funding · ${f.party}`, ACC.CASH,
+            f.funding === 'Partner Loan' ? ACC.PARTNER_LOANS : ACC.EQUITY, n);
+          break;
+        case 'Operating Expense':
+          rows = this.pair(f.date, 'Investment', f.refNo, `Operating expense · ${f.category}`, `Expense · ${f.category}`, ACC.CASH, n);
+          break;
+        case 'Asset Purchase':
+          rows = this.pair(f.date, 'Investment', f.refNo, `Fixed asset · ${f.category}`, ACC.FIXED_ASSETS, ACC.CASH, n);
+          break;
+        case 'Other Receipt':
+          rows = this.pair(f.date, 'Investment', f.refNo, `Other receipt · ${f.party}`, ACC.CASH, ACC.OTHER_INCOME, n);
+          break;
+      }
+    }
+    await this.ledger.replace(em, 'FINANCE', id, rows);
+  }
+
+  // ───────────── accounting (income invoices, expense bills) ─────────────
+
+  async syncAccountingDoc(em: EntityManager, id: string) {
+    const a = await em.findOne(AccountingDocument, { where: { id } });
+    if (!a) return;
+    const st = await this.accountingState(em, a);
+    let rows: LedgerRow[] = [];
+    if (st.approved) {
+      const extra = { currency: a.currency, fxRate: a.fxRate };
+      rows = a.kind === 'Income'
+        ? this.pair(a.date, 'Accounting', a.refNo, `Income invoice · ${a.party}`, ACC.AR, `Income · ${a.category}`, a.amount, extra)
+        : this.pair(a.date, 'Accounting', a.refNo, `Supplier bill · ${a.party}`, `Expense · ${a.category}`, ACC.AP, a.amount, extra);
+    }
+    await this.ledger.replace(em, 'ACC_DOC', id, rows);
+    // payments against it only count while the document itself is approved
+    const settlements = await em.find(AccountingSettlement, { where: { documentId: id } });
+    for (const s of settlements) await this.syncSettlement(em, s.id);
+  }
+
+  async syncSettlement(em: EntityManager, id: string) {
+    const s = await em.findOne(AccountingSettlement, { where: { id }, relations: ['document'] });
+    if (!s) return;
+    const st = await this.accountingState(em, s.document);
+    let rows: LedgerRow[] = [];
+    if (st.approved) {
+      rows = s.document.kind === 'Income'
+        ? this.pair(s.date, 'Accounting', s.refNo, `Invoice collected · ${s.document.party}`, ACC.CASH, ACC.AR, s.amount)
+        : this.pair(s.date, 'Accounting', s.refNo, `Bill paid · ${s.document.party}`, ACC.AP, ACC.CASH, s.amount);
+    }
+    await this.ledger.replace(em, 'ACC_SETTLEMENT', id, rows);
+  }
+
+  /** Re-check every document that depends on signatures (called after the threshold changes). */
+  async resyncApprovals() {
+    await this.db.transaction(async (em) => {
+      for (const f of await em.find(FinanceEntry)) await this.syncFinance(em, f.id);
+      for (const a of await em.find(AccountingDocument)) await this.syncAccountingDoc(em, a.id);
+    });
+  }
+}

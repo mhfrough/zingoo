@@ -1,0 +1,72 @@
+/** Starting configuration, taken from the client prototype. */
+
+export const DEFAULT_SETTINGS = {
+  companyName: 'Zen Foods (Pvt.) Ltd.',
+  baseCurrency: 'PKR',
+  fiscalMonth: 7,
+  numberFormat: 'en-PK',
+  capitalTarget: 8000000,
+  packsPerCarton: 432,
+  approvalThreshold: 50000,
+  signatoryA: 'Signatory A (Arittek)',
+  signatoryB: 'Signatory B (BCP)',
+  lowStockCartons: 12,
+  containerSize: '40HC',
+  defaultIncoterm: 'FOB',
+  salesTaxRate: 0,
+  profitAllocationPerPack: 0,
+  paymentCycles: [15, 30, 45, 60],
+  defaultPaymentCycle: 30,
+  docPrefixes: { sales: 'SO', batch: 'B', finance: 'FIN', accounting: 'ACC', export: 'EXP' },
+};
+
+export const CURRENCIES = [
+  { code: 'PKR', name: 'Pakistan Rupee', rate: 1, symbol: 'Rs' },
+  { code: 'USD', name: 'US Dollar', rate: 280, symbol: '$' },
+  { code: 'AED', name: 'UAE Dirham', rate: 76.25, symbol: 'AED' },
+  { code: 'EUR', name: 'Euro', rate: 325, symbol: '€' },
+  { code: 'GBP', name: 'Pound Sterling', rate: 370, symbol: '£' },
+  { code: 'CNY', name: 'Chinese Yuan', rate: 39.3, symbol: '¥' },
+];
+
+export const CONTAINER_TYPES = [
+  { code: '20GP', maxCartons: 1000 },
+  { code: '40GP', maxCartons: 2000 },
+  { code: '40HC', maxCartons: 2400 },
+];
+
+export const COST_CENTERS: Record<string, number> = {
+  Marketing: 650000,
+  Manufacturing: 1100000,
+  Exports: 500000,
+  Printing: 400000,
+  Packaging: 700000,
+  Other: 200000,
+};
+
+export const INCOME_CATEGORIES = ['Other Sales', 'Exports', 'Services', 'Other Income'];
+
+export const EXPENSE_CATEGORIES = [
+  'Marketing', 'Manufacturing', 'Exports', 'Printing', 'Packaging', 'Salaries', 'Rent', 'Utilities',
+  'Transport', 'Administration', 'Other', 'Taxes & Duties', 'Interest & Bank Fees', 'Depreciation',
+  'Wastage & Write-offs', 'Selling Discounts',
+];
+
+type AccountType = 'Asset' | 'Liability' | 'Equity' | 'Revenue' | 'COGS' | 'Expense';
+
+/** [code, name, type] - the chart of accounts the prototype starts with. */
+export const STARTER_ACCOUNTS: [string, string, AccountType][] = [
+  ['1000', 'Cash & Bank', 'Asset'], ['1100', 'Accounts Receivable', 'Asset'], ['1200', 'Inventory · Estimated', 'Asset'],
+  ['1300', 'Fixed Assets', 'Asset'], ['1400', 'Prepaid Expenses', 'Asset'], ['1500', 'FX Clearing', 'Asset'],
+  ['2000', 'Accounts Payable', 'Liability'], ['2050', 'Production Cost Clearing', 'Liability'],
+  ['2100', 'Manufacturer Payable', 'Liability'], ['2150', 'Customer Advances', 'Liability'],
+  ['2160', 'Distributor Credit Payable', 'Liability'], ['2200', 'Export Costs Payable', 'Liability'],
+  ['2300', 'Partner Loans', 'Liability'], ['2400', 'Sales Tax Payable', 'Liability'],
+  ['3000', 'Owner Equity', 'Equity'], ['3100', 'Opening Balance Equity', 'Equity'],
+  ['4000', 'Sales Revenue', 'Revenue'], ['4010', 'Sales Returns & Allowances', 'Revenue'],
+  ['4100', 'Export Sales Revenue', 'Revenue'], ['4200', 'Other Income', 'Revenue'], ['4300', 'FX Gain', 'Revenue'],
+  ['5000', 'Cost of Goods Sold', 'COGS'], ['5100', 'Export Logistics Expense', 'Expense'], ['5200', 'FX Loss', 'Expense'],
+  ['5300', 'Tax Expense', 'Expense'], ['5400', 'Depreciation Expense', 'Expense'],
+  ...EXPENSE_CATEGORIES.map((c, i): [string, string, AccountType] => [String(6000 + i * 10), `Expense · ${c}`, 'Expense']),
+  ...INCOME_CATEGORIES.map((c, i): [string, string, AccountType] => [String(4500 + i * 10), `Income · ${c}`, 'Revenue']),
+];

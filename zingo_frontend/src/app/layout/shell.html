@@ -1,0 +1,66 @@
+<div class="app" [attr.data-nav-open]="navOpen() ? '' : null">
+  <nav class="sidebar" id="sidebar" aria-label="Main navigation">
+    <a class="brand" routerLink="/admin/overview">
+      <img class="brand-mark" src="brand/zingoo-mark.svg" alt="" width="56" height="56" />
+      <span>
+        <span class="brand__name">Zingoo</span><br />
+        <span class="brand__sub">Distributor Portal</span>
+      </span>
+    </a>
+
+    <div class="sidebar__nav scroll-shadow">
+      @for (g of groups(); track g.name) {
+        <div class="nav-group">{{ g.name }}</div>
+        @for (n of g.items; track n.path) {
+          <a class="nav-link" [routerLink]="'/admin/' + n.path" routerLinkActive="active" ariaCurrentWhenActive="page">
+            <app-icon [name]="n.icon" [size]="18" />
+            {{ n.label }}
+          </a>
+        }
+      }
+    </div>
+
+    <div class="sidebar__foot">Zen Foods (Pvt.) Ltd.<br />Sample data, not live accounts.</div>
+  </nav>
+
+  <div class="scrim" (click)="navOpen.set(false)"></div>
+
+  <div class="main">
+    <header class="topbar" [attr.data-scrolled]="scrolled() ? '' : null">
+      <button type="button" class="btn btn-icon topbar__menu" data-variant="ghost" aria-controls="sidebar"
+              [attr.aria-expanded]="navOpen()" aria-label="Open menu" (click)="navOpen.set(!navOpen())">
+        <app-icon name="menu" [size]="20" />
+      </button>
+
+      <div class="topbar__title">
+        <small>Zen Foods / Operations</small>
+        <strong>{{ current()?.label ?? 'Portal' }}</strong>
+      </div>
+
+      <span class="topbar__spacer"></span>
+      <app-tag tone="warning">Sample data</app-tag>
+
+      <div class="user">
+        <span class="user__avatar" aria-hidden="true">{{ initial() }}</span>
+        <span class="user__meta">
+          <strong>{{ auth.user()?.name }}</strong>
+          <small>{{ auth.user()?.role }}</small>
+        </span>
+        <button type="button" class="btn btn-icon" data-variant="ghost" aria-label="Sign out" (click)="auth.logout()">
+          <app-icon name="logout" [size]="18" />
+        </button>
+      </div>
+
+      <div class="topbar__progress" [attr.data-active]="loadingPage() ? '' : null" aria-hidden="true"></div>
+    </header>
+
+    <main class="content" id="main">
+      <router-outlet />
+    </main>
+  </div>
+
+  <button type="button" class="btn btn-icon to-top no-print" aria-label="Back to top" title="Back to top"
+          [attr.data-show]="showTop() ? '' : null" [attr.tabindex]="showTop() ? 0 : -1" (click)="toTop()">
+    <app-icon name="arrow-up" [size]="18" />
+  </button>
+</div>

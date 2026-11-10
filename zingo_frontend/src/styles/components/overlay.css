@@ -1,0 +1,318 @@
+@layer components {
+  /* ── modal (native <dialog>) ──
+     In:  panel pops (fade + scale + 6px rise), backdrop fades in.
+     Out: the Modal class sets data-closing for one --dur-fast, then closes the dialog, so the exit is animated too.
+     Phones: full-screen sheet that slides up (alert dialogs: a short sheet pinned to the bottom edge). */
+  .modal {
+    inline-size: min(100% - var(--space-8), var(--modal-w, 36rem));
+    max-block-size: min(100dvh - var(--space-8), 52rem);
+    margin: auto;
+    padding: 0;
+    border: 0;
+    border-radius: var(--radius-lg);
+    background: transparent;
+    color: var(--text);
+    overflow: visible;
+
+    &[data-size='sm'] {
+      --modal-w: 26rem;
+    }
+
+    &[data-size='lg'] {
+      --modal-w: 52rem;
+    }
+
+    &::backdrop {
+      background: rgb(12 23 39 / 0.55);
+      backdrop-filter: blur(3px);
+    }
+
+    &[open] > .modal__panel {
+      animation: pop-in var(--dur-base) var(--ease-out) both;
+    }
+
+    &[open]::backdrop {
+      animation: fade-in var(--dur-base) var(--ease-out) both;
+    }
+
+    &[data-closing] > .modal__panel {
+      animation: pop-out var(--dur-fast) var(--ease-in) both;
+    }
+
+    &[data-closing]::backdrop {
+      animation: fade-out var(--dur-fast) var(--ease-in) both;
+    }
+
+    @media (max-width: 640px) {
+      inline-size: 100%;
+      max-inline-size: 100%;
+      max-block-size: 100dvh;
+      block-size: 100dvh;
+      margin: 0;
+
+      & > .modal__panel {
+        block-size: 100%;
+        border-radius: 0;
+      }
+
+      &[open] > .modal__panel {
+        animation-name: sheet-in;
+      }
+
+      &[data-closing] > .modal__panel {
+        animation-name: sheet-out;
+      }
+
+      &[data-variant='alert'] {
+        block-size: auto;
+        margin: auto 0 0;
+
+        & > .modal__panel {
+          block-size: auto;
+          border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+        }
+      }
+    }
+  }
+
+  .modal__panel {
+    display: flex;
+    flex-direction: column;
+    max-block-size: inherit;
+    border-radius: var(--radius-lg);
+    background: var(--surface-card);
+    box-shadow: var(--elev-3);
+    overflow: hidden;
+
+    & > header {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: var(--space-4);
+      padding: var(--space-5) var(--space-6);
+      border-block-end: 1px solid var(--border);
+
+      & p {
+        margin-block-start: 2px;
+        font-size: var(--text-sm);
+        color: var(--text-3);
+      }
+    }
+
+    & > .modal__body {
+      --scroll-bg: var(--surface-card);
+
+      padding: var(--space-6);
+      overflow-y: auto;
+      overscroll-behavior: contain;
+      flex: 1 1 auto;
+    }
+
+    & > footer {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: flex-end;
+      gap: var(--space-2);
+      padding: var(--space-4) var(--space-6);
+      border-block-start: 1px solid var(--border);
+      background: var(--surface-page);
+
+      &:empty {
+        display: none;
+      }
+
+      @media (max-width: 640px) {
+        & > .btn {
+          flex: 1 1 auto;
+        }
+      }
+    }
+  }
+
+  /* ── confirm / alert dialog: [icon badge] title, the question under it, a verb-and-object button ── */
+  .modal[data-variant='alert'] {
+    --_badge: 2.75rem;
+
+    & .modal__panel > header {
+      align-items: center;
+      justify-content: flex-start;
+      padding: var(--space-6) var(--space-6) 0;
+      border-block-end: 0;
+
+      & h2 {
+        font-size: var(--text-xl);
+      }
+    }
+
+    & .modal__panel > .modal__body {
+      padding: var(--space-2) var(--space-6) var(--space-6)
+        calc(var(--space-6) + var(--_badge) + var(--space-4));
+      color: var(--text-2);
+      overflow-wrap: anywhere;
+
+      @media (max-width: 640px) {
+        padding-inline-start: var(--space-6);
+      }
+    }
+
+    & .modal__badge {
+      display: grid;
+      flex: none;
+      place-items: center;
+      inline-size: var(--_badge);
+      block-size: var(--_badge);
+      border-radius: 50%;
+      background: var(--accent-soft);
+      color: var(--accent-text);
+      box-shadow: 0 0 0 6px color-mix(in srgb, var(--accent-soft) 45%, transparent);
+      animation: pop-in var(--dur-slow) var(--ease-pop) var(--stagger) both;
+
+      &[data-tone='danger'] {
+        background: var(--tone-danger-bg);
+        color: var(--tone-danger-fg);
+        box-shadow: 0 0 0 6px color-mix(in srgb, var(--tone-danger-bg) 55%, transparent);
+      }
+    }
+  }
+
+  /* ── toast: a popover, so it stays above an open dialog ── */
+  .toast-host {
+    position: fixed;
+    inset: auto var(--space-4) var(--space-4) auto;
+    z-index: var(--z-toast);
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+    inline-size: min(24rem, 100% - var(--space-8));
+    margin: 0;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    overflow: visible;
+    pointer-events: none;
+
+    @media (max-width: 640px) {
+      inset-inline: var(--space-4);
+      inline-size: auto;
+    }
+  }
+
+  .toast {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--space-3);
+    padding: var(--space-3) var(--space-3) var(--space-3) var(--space-4);
+    border-radius: var(--radius-md);
+    background: var(--navy-900);
+    color: var(--text-inverse);
+    font-size: var(--text-sm);
+    box-shadow: var(--elev-2);
+    pointer-events: auto;
+
+    &[data-tone='danger'] {
+      background: var(--red-700);
+    }
+
+    &[data-tone='success'] {
+      background: var(--teal-700);
+    }
+
+    &[data-tone='warning'] {
+      background: var(--amber-700);
+    }
+
+    & > .icon {
+      margin-block-start: 0.55rem;
+    }
+
+    & > span {
+      flex: 1 1 auto;
+      min-inline-size: 0;
+      padding-block: var(--space-2);
+      overflow-wrap: anywhere;
+    }
+
+    & .toast__close {
+      color: inherit;
+      flex: none;
+
+      &:hover {
+        background: rgb(255 255 255 / 0.16);
+      }
+    }
+  }
+
+  .toast-in {
+    animation: toast-in var(--dur-base) var(--ease-out) both;
+  }
+
+  .toast-out {
+    animation: toast-out var(--dur-fast) var(--ease-in) both;
+  }
+
+  /* ── overflow menu (details) ── */
+  .menu {
+    position: relative;
+
+    & > summary {
+      list-style: none;
+
+      &::-webkit-details-marker {
+        display: none;
+      }
+    }
+
+    & > .menu__list {
+      position: absolute;
+      z-index: var(--z-sticky);
+      inset-inline-end: 0;
+      inset-block-start: calc(100% + 4px);
+      min-inline-size: 11rem;
+      padding: var(--space-1);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-md);
+      background: var(--surface-card);
+      box-shadow: var(--elev-2);
+      transform-origin: top right;
+    }
+
+    &[open] > .menu__list {
+      animation: pop-in var(--dur-fast) var(--ease-out) both;
+    }
+
+    &[open] > summary {
+      background: var(--surface-sunken);
+    }
+
+    & .menu__item {
+      display: flex;
+      align-items: center;
+      gap: var(--space-2);
+      inline-size: 100%;
+      min-block-size: var(--control-h-sm);
+      padding: 0 var(--space-3);
+      border: 0;
+      border-radius: var(--radius-sm);
+      background: transparent;
+      color: var(--text);
+      font-size: var(--text-sm);
+      text-align: start;
+      transition:
+        background-color var(--dur-fast) var(--ease-out),
+        padding-inline-start var(--dur-fast) var(--ease-out);
+
+      &:hover {
+        background: var(--surface-sunken);
+        padding-inline-start: calc(var(--space-3) + 2px);
+      }
+
+      &[data-tone='danger'] {
+        color: var(--negative);
+
+        &:hover {
+          background: var(--tone-danger-bg);
+        }
+      }
+    }
+  }
+}

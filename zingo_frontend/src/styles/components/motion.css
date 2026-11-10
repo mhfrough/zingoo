@@ -1,0 +1,161 @@
+/*
+  MOTION - every keyframe and the route transition live here, built only from the motion tokens
+  (--dur-*, --ease-*, --stagger in tokens.css). Rules we keep:
+    - 120-320ms, one easing family, no fade-in on scroll, no parallax, nothing blinks at random.
+    - Anything that loops (spinner, shimmer, login backdrop) is switched off by prefers-reduced-motion.
+  Component files only name the animation; the shapes are defined once, here.
+*/
+@layer components {
+  @keyframes spin {
+    to {
+      rotate: 1turn;
+    }
+  }
+
+  @keyframes fade-in {
+    from {
+      opacity: 0;
+    }
+  }
+
+  @keyframes fade-out {
+    to {
+      opacity: 0;
+    }
+  }
+
+  /* enter: fade + rise */
+  @keyframes rise {
+    from {
+      opacity: 0;
+      translate: 0 8px;
+    }
+  }
+
+  /* modal / popover enter and exit */
+  @keyframes pop-in {
+    from {
+      opacity: 0;
+      scale: 0.96;
+      translate: 0 6px;
+    }
+  }
+
+  @keyframes pop-out {
+    to {
+      opacity: 0;
+      scale: 0.97;
+      translate: 0 4px;
+    }
+  }
+
+  /* phone: dialogs slide up from the bottom edge */
+  @keyframes sheet-in {
+    from {
+      opacity: 0.4;
+      translate: 0 2.5rem;
+    }
+  }
+
+  @keyframes sheet-out {
+    to {
+      opacity: 0.4;
+      translate: 0 2.5rem;
+    }
+  }
+
+  /* toast: slide in from the right, leave to the right */
+  @keyframes toast-in {
+    from {
+      opacity: 0;
+      translate: 1.5rem 0;
+      scale: 0.98;
+    }
+  }
+
+  @keyframes toast-out {
+    to {
+      opacity: 0;
+      translate: 1.5rem 0;
+      scale: 0.98;
+    }
+  }
+
+  /* validation: a short horizontal shake */
+  @keyframes shake {
+    20% {
+      translate: -5px 0;
+    }
+    40% {
+      translate: 4px 0;
+    }
+    60% {
+      translate: -3px 0;
+    }
+    80% {
+      translate: 2px 0;
+    }
+  }
+
+  /* skeleton shimmer */
+  @keyframes shimmer {
+    to {
+      background-position: -200% 0;
+    }
+  }
+
+  /* table row entrance (first 8 rows, staggered by --stagger) */
+  @keyframes row-in {
+    from {
+      opacity: 0;
+      translate: 0 6px;
+    }
+  }
+
+  /* indeterminate bar under the top bar while a page chunk loads */
+  @keyframes route-bar {
+    from {
+      translate: -100% 0;
+    }
+    to {
+      translate: 285% 0;
+    }
+  }
+
+  /* checkbox tick draws left to right */
+  @keyframes tick-draw {
+    from {
+      clip-path: inset(0 100% 0 0);
+    }
+    to {
+      clip-path: inset(0 0 0 0);
+    }
+  }
+
+  /* ───────────── route change (Angular withViewTransitions) ─────────────
+     Only the page area (.content, named "page") animates. The sidebar and top bar are identical in the old and new
+     snapshot, so the root layer keeps the browser's plain cross-fade, shortened to a token. */
+  ::view-transition-group(root) {
+    animation-duration: var(--dur-base);
+  }
+
+  ::view-transition-group(page) {
+    animation: none;
+  }
+
+  ::view-transition-old(page) {
+    animation: fade-out var(--dur-fast) var(--ease-in) both;
+  }
+
+  ::view-transition-new(page) {
+    animation: rise var(--dur-base) var(--ease-out) calc(var(--dur-fast) / 2) both;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    ::view-transition-group(*),
+    ::view-transition-old(*),
+    ::view-transition-new(*) {
+      animation: none !important;
+    }
+  }
+}

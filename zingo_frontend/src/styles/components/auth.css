@@ -29,7 +29,7 @@
   .auth__bg {
     position: absolute;
     inset: 0;
-    z-index: -1;
+    z-index: var(--z-base); /* behind the brand text: the brand block is its own stacking context */
     pointer-events: none;
 
     & .auth__orb {
@@ -103,6 +103,8 @@
   }
 
   .auth__brand-inner {
+    position: relative;
+    z-index: var(--z-raised);
     display: flex;
     flex-direction: column;
     justify-content: space-between;
@@ -110,11 +112,11 @@
     inline-size: 100%;
     max-inline-size: 38rem;
     margin-inline: auto;
-    padding: clamp(1.25rem, 3vw, 3.5rem);
+    padding: clamp(1.25rem, 3dvw, 3.5rem);
   }
 
   .auth__logo {
-    inline-size: clamp(8.5rem, 14vw, 11rem);
+    inline-size: clamp(8.5rem, 14dvw, 11rem);
     block-size: auto;
     animation: rise var(--dur-slow) var(--ease-out) both;
   }

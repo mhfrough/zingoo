@@ -72,31 +72,36 @@
     /* spacing - 4px base */
     --space-1: 0.25rem;
     --space-2: 0.5rem;
-    --space-3: 0.75rem;
-    --space-4: 1rem;
-    --space-5: 1.25rem;
-    --space-6: 1.5rem;
-    --space-8: 2rem;
-    --space-10: 2.5rem;
-    --space-12: 3rem;
+    --space-3: 0.625rem;
+    --space-4: 0.75rem;
+    --space-5: 1rem;
+    --space-6: 1.25rem;
+    --space-8: 1.5rem;
+    --space-10: 2rem;
+    --space-12: 2.5rem;
     --space-16: 4rem;
 
-    /* radius - one scale */
-    --radius-sm: 6px;
-    --radius-md: 10px;
-    --radius-lg: 14px;
+    /* radius - ONE corner radius for every control, card, table, modal and menu. The sm / md / lg names stay so
+       existing rules keep working, but they all resolve to it. Change the look of the whole app here.
+       --radius-pill is only for things that are round by shape (scrollbar thumbs, switches, progress tracks). */
+    --radius: 0.45rem;
+    --radius-sm: var(--radius);
+    --radius-md: var(--radius);
+    --radius-lg: var(--radius);
     --radius-pill: 999px;
 
-    /* type scale (min 12px) */
+    /* type scale (min 12px). These are the COMPACT values (the default); html[data-density='comfortable'] below
+       restores the roomy ones. Body text is 13px. */
     --text-xs: 0.75rem;
-    --text-sm: 0.8125rem;
-    --text-md: 0.875rem;
-    --text-lg: 1rem;
-    --text-xl: 1.125rem;
-    --text-2xl: 1.375rem;
-    --text-3xl: clamp(1.5rem, 0.9rem + 1.2vw, 1.875rem);
-    --text-kpi: clamp(1.375rem, 1rem + 0.9vw, 1.75rem);
-    --text-display: clamp(1.75rem, 1rem + 2.4vw, 2.875rem);
+    --text-2xs: 0.6875rem;
+    --text-sm: 0.75rem;
+    --text-md: 0.8125rem;
+    --text-lg: 0.875rem;
+    --text-xl: 1rem;
+    --text-2xl: 1.125rem;
+    --text-3xl: clamp(1.125rem, 0.8rem + 0.8dvw, 1.375rem);
+    --text-kpi: clamp(1rem, 0.8rem + 0.5dvw, 1.1875rem);
+    --text-display: clamp(1.75rem, 1rem + 2.4dvw, 2.875rem);
 
     --weight-regular: 400;
     --weight-medium: 500;
@@ -127,17 +132,39 @@
     --ease-in: cubic-bezier(0.5, 0, 0.9, 0.45);
     --ease-pop: cubic-bezier(0.34, 1.45, 0.5, 1);
 
-    /* z-index */
+    /* z-index scale, lowest to highest. Components use these names only (npm run lint:css fails on a raw number):
+         base     0   normal flow
+         raised   1   a sticky table header, an element lifted over its siblings
+         sticky  10   menus and floating helpers inside the page (row menu, back to top)
+         nav     20   the top bar
+         overlay 30   the scrim behind the mobile sidebar
+         drawer  40   the mobile sidebar
+         modal   60   dialogs and the off-canvas panel (top layer: here for documentation and fallbacks)
+         popover 70   dropdown lists
+         toast   80   notifications
+         tooltip 90   tooltips, always on top */
+    --z-base: 0;
+    --z-raised: 1;
     --z-sticky: 10;
+    --z-nav: 20;
+    --z-overlay: 30;
     --z-drawer: 40;
     --z-modal: 60;
+    --z-popover: 70;
     --z-toast: 80;
+    --z-tooltip: 90;
 
-    /* layout */
-    --sidebar-w: 16rem;
-    --topbar-h: 4rem;
-    --content-max: 90rem;
-    --gutter: clamp(1rem, 0.4rem + 2vw, 2rem);
+    /* layout (compact; see the density blocks at the end of this file) */
+    --sidebar-w: 13.5rem;
+    --topbar-h: 2.75rem;
+    --content-max: 100rem;
+    --gutter: clamp(0.625rem, 0.3rem + 1.2dvw, 1.125rem);
+
+    /* vertical rhythm that density changes: gap under the page title, between sections, in forms, above the content */
+    --page-gap: var(--space-2);
+    --section-gap: var(--space-4);
+    --form-gap: var(--space-2);
+    --content-pad-y: var(--space-3);
 
     /* ───────────── Tier 2 · semantic ───────────── */
 
@@ -227,28 +254,60 @@
 
     /* ───────────── Tier 3 · component ───────────── */
 
-    --control-h: 2.75rem;
-    --control-h-sm: 2rem;
-    --control-pad: var(--space-3);
-    --field-h-float: 3.5rem;
+    --control-h: 2rem;
+    --control-h-sm: 1.625rem;
+    --control-pad: var(--space-2);
+    --field-h-float: 2.75rem;
 
     --btn-h: var(--control-h);
     --btn-h-sm: var(--control-h-sm);
+    --nav-link-h: 1.875rem;
 
-    --card-pad: var(--space-5);
+    --card-pad: 0.75rem;
     --card-radius: var(--radius-lg);
 
-    --table-row-pad-y: var(--space-3);
-    --table-cell-pad-x: var(--space-3);
+    --table-row-pad-y: 0.25rem;
+    --table-cell-pad-x: 0.5rem;
     --table-head-bg: var(--surface-sunken);
   }
 
-  /* tablets, phones and touch screens: 44px tap targets (same breakpoint as the drawer menu) */
-  @media (max-width: 1100px), (pointer: coarse) {
-    :root {
-      --control-h: 2.75rem;
-      --control-h-sm: 2.75rem;
-      --card-pad: var(--space-4);
+  /* DENSITY. Compact is the default (more rows per screen). The platform layer sets data-density="comfortable" on <html>
+     for people who prefer the roomier sizes. Only sizes and spacing change, never colours or the design language. */
+  html[data-density='comfortable'] {
+    --text-sm: 0.8125rem;
+    --text-md: 0.875rem;
+    --text-lg: 1rem;
+    --text-xl: 1.125rem;
+    --text-2xl: 1.375rem;
+    --text-3xl: clamp(1.5rem, 0.9rem + 1.2dvw, 1.875rem);
+    --text-kpi: clamp(1.375rem, 1rem + 0.9dvw, 1.75rem);
+    --sidebar-w: 16rem;
+    --topbar-h: 4rem;
+    --content-max: 90rem;
+    --gutter: clamp(1rem, 0.4rem + 2dvw, 2rem);
+    --page-gap: var(--space-6);
+    --section-gap: var(--space-8);
+    --form-gap: var(--space-5);
+    --content-pad-y: var(--space-6);
+    --control-h: 2.75rem;
+    --control-h-sm: 2rem;
+    --field-h-float: 3.5rem;
+    --nav-link-h: 2.25rem;
+    --card-pad: var(--space-5);
+    --table-row-pad-y: var(--space-3);
+    --table-cell-pad-x: var(--space-3);
+  }
+
+  /* touch screens only: controls a little taller to tap (40px, above the WCAG 2.2 minimum of 24px).
+     A narrow desktop window keeps the compact sizes. Text size does not change. */
+  @media (hover: none) and (pointer: coarse) {
+    :root,
+    html[data-density] {
+      --control-h: 2.5rem;
+      --control-h-sm: 2.25rem;
+      --field-h-float: 3rem;
+      --nav-link-h: 2.125rem;
+      --table-row-pad-y: 0.4375rem;
     }
   }
 

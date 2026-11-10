@@ -49,6 +49,7 @@
 
     overflow-y: auto;
     overscroll-behavior: contain;
+    scrollbar-gutter: stable;
     background:
       linear-gradient(var(--_bg) 30%, transparent) center top / 100% 2rem no-repeat local,
       linear-gradient(transparent, var(--_bg) 70%) center bottom / 100% 2rem no-repeat local,
@@ -72,7 +73,7 @@
   .stack {
     display: flex;
     flex-direction: column;
-    gap: var(--stack-gap, var(--space-4));
+    gap: var(--stack-gap, var(--space-3));
   }
 
   /* horizontal group that wraps */
@@ -87,7 +88,7 @@
   .grid-auto {
     display: grid;
     /* min() keeps a column from ever being wider than its container (no overflow at 320px) */
-    grid-template-columns: repeat(auto-fit, minmax(min(var(--grid-min, 15rem), 100%), 1fr));
-    gap: var(--grid-gap, var(--space-4));
+    grid-template-columns: repeat(auto-fit, minmax(min(var(--grid-min, 10rem), 100%), 1fr));
+    gap: var(--grid-gap, var(--space-3));
   }
 }

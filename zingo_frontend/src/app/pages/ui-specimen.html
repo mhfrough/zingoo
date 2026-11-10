@@ -1,6 +1,10 @@
 <app-page-header eyebrow="Design system" title="UI kit specimen"
   description="Every block in one place: tokens, motion, buttons in every state, inputs, rich text, dialogs, skeletons, scroll areas and the merged-column table.">
-  <button pageActions appBtn intent="create" (click)="modalOpen.set(true)">Open a form</button>
+  <div pageActions class="cluster">
+    <button appBtn size="sm" [attr.aria-pressed]="density() === 'compact'" [variant]="density() === 'compact' ? 'primary' : 'secondary'" (click)="setDensity('compact')">Compact</button>
+    <button appBtn size="sm" [attr.aria-pressed]="density() === 'comfortable'" [variant]="density() === 'comfortable' ? 'primary' : 'secondary'" (click)="setDensity('comfortable')">Comfortable</button>
+    <button appBtn intent="create" (click)="ocMd.set(true)">New distributor</button>
+  </div>
 </app-page-header>
 
 <!-- ───────────── tokens ───────────── -->
@@ -256,6 +260,116 @@
       <button appBtn (click)="onToast('danger')">Error toast</button>
       <button appBtn (click)="onToast('warning')">Warning toast</button>
       <button appBtn (click)="onToast('neutral')">Neutral toast</button>
+    </div>
+  </div>
+</div>
+
+<!-- ───────────── panels, tabs, select, table v2 ───────────── -->
+<h2 class="section-title">Off-canvas panel and discard dialog</h2>
+<div class="card">
+  <div class="card__body stack">
+    <p class="muted">Forms open here. Type in a field, then close with Esc, the backdrop or the x: it asks "Discard changes?". Medium is 32rem, large is half the screen, extra large 70%; under 820px they are full width.</p>
+    <div class="state-row">
+      <button appBtn intent="create" (click)="ocMd.set(true)">Open medium panel</button>
+      <button appBtn intent="create" (click)="ocLg.set(true)">Open large panel (50%)</button>
+      <button appBtn icon="alert" (click)="askDiscard()">Show the discard dialog</button>
+    </div>
+  </div>
+</div>
+
+<app-offcanvas #ocm [(open)]="ocMd" title="New distributor" subtitle="Medium panel · 32rem" [dirty]="ocForm.dirty">
+  <form id="oc-form-md" class="form-grid" [formGroup]="ocForm" (ngSubmit)="saveOc()">
+    <app-field label="Distributor name" [required]="true" [wide]="true"><input type="text" formControlName="name" placeholder="e.g. Sindh Central Distributors" /></app-field>
+    <app-field label="City" hint="517 places, type to search"><app-select formControlName="city" [options]="cities()" placeholder="Search a city" /></app-field>
+    <app-field label="Cartons per order"><app-number-input formControlName="cartons" [min]="1" /></app-field>
+    <app-field label="Notes" [wide]="true"><textarea formControlName="notes" maxlength="500" rows="3"></textarea></app-field>
+  </form>
+  <ng-container offcanvasFooter>
+    <button appBtn type="button" (click)="ocm.requestClose()">Cancel</button>
+    <button appBtn intent="save" type="submit" form="oc-form-md">Save distributor</button>
+  </ng-container>
+</app-offcanvas>
+
+<app-offcanvas #ocl [(open)]="ocLg" title="New production batch" subtitle="Large panel · half the screen" size="lg" [dirty]="ocForm.dirty">
+  <form id="oc-form-lg" class="form-grid" [formGroup]="ocForm" (ngSubmit)="saveOc()">
+    <app-field label="Distributor name" [required]="true"><input type="text" formControlName="name" /></app-field>
+    <app-field label="City"><app-select formControlName="city" [options]="cities()" placeholder="Search a city" /></app-field>
+    @for (n of [1, 2, 3, 4, 5, 6, 7, 8]; track n) {
+      <app-field [label]="'Extra field ' + n"><input type="text" /></app-field>
+    }
+    <app-field label="Notes" [wide]="true"><textarea formControlName="notes" maxlength="500" rows="4"></textarea></app-field>
+  </form>
+  <ng-container offcanvasFooter>
+    <button appBtn type="button" (click)="ocl.requestClose()">Cancel</button>
+    <button appBtn intent="save" type="submit" form="oc-form-lg">Save batch</button>
+  </ng-container>
+</app-offcanvas>
+
+<h2 class="section-title">Tabs</h2>
+<div class="card">
+  <div class="card__body">
+    <app-tabs [tabs]="tabs" [(active)]="tab" ariaLabel="Specimen sections">
+      <ng-template appTabPanel="orders"><p>Sales orders: only this panel is rendered while its tab is active.</p></ng-template>
+      <ng-template appTabPanel="batches"><p>Production batches panel.</p></ng-template>
+      <ng-template appTabPanel="payments"><p>Payments panel (zero records, so the count shows 0).</p></ng-template>
+      <ng-template appTabPanel="reports"><p>Reports panel.</p></ng-template>
+    </app-tabs>
+    <p class="muted" style="margin-block-start: var(--space-3)">Active tab: <code>{{ tab() }}</code>. It is in the address bar as <code>?tab=</code> and remembered for this page. Arrow keys move between tabs.</p>
+  </div>
+</div>
+
+<h2 class="section-title">Searchable select with 517 places</h2>
+<div class="card">
+  <div class="card__body">
+    <form [formGroup]="demo" (submit)="$event.preventDefault()">
+      <div class="form-grid">
+        <app-field label="City" hint="Type to filter by city or province, arrows and Enter to pick">
+          <app-select formControlName="city" [options]="cities()" placeholder="Choose a city" />
+        </app-field>
+        <app-field label="City (required, no clear button)">
+          <app-select formControlName="city" [options]="cities()" [clearable]="false" placeholder="Choose a city" />
+        </app-field>
+      </div>
+    </form>
+  </div>
+</div>
+
+<h2 class="section-title">Table v2: 120 orders with paging, filters and sort</h2>
+<div class="card" data-flush>
+  <div class="card__head"><div><h2>Sales orders</h2><p>Click a header to sort, open Filters for status, date and invoice range. Page size, sort and filters are remembered (tableId).</p></div></div>
+  <div class="card__body">
+    <app-data-table tableId="specimen-orders" [columns]="bigColumns" [rows]="bigOrders" [filters]="bigFilters"
+      searchPlaceholder="Search orders" />
+  </div>
+</div>
+
+<h2 class="section-title">Connection pill, draft banner, scroll gutter</h2>
+<div class="card">
+  <div class="card__body stack">
+    <div class="state-row">
+      <app-connection-status status="connected" />
+      <app-connection-status status="connecting" />
+      <app-connection-status status="offline" />
+    </div>
+    <div class="notice draft-banner">
+      <app-icon class="draft-banner__icon" name="file" />
+      <span class="draft-banner__text"><strong>You have an unsaved draft.</strong> <span class="draft-banner__time">Saved 12:04</span></span>
+      <span class="draft-banner__actions">
+        <button appBtn size="sm" variant="primary" icon="undo">Restore draft</button>
+        <button appBtn size="sm" variant="ghost">Discard draft</button>
+      </span>
+    </div>
+    <p class="muted">Scroll gutter: both boxes reserve the same scrollbar space, so the short list lines up with the long one.</p>
+    <div class="grid-auto" style="--grid-min: 16rem">
+      <div class="card" data-flush><div class="scroll-region" style="--scroll-max: 7rem">
+        <div class="list-row"><span>Short list</span><span class="mono">1</span></div>
+        <div class="list-row"><span>No scrollbar needed</span><span class="mono">2</span></div>
+      </div></div>
+      <div class="card" data-flush><div class="scroll-region" style="--scroll-max: 7rem">
+        @for (r of listItems; track r.id) {
+          <div class="list-row"><span>Long list {{ r.id }}</span><span class="mono">{{ r.amount.toLocaleString('en-PK') }}</span></div>
+        }
+      </div></div>
     </div>
   </div>
 </div>

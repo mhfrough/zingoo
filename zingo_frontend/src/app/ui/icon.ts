@@ -6,7 +6,8 @@ import {
   Pencil, PiggyBank, Plus, Receipt, RotateCcw, Scale, Search, Send, Settings, ShieldCheck, Trash2,
   TrendingUp, TriangleAlert, Truck, Upload, Users, Wallet, X, ArrowRight,
   ArrowUp, Bold, ChevronUp, ChevronsUpDown, CircleX, Eraser, EyeOff, Italic, KeyRound, Link, List,
-  ListOrdered, LogIn, Mail, Minus, Save, Underline, Unlink, User,
+  ListOrdered, LogIn, Mail, Minus, Save, Underline, Unlink, User, ListFilter, ChevronLeft, ChevronsLeft,
+  ChevronsRight, ArrowUpDown, Wifi, WifiOff,
 } from 'lucide';
 
 /** Lucide icons used by the portal. Add a name here to use it as <app-icon name="..."/>. */
@@ -15,7 +16,9 @@ const ICONS = {
   bold: Bold, book: BookOpen, 'chevron-up': ChevronUp, 'chevrons-up-down': ChevronsUpDown,
   'circle-x': CircleX, eraser: Eraser, 'eye-off': EyeOff, italic: Italic, key: KeyRound, link: Link,
   list: List, 'list-ordered': ListOrdered, 'log-in': LogIn, mail: Mail, minus: Minus, save: Save,
-  underline: Underline, unlink: Unlink, user: User,
+  underline: Underline, unlink: Unlink, user: User, filter: ListFilter, 'chevron-left': ChevronLeft,
+  'chevrons-left': ChevronsLeft, 'chevrons-right': ChevronsRight, 'arrow-up-down': ArrowUpDown, wifi: Wifi,
+  'wifi-off': WifiOff,
   boxes: Boxes, building: Building2, calendar: Calendar, check: Check, 'check-circle': CircleCheck,
   'chevron-down': ChevronDown, 'chevron-right': ChevronRight, 'circle-alert': CircleAlert, clock: Clock,
   coins: Coins, container: Container, dashboard: LayoutDashboard, download: Download, edit: Pencil,

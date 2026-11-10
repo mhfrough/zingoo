@@ -1,10 +1,15 @@
+/**
+ * ui-specimen.ts - the /admin/ui page: every block of the design system in every state, in one place.
+ * Owned by the design-system session. Review here after changing anything in src/styles or src/app/ui.
+ */
 import { ChangeDetectionStrategy, Component, inject, signal } from '@angular/core';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { Tone, fmtDate } from '../shared/format';
 import {
-  Btn, ConfirmService, DataTable, EmptyState, Field, IconComponent, IconName, Kpi, Modal, NumberInput, PageHeader,
-  PageSkeleton, PasswordField, RichText, RowAction, RowActionEvent, SearchBox, Select, SelectOption, Skeleton,
-  SkeletonForm, SkeletonKpi, SkeletonText, TEXT_LIMITS, Tag, TableColumn, ToastService,
+  Btn, ConfirmService, ConnectionStatus, DataTable, EmptyState, Field, IconComponent, IconName, Kpi, Modal,
+  NumberInput, Offcanvas, PageHeader, PageSkeleton, PasswordField, RichText, RowAction, RowActionEvent, SearchBox,
+  Select, SelectOption, Skeleton, SkeletonForm, SkeletonKpi, SkeletonText, TEXT_LIMITS, TabItem, TabPanel, Tabs, Tag,
+  TableColumn, TableFilter, ToastService,
 } from '../ui';
 
 interface Order {
@@ -31,10 +36,23 @@ const BATCHES: Batch[] = [
 ];
 
 const TONE: Record<string, Tone> = {
-  Released: 'success', Dispatched: 'success', Passed: 'success',
+  Released: 'success', Dispatched: 'success', Passed: 'success', Paid: 'success',
   Planned: 'warning', Draft: 'warning', Pending: 'warning',
 };
 const tone = (s: string): Tone => TONE[s] ?? 'neutral';
+
+/** 120 generated sales orders for the table v2 demo */
+const BIG: Order[] = Array.from({ length: 120 }, (_, i) => {
+  const cartons = 2 + ((i * 7) % 19);
+  const [sku, product] = [['Z10-MAS', 'Masala Masti · Rs 10'], ['Z20-MAS', 'Masala Masti · Rs 20'], ['Z10-KET', 'Ketchup Tango · Rs 10'], ['Z20-KET', 'Ketchup Tango · Rs 20']][i % 4];
+  const [distributor, region] = [['Sindh Central Distributors', 'Hyderabad'], ['South Route Partners', 'Karachi'], ['Upper Sindh Supply', 'Sukkur'], ['Karachi Bazaar Traders', 'Karachi'], ['Punjab Link Foods', 'Lahore']][(i * 3) % 5];
+  const status = ['Draft', 'Dispatched', 'Dispatched', 'Paid'][i % 4];
+  const value = cartons * 2700;
+  return {
+    id: `SO-${420 - i}`, date: new Date(Date.UTC(2026, 10, 9 - i)).toISOString().slice(0, 10), distributor, region, sku, product,
+    cartons, value, due: status === 'Dispatched' ? Math.round(value / 2) : 0, status,
+  };
+});
 
 type BtnVariantName = 'primary' | 'secondary' | 'ghost' | 'success' | 'danger' | 'danger-solid';
 
@@ -42,7 +60,7 @@ type BtnVariantName = 'primary' | 'secondary' | 'ghost' | 'success' | 'danger' |
   selector: 'app-ui-specimen',
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [
-    ReactiveFormsModule, Btn, DataTable, EmptyState, Field, IconComponent, Kpi, Modal, NumberInput, PageHeader,
+    ReactiveFormsModule, Btn, ConnectionStatus, DataTable, Offcanvas, TabPanel, Tabs, EmptyState, Field, IconComponent, Kpi, Modal, NumberInput, PageHeader,
     PageSkeleton, PasswordField, RichText, SearchBox, Select, Skeleton, SkeletonForm, SkeletonKpi,
     SkeletonText, Tag,
   ],
@@ -54,6 +72,36 @@ export class UiSpecimen {
   private fb = inject(FormBuilder);
 
   protected modalOpen = signal(false);
+  protected ocMd = signal(false);
+  protected ocLg = signal(false);
+  protected tab = signal('');
+  protected density = signal<'compact' | 'comfortable'>('compact');
+  /** 517 Pakistan places for the searchable select demo (loaded from /data/pk-places.json) */
+  protected cities = signal<SelectOption[]>([]);
+
+  protected tabs: TabItem[] = [
+    { id: 'orders', label: 'Sales orders', icon: 'receipt', count: 120 },
+    { id: 'batches', label: 'Production batches', icon: 'factory', count: 4 },
+    { id: 'payments', label: 'Payments', icon: 'wallet', count: 0 },
+    { id: 'reports', label: 'Reports', icon: 'sheet' },
+  ];
+
+  protected bigOrders = BIG;
+  protected bigFilters: TableFilter[] = [
+    { id: 'status', type: 'select' },
+    { id: 'date', type: 'date-range', label: 'Order date' },
+    { id: 'value', type: 'number-range', label: 'Invoice (PKR)' },
+    { id: 'distributor', type: 'text' },
+  ];
+  protected bigColumns: TableColumn<Order>[] = [
+    { id: 'id', label: 'Order', value: (o) => o.id, sub: (o) => o.region },
+    { id: 'date', label: 'Date', kind: 'date', value: (o) => o.date, priority: 2 },
+    { id: 'distributor', label: 'Distributor', value: (o) => o.distributor },
+    { id: 'product', label: 'Product', value: (o) => o.product, sub: (o) => o.sku, priority: 3 },
+    { id: 'cartons', label: 'Cartons', kind: 'number', value: (o) => o.cartons, priority: 3 },
+    { id: 'value', label: 'Invoice (PKR)', kind: 'money', value: (o) => o.value },
+    { id: 'status', label: 'Status', kind: 'tag', value: (o) => o.status, tone: (o) => tone(o.status), priority: 2 },
+  ];
 
   // live demos
   protected saving = signal(false);
@@ -96,6 +144,15 @@ export class UiSpecimen {
     plainNote: ['Plain textarea with maxlength 120: this text is already at about ninety percent of the limit, so it is orange.'],
     agree: [true],
     hold: [false],
+    city: [null as string | null],
+  });
+
+  /** the form inside the off-canvas demos: typing makes it dirty, so closing asks "Discard changes?" */
+  protected ocForm = this.fb.nonNullable.group({
+    name: ['', Validators.required],
+    city: [null as string | null],
+    cartons: [1 as number | null],
+    notes: [''],
   });
 
   protected tones: Tone[] = ['neutral', 'success', 'warning', 'danger', 'info', 'accent'];
@@ -158,6 +215,35 @@ export class UiSpecimen {
     b.status === 'Planned'
       ? [{ id: 'release', label: 'Release batch', tone: 'success' }, { id: 'edit', label: 'Edit' }, { id: 'delete', label: 'Delete', tone: 'danger' }]
       : [];
+
+  constructor() {
+    fetch('data/pk-places.json')
+      .then((r) => r.json())
+      .then((j: { cities: { name: string; province: string }[] }) =>
+        this.cities.set(j.cities.map((c) => ({ value: c.name, label: c.name, sub: c.province }))),
+      )
+      .catch(() => this.cities.set([]));
+  }
+
+  /** switch the whole app between the compact and comfortable density */
+  protected setDensity(d: 'compact' | 'comfortable') {
+    this.density.set(d);
+    document.documentElement.setAttribute('data-density', d);
+  }
+
+  /** pretend to save: clear the form (no longer dirty) and close both panels */
+  protected saveOc() {
+    this.ocForm.reset();
+    this.ocMd.set(false);
+    this.ocLg.set(false);
+    this.toast.success('Distributor saved (demo).');
+  }
+
+  /** show the standard discard dialog */
+  protected async askDiscard() {
+    const discard = await this.confirm.discard();
+    this.toast.show(discard ? 'Discarded.' : 'Keep editing.');
+  }
 
   protected onToast(kind: 'success' | 'danger' | 'neutral' | 'warning') {
     if (kind === 'success') this.toast.success('Batch B-1004 released to the warehouse.');

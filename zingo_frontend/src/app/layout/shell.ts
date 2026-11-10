@@ -9,19 +9,22 @@ import {
 import { filter, map } from 'rxjs';
 import { AuthService } from '../core/auth.service';
 import { NAV, NAV_GROUPS, visibleNav } from '../portal.config';
-import { IconComponent, Tag } from '../ui';
+import { CONNECTION_STATUS, ConnectionStatus, IconComponent, Tag } from '../ui';
 import { prefersReducedMotion } from '../ui/motion';
 
 /** Sidebar + top bar around every portal page. Below 1100px the sidebar is a drawer. */
 @Component({
   selector: 'app-shell',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [RouterOutlet, RouterLink, RouterLinkActive, IconComponent, Tag],
+  imports: [RouterOutlet, RouterLink, RouterLinkActive, IconComponent, Tag, ConnectionStatus],
   templateUrl: './shell.html',
 })
 export class Shell {
   protected auth = inject(AuthService);
   private router = inject(Router);
+
+  /** realtime connection state for the top bar pill (hidden until the platform layer provides CONNECTION_STATUS) */
+  protected conn = inject(CONNECTION_STATUS, { optional: true });
 
   protected navOpen = signal(false);
   /** page has scrolled under the top bar */
@@ -44,6 +47,9 @@ export class Shell {
     { initialValue: this.router.url },
   );
 
+  /** the page path without ?query, so switching a tab does not scroll the page back to the top */
+  private path = computed(() => this.url().split('?')[0].split('#')[0]);
+
   protected current = computed(() => NAV.find((n) => this.url().startsWith(`/admin/${n.path}`)));
 
   protected initial = computed(() => (this.auth.user()?.name ?? '?').charAt(0).toUpperCase());
@@ -51,7 +57,7 @@ export class Shell {
   constructor() {
     // close the drawer after every navigation, and start the new page at the top (instantly, not smoothly)
     effect(() => {
-      this.url();
+      this.path();
       this.navOpen.set(false);
       window.scrollTo({ top: 0, left: 0, behavior: 'instant' });
     });

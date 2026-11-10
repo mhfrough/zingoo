@@ -55,6 +55,21 @@ export class ConfirmService {
     });
   }
 
+  /**
+   * The standard "Discard changes?" question, used by the off-canvas panel and the unsaved-changes guard.
+   * Resolves true on Discard; focus starts on "Keep editing".
+   */
+  discard(): Promise<boolean> {
+    return this.ask({
+      title: 'Discard changes?',
+      message: 'You have unsaved changes in this form.',
+      confirmLabel: 'Discard',
+      cancelLabel: 'Keep editing',
+      tone: 'danger',
+      icon: 'alert',
+    });
+  }
+
   answer(ok: boolean) {
     const s = this.state();
     if (!s) return; // already answered (the dialog also reports "closed" after an answer)

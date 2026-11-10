@@ -10,9 +10,14 @@
     scroll-padding-block-start: calc(var(--topbar-h) + var(--space-4));
   }
 
-  /* portal pages keep the scrollbar's space, so opening a long list does not shift the layout */
-  html:has(.app) {
+  /* the page keeps room for its scrollbar, so content never jumps between a short page and a long one.
+     The sign-in page has no scrolling content and no gutter. */
+  html {
     scrollbar-gutter: stable;
+  }
+
+  html:has(.auth) {
+    scrollbar-gutter: auto;
   }
 
   body {
@@ -22,10 +27,14 @@
     font-feature-settings: 'tnum' 1, 'cv11' 1;
   }
 
-  /* ── thin, tokenised scrollbars (inherited, so every scroll box gets them) ── */
+  /* ── thin, tokenised scrollbars. scrollbar-color is inherited but scrollbar-width is NOT, so width is set on
+     every element (zero specificity): the sidebar, modals, lists and tables get the same thin bar as the page. ── */
   :root {
-    scrollbar-width: thin;
     scrollbar-color: var(--scroll-thumb) transparent;
+  }
+
+  :where(*) {
+    scrollbar-width: thin;
   }
 
   /* engines without scrollbar-color (older Chromium / Safari) */
@@ -44,11 +53,11 @@
       border-radius: var(--radius-pill);
       background: var(--scroll-thumb);
       background-clip: content-box;
+    }
 
-      &:hover {
-        background: var(--scroll-thumb-hover);
-        background-clip: content-box;
-      }
+    ::-webkit-scrollbar-thumb:hover {
+      background: var(--scroll-thumb-hover);
+      background-clip: content-box;
     }
 
     ::-webkit-scrollbar-corner {

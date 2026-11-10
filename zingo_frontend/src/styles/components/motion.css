@@ -49,6 +49,19 @@
     }
   }
 
+  /* off-canvas panel: slides in from the right edge and back out */
+  @keyframes slide-in {
+    from {
+      translate: 100% 0;
+    }
+  }
+
+  @keyframes slide-out {
+    to {
+      translate: 100% 0;
+    }
+  }
+
   /* phone: dialogs slide up from the bottom edge */
   @keyframes sheet-in {
     from {
@@ -119,6 +132,16 @@
     }
     to {
       translate: 285% 0;
+    }
+  }
+
+  /* connection pill: a ring spreads from the dot while connecting */
+  @keyframes conn-pulse {
+    from {
+      box-shadow: 0 0 0 0 color-mix(in srgb, currentColor 55%, transparent);
+    }
+    to {
+      box-shadow: 0 0 0 7px transparent;
     }
   }
 

@@ -202,6 +202,7 @@
 
   /* square icon-only button (give it an aria-label) */
   .btn-icon {
+    flex: none; /* never squeezed by a crowded flex row (top bar at 320px) */
     inline-size: var(--btn-h);
     padding: 0;
 

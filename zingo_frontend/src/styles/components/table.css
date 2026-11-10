@@ -33,7 +33,7 @@
       text-transform: uppercase;
       position: sticky;
       inset-block-start: var(--topbar-h);
-      z-index: 1;
+      z-index: var(--z-raised);
 
       &:first-child {
         border-start-start-radius: calc(var(--card-radius) - 1px);
@@ -216,6 +216,233 @@
     .table tfoot td {
       background: transparent;
       border: 0;
+    }
+  }
+
+  /* ───────────── table v2: sortable headers, filter bar, chips, footer with pagination ───────────── */
+
+  /* sortable header: the label is a button with a small sort glyph */
+  .dt__sort {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-1);
+    min-block-size: var(--control-h-sm); /* 44px under 1100px */
+    padding: 0;
+    border: 0;
+    background: transparent;
+    color: inherit;
+    font: inherit;
+    letter-spacing: inherit;
+    text-transform: inherit;
+
+    & > .icon {
+      opacity: 0.5;
+      transition: opacity var(--dur-fast) var(--ease-out);
+    }
+
+    &:hover,
+    th[aria-sort] > & {
+      color: var(--text);
+
+      & > .icon {
+        opacity: 1;
+      }
+    }
+  }
+
+  .table th[data-end] .dt__sort {
+    flex-direction: row-reverse;
+  }
+
+  /* the filter panel under the search bar */
+  .dt__filters {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(min(14rem, 100%), 1fr));
+    gap: var(--space-3) var(--space-4);
+    padding: var(--space-3) var(--card-pad);
+    border-block-end: 1px solid var(--border);
+    background: var(--surface-page);
+    animation: rise var(--dur-base) var(--ease-out) both;
+  }
+
+  .dt__filter {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-1);
+    min-inline-size: 0;
+  }
+
+  .dt__filter-label {
+    color: var(--text-2);
+    font-size: var(--text-xs);
+    font-weight: var(--weight-semibold);
+  }
+
+  .dt__range {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+    align-items: center;
+    gap: var(--space-2);
+    color: var(--text-3);
+    font-size: var(--text-sm);
+  }
+
+  /* count badge on the Filters button */
+  .dt__badge {
+    display: inline-grid;
+    place-items: center;
+    min-inline-size: 1.125rem;
+    block-size: 1.125rem;
+    padding-inline: 4px;
+    border-radius: var(--radius);
+    background: var(--accent);
+    color: var(--on-accent);
+    font-size: var(--text-xs);
+    font-weight: var(--weight-bold);
+  }
+
+  /* removable chips for the active filters */
+  .dt__chips {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-2);
+    padding: var(--space-2) var(--card-pad);
+    border-block-end: 1px solid var(--border);
+  }
+
+  .dt__chip {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-1);
+    padding: 2px 4px 2px var(--space-3);
+    border: 1px solid var(--tone-accent-line);
+    border-radius: var(--radius);
+    background: var(--tone-accent-bg);
+    color: var(--tone-accent-fg);
+    font-size: var(--text-sm);
+    animation: pop-in var(--dur-base) var(--ease-pop) both;
+
+    & > button {
+      display: grid;
+      place-items: center;
+      inline-size: 1.5rem;
+      block-size: 1.5rem;
+      padding: 0;
+      border: 0;
+      border-radius: 50%;
+      background: transparent;
+      color: inherit;
+      transition: background-color var(--dur-fast) var(--ease-out);
+
+      &:hover {
+        background: var(--orange-100);
+      }
+    }
+  }
+
+  /* footer: range text on the left; rows per page, page buttons and "Page x of y" on the right */
+  .dt__foot {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-3) var(--space-5);
+    padding: var(--space-3) var(--card-pad);
+    border-block-start: 1px solid var(--border);
+    color: var(--text-2);
+    font-size: var(--text-sm);
+  }
+
+  .dt__foot-right {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-3) var(--space-4);
+  }
+
+  .dt__size {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-2);
+
+    & > select {
+      inline-size: auto;
+      min-block-size: var(--control-h-sm);
+      padding-inline: var(--space-2) var(--space-6);
+    }
+  }
+
+  .dt__pager {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 2px;
+  }
+
+  .dt__page {
+    display: inline-grid;
+    place-items: center;
+    min-inline-size: var(--control-h-sm);
+    block-size: var(--control-h-sm);
+    padding: 0 var(--space-2);
+    border: 1px solid transparent;
+    border-radius: var(--radius-sm);
+    background: transparent;
+    color: var(--text);
+    font-size: var(--text-sm);
+    font-variant-numeric: tabular-nums;
+    font-weight: var(--weight-medium);
+    transition:
+      background-color var(--dur-fast) var(--ease-out),
+      color var(--dur-fast) var(--ease-out),
+      scale var(--dur-fast) var(--ease-out);
+
+    &:hover:not(:disabled, [aria-current]) {
+      background: var(--surface-sunken);
+    }
+
+    &:active:not(:disabled) {
+      scale: 0.94;
+    }
+
+    &[aria-current='page'] {
+      border-color: var(--tone-accent-line);
+      background: var(--accent-soft);
+      color: var(--accent-text);
+      font-weight: var(--weight-bold);
+    }
+
+    &:disabled {
+      opacity: 0.4;
+      cursor: not-allowed;
+    }
+  }
+
+  .dt__gap {
+    padding-inline: var(--space-1);
+    color: var(--text-3);
+  }
+
+  .dt__page-of {
+    color: var(--text-3);
+    white-space: nowrap;
+  }
+
+  /* phone: the number buttons give way to Previous / Next and "Page x of y" */
+  @container dt (max-width: 639px) {
+    .dt__page--num,
+    .dt__gap {
+      display: none;
+    }
+
+    .dt__foot {
+      justify-content: center;
+      text-align: center;
+    }
+
+    .dt__foot-right {
+      justify-content: center;
     }
   }
 }

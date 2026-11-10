@@ -12,9 +12,9 @@
       @for (g of groups(); track g.name) {
         <div class="nav-group">{{ g.name }}</div>
         @for (n of g.items; track n.path) {
-          <a class="nav-link" [routerLink]="'/admin/' + n.path" routerLinkActive="active" ariaCurrentWhenActive="page">
-            <app-icon [name]="n.icon" [size]="18" />
-            {{ n.label }}
+          <a class="nav-link" [routerLink]="'/admin/' + n.path" routerLinkActive="active" ariaCurrentWhenActive="page" [attr.title]="n.label">
+            <app-icon [name]="n.icon" [size]="16" />
+            <span class="nav-link__label">{{ n.label }}</span>
           </a>
         }
       }
@@ -38,6 +38,9 @@
       </div>
 
       <span class="topbar__spacer"></span>
+      @if (conn) {
+        <app-connection-status [status]="conn()" />
+      }
       <app-tag tone="warning">Sample data</app-tag>
 
       <div class="user">

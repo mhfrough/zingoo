@@ -187,3 +187,66 @@ New entities, chart of accounts, posting engine, approvals, roles guard, `db:res
 1. Should the partner portal be in this release, or later?
 2. Do real distributors log in themselves (needs real accounts and password reset), or is it staff-only for now?
 3. Is PKR the only reporting currency, with USD/AED/EUR/GBP/CNY only for exports? (prototype says yes)
+
+---
+
+## 9. Platform upgrade (requested 2026-11-10)
+
+New requirements from the client side, applied to **every** page, old and new. Phases 4-8 above are built on top of this, so
+this block comes first.
+
+### 9.1 House rules (every session, every file)
+
+1. **Documented code.** Every file starts with a header comment (what it is, what it owns). Every exported class, function, method,
+   component input/output and every CSS section has a short doc comment. A check (`npm run docs:check`) reports gaps.
+2. **No assistant names anywhere** in code, comments, docs, commit messages or trailers. **No co-author lines, ever.** Author of the
+   project: Mohammad Hamza, mhfrough.dev.
+3. **Only the main session runs `git commit` / `git push`.** Other sessions leave their work in the working tree.
+4. **Viewport units:** `dvh` / `dvw` / `svh` only, never `vh` / `vw`.
+5. **z-index only from tokens** (`--z-*` in `tokens.css`). No raw numbers. A lint script checks it.
+6. **Realtime, no polling.** Data on screen changes when the server says it changed (Socket.IO). No `setInterval` refresh.
+7. **Compact by default.** More rows per screen, less white space, same design system (density tokens, not one-off CSS).
+8. **Forms open in an off-canvas panel**, 50% of the screen width when the form is big. Closing a half-filled form asks "Discard changes?".
+   Long text (notes, descriptions) is saved as a **draft** while typing and offered back later.
+9. **Every table:** pagination (rows per page, page buttons, "Showing a-b of N", total pages), filters, search, sort.
+   **Every dropdown** has search.
+10. **Pages use tabs** instead of stacking every table under each other.
+11. **Storage:** one wrapper (`AppStorage`) over localStorage, sessionStorage, cookies and IndexedDB. Nothing else touches them directly.
+12. **Scroll:** reserved scrollbar gutter on the page so content never jumps between pages that scroll and pages that do not.
+
+### 9.2 Phases, owners and files
+
+| Phase | What | Owner | Owns (others do not edit) |
+| --- | --- | --- | --- |
+| U0 | Git repo, baseline commit, author metadata, `admin@zingo.pk` seed user, Pakistan place data (`public/data/pk-places.json`) | main | root files, `zingo_frontend/public/data` |
+| U1 | **Design system v2**: off-canvas, tabs, searchable select, table v2 (pagination, filters, sort, footer), compact density, sidebar item without left border, z-index tokens + lint, dvh/dvw + lint, scrollbar gutter, discard dialog variant, draft banner look, connection pill in top bar, finish sign-in page (remember me, password eye), earlier motion / scroll / confirm work | `zingoo-ui` session | `src/styles/**`, `src/app/ui/**`, `src/app/layout/**`, `src/app/pages/login.*`, `src/app/pages/ui-specimen.*` |
+| U2 | **Platform services**: realtime (Socket.IO gateway + commit hook + client), `AppStorage`, remember me, inactivity auto-logout (30 min default, adjustable, warning countdown, cross-tab), preferences + Settings > Preferences page, drafts (IndexedDB), unsaved-changes guard, `PlacesService`, server settings fields | `zingoo-platform` session | `src/app/core/**`, `src/app/shared/**`, `src/app/features/settings/**`, `zingo_backend/src/realtime/**`, `zingo_backend/src/setup/**`, `zingo_backend/src/auth/**` |
+| U3 | **Apply**: move Overview, Manufacturing, Distribution onto off-canvas forms + drafts + discard, tabs, paginated tables, searchable selects (city from Pakistan data), live data | main | `src/app/features/{overview,manufacturing,distribution,ops}/**`, `app.routes.ts`, `portal.config.ts` |
+| U4 | **Docs and repo**: README, GitHub description + topics, `docs:check` tool, then the documentation pass over all code, then push | `zingoo-docs` session (tool + README now, code pass last) | root `README.md`, `scripts/docs-check.*`, comment-only edits at the end |
+| U5 | Verify: tests, lints, widths, two-browser realtime check, push | main | everything (read) |
+
+### 9.3 Contracts between the sessions
+
+- **Off-canvas** (U1 builds, U3 uses): `<app-offcanvas [(open)]="open" title subtitle size="md|lg|xl" [dirty]="form.dirty">` with `[offcanvasFooter]`
+  slot. `md` = 32rem, `lg` = 50dvw (min 36rem), `xl` = 70dvw. Closing while `dirty()` asks `ConfirmService` "Discard changes?"
+  (Keep editing / Discard). Same inputs and outputs as `Modal` where they overlap.
+- **Select** (U1): `<app-select [options]="..." searchable>` works as a form control (`formControlName`, `ngModel`), search box,
+  keyboard navigation, handles 500+ options (cities), shows a secondary line per option.
+- **Table** (U1): `DataTable` keeps its current inputs. New optional: `tableId` (persists page size, sort, filters), `pageSizes`,
+  `filters` (column filter definitions), `serverMode` + `total` + `(query)` for later server-side paging. Footer shows range, total records,
+  total pages, rows-per-page.
+- **Tabs** (U1): `<app-tabs [tabs]="..." [(active)]="tab">`, keeps the active tab in the URL (`?tab=`), remembered per page.
+- **Storage / preferences** (U2 builds first, U1 reads): `AppStorage.get/set/remove(key, { scope: 'local' | 'session' | 'cookie' })`,
+  `IdbStore` for drafts; `PreferencesService` signals `pageSize`, `density`, `autoLogoutMinutes`.
+- **Drafts** (U2): `[appDraft]="key"` on a `<form [formGroup]>` saves the value (debounced) to IndexedDB and offers it back with a banner;
+  `DraftStore.save/load/remove`. U1 restyles the banner.
+- **Realtime** (U2): `liveResource(loader, ['sales_orders', 'collections'])` returns a resource that reloads when those tables change.
+  `RealtimeService.status` signal (`connected | connecting | offline`) feeds the connection pill (U1).
+- **Auth** (U2 changes `AuthService.login(email, password, remember = false)`, U1 wires the checkbox on the sign-in page).
+- **Places** (U2): `PlacesService.provinces()`, `.cities(province?)` returning select options from `public/data/pk-places.json`.
+
+### 9.4 Done when
+
+All twelve house rules hold (lint scripts pass), Phase 3 pages use the new kit and services, two browser windows see each other's
+changes within a second, an idle session is signed out after the configured time, a half-filled form can be discarded or restored,
+and the README describes all of it.

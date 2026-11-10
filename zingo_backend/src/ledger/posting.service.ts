@@ -4,10 +4,13 @@ import { DataSource, EntityManager } from 'typeorm';
 import { JournalSource } from '../common/enums';
 import { round2 } from '../common/numeric.transformer';
 import { Collection, SalesOrder } from '../distribution/distribution.entities';
+import { shipmentMath } from '../exports/export-math';
+import { ExportCostPayment, ExportReceipt, ExportShipment } from '../exports/exports.entities';
 import { AccountingDocument, AccountingSettlement, Approval, FinanceEntry } from '../finance/finance.entities';
 import { ManufacturerPayment, ProductionBatch } from '../manufacturing/manufacturing.entities';
 import { Setting } from '../setup/setup.entities';
 import { SettingsService } from '../setup/setup.service';
+import { JournalVoucher } from './ledger.entities';
 import { LedgerRow, LedgerService } from './ledger.service';
 
 /** Ledger account names (the chart of accounts is looked up by name). */
@@ -23,6 +26,11 @@ export const ACC = {
   SALES: 'Sales Revenue',
   OTHER_INCOME: 'Other Income',
   COGS: 'Cost of Goods Sold',
+  EXPORT_SALES: 'Export Sales Revenue',
+  EXPORT_LOGISTICS: 'Export Logistics Expense',
+  EXPORT_COSTS_PAYABLE: 'Export Costs Payable',
+  FX_GAIN: 'FX Gain',
+  FX_LOSS: 'FX Loss',
 } as const;
 
 export interface ApprovalState {
@@ -195,6 +203,89 @@ export class PostingService implements OnModuleInit {
         : this.pair(s.date, 'Accounting', s.refNo, `Bill paid · ${s.document.party}`, ACC.AP, ACC.CASH, s.amount);
     }
     await this.ledger.replace(em, 'ACC_SETTLEMENT', id, rows);
+  }
+
+  // ───────────── exports ─────────────
+
+  /**
+   * A shipped container: invoice (receivable / export sales at the invoice rate), the frozen goods cost,
+   * and the logistics the seller carries under the Incoterm (accrued as a payable). A quote posts nothing.
+   */
+  async syncShipment(em: EntityManager, id: string) {
+    const x = await em.findOne(ExportShipment, { where: { id }, relations: ['product'] });
+    if (!x) return;
+    let rows: LedgerRow[] = [];
+    if (x.status === 'Shipped') {
+      const s = await this.settings.get(em);
+      const m = shipmentMath(x, x.packsPerCarton ?? x.product.packsPerCarton ?? s.packsPerCarton, Number(x.unitCost ?? 0));
+      const date = x.shipDate ?? x.date;
+      const fx = { currency: x.currency, fxRate: x.fxRate };
+      rows = [
+        ...this.pair(date, 'Exports', x.refNo, `Export invoice ${x.incoterm} · ${x.buyer}`, ACC.AR, ACC.EXPORT_SALES, m.revenuePKR, fx),
+        ...this.pair(date, 'Exports', x.refNo, `Export goods cost · ${x.product.sku}`, ACC.COGS, ACC.INVENTORY, m.cogs),
+        ...this.pair(date, 'Exports', x.refNo, `Export seller-borne logistics · ${x.incoterm}`, ACC.EXPORT_LOGISTICS, ACC.EXPORT_COSTS_PAYABLE, m.sellerCostPKR),
+      ];
+    }
+    await this.ledger.replace(em, 'EXPORT', id, rows);
+    for (const r of await em.find(ExportReceipt, { where: { shipmentId: id } })) await this.syncExportReceipt(em, r.id);
+    for (const p of await em.find(ExportCostPayment, { where: { shipmentId: id } })) await this.syncExportCostPayment(em, p.id);
+  }
+
+  /**
+   * Money from the buyer. The receivable is cleared at the invoice rate; the difference to the rate on the
+   * day the money arrived is a realised FX gain (more PKR than invoiced) or FX loss (less).
+   */
+  async syncExportReceipt(em: EntityManager, id: string) {
+    const r = await em.findOne(ExportReceipt, { where: { id }, relations: ['shipment'] });
+    if (!r) return;
+    let rows: LedgerRow[] = [];
+    if (r.shipment.status === 'Shipped') {
+      const base = round2(Number(r.foreignAmount) * Number(r.shipment.fxRate));
+      const cash = round2(Number(r.foreignAmount) * Number(r.fxRate));
+      const desc = `Export collection · ${r.shipment.refNo}`;
+      const fx = { currency: r.shipment.currency, fxRate: r.fxRate };
+      rows = [
+        ...this.pair(r.date, 'Exports', r.refNo, desc, ACC.CASH, ACC.AR, Math.min(base, cash), fx),
+        ...(cash > base ? this.pair(r.date, 'Exports', r.refNo, `FX gain · ${r.shipment.refNo}`, ACC.CASH, ACC.FX_GAIN, cash - base, fx) : []),
+        ...(base > cash ? this.pair(r.date, 'Exports', r.refNo, `FX loss · ${r.shipment.refNo}`, ACC.FX_LOSS, ACC.AR, base - cash, fx) : []),
+      ];
+    }
+    await this.ledger.replace(em, 'EXPORT_RECEIPT', id, rows);
+  }
+
+  /** Paying the accrued logistics: the cost was booked at shipping, so this only moves cash against the payable. */
+  async syncExportCostPayment(em: EntityManager, id: string) {
+    const p = await em.findOne(ExportCostPayment, { where: { id }, relations: ['shipment'] });
+    if (!p) return;
+    await this.ledger.replace(em, 'EXPORT_COST', id,
+      p.shipment.status === 'Shipped'
+        ? this.pair(p.date, 'Exports', p.refNo, `Export costs settled · ${p.shipment.refNo}`, ACC.EXPORT_COSTS_PAYABLE, ACC.CASH, p.amount)
+        : []);
+  }
+
+  // ───────────── manual journal vouchers ─────────────
+
+  /**
+   * A voucher posts every line in PKR (amount x the voucher's rate). A rounding difference of a few
+   * paisa is moved onto the largest line of the lighter side, so the ledger always balances exactly.
+   */
+  async syncVoucher(em: EntityManager, id: string) {
+    const v = await em.findOne(JournalVoucher, { where: { id } });
+    if (!v) return;
+    const fx = Number(v.fxRate) || 1;
+    const rows: LedgerRow[] = v.lines
+      .map((l) => ({
+        date: v.date, source: 'Manual Voucher' as const, reference: v.refNo, description: v.memo, account: l.account,
+        debit: round2(Number(l.debit) * fx), credit: round2(Number(l.credit) * fx), currency: v.currency, fxRate: fx,
+      }))
+      .filter((r) => r.debit > 0 || r.credit > 0);
+    const diff = round2(rows.reduce((s, r) => s + r.debit - r.credit, 0));
+    if (diff !== 0 && Math.abs(diff) <= 0.05) {
+      const side = diff > 0 ? 'credit' : 'debit';
+      const target = rows.filter((r) => r[side] > 0).sort((a, b) => b[side] - a[side])[0];
+      if (target) target[side] = round2(target[side] + Math.abs(diff));
+    }
+    await this.ledger.replace(em, 'VOUCHER', id, rows);
   }
 
   /** Re-check every document that depends on signatures (called after the threshold changes). */

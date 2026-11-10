@@ -1,0 +1,92 @@
+/* Export Containers layout only. Tokens from src/styles, native CSS nesting. */
+
+:host {
+  display: block;
+}
+
+.two-col {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-4);
+
+  @media (max-width: 1100px) {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+/* Incoterm: code, then what it means */
+.terms {
+  display: flex;
+  flex-direction: column;
+
+  & > li {
+    display: grid;
+    grid-template-columns: 3rem minmax(0, 1fr);
+    gap: var(--space-3);
+    padding: var(--space-2) 0;
+    border-block-end: 1px solid var(--border);
+    font-size: var(--text-md);
+
+    &:last-child {
+      border-block-end: 0;
+    }
+
+    & > span {
+      color: var(--text-2);
+    }
+  }
+}
+
+/* label ... value rows (the value wraps instead of pushing the row wide) */
+.lines {
+  display: flex;
+  flex-direction: column;
+
+  & > li {
+    display: flex;
+    justify-content: space-between;
+    gap: var(--space-4);
+    padding: var(--space-2) 0;
+    border-block-end: 1px solid var(--border);
+    font-size: var(--text-md);
+
+    &:last-child {
+      border-block-end: 0;
+    }
+
+    & > span {
+      flex: none;
+      color: var(--text-2);
+    }
+
+    & > strong {
+      min-inline-size: 0;
+      text-align: end;
+      font-weight: var(--weight-semibold);
+    }
+  }
+}
+
+/* documents checklist: a ruled box before each line */
+.checklist {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+
+  & > li {
+    display: flex;
+    gap: var(--space-3);
+    font-size: var(--text-md);
+    color: var(--text-2);
+
+    &::before {
+      content: '';
+      flex: none;
+      inline-size: 0.875rem;
+      block-size: 0.875rem;
+      margin-block-start: 0.2em;
+      border: 1.5px solid var(--border-strong);
+      border-radius: calc(var(--radius) / 2);
+    }
+  }
+}

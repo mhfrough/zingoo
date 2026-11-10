@@ -136,6 +136,12 @@ export interface Settings {
   capitalTarget: number;
   signatoryA: string;
   signatoryB: string;
+  /** overhead share charged to every pack when judging margin (PKR per pack) */
+  profitAllocationPerPack: number;
+  /** default container type for export quotes */
+  containerSize: string;
+  /** default Incoterm for export quotes */
+  defaultIncoterm: string;
 }
 
 export const PAY_METHODS = ['Bank Transfer', 'Cash', 'Cheque', 'Other'] as const;

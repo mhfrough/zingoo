@@ -1,0 +1,135 @@
+<app-page-header eyebrow="Zingoo · Zen Foods" title="Export containers & profitability"
+  description="Build quotes, work out the seller's cost, ship goods and collect foreign-currency payments.">
+  <ng-container pageActions>
+    @if (canWrite()) {
+      <button appBtn variant="primary" icon="plus" (click)="openQuote()">New container quote</button>
+    }
+    <button appBtn icon="download" (click)="exportCsv()">Export CSV</button>
+  </ng-container>
+</app-page-header>
+
+<div class="stack">
+  <div class="notice">
+    <span>
+      <strong>A quote is only a costing scenario.</strong>
+      Shipping it records export sales, the goods cost and the costs the seller carries. Freight, insurance and duty are typed in the
+      invoice currency and are planning inputs, not current market quotations.
+    </span>
+  </div>
+
+  <div class="grid-auto">
+    <app-kpi label="Shipped export sales" [value]="money(booked())" icon="container" tone="accent" foot="At the invoice exchange rate" />
+    <app-kpi label="Container contribution" [value]="money(contribution())" icon="coins" [tone]="contribution() >= 0 ? 'success' : 'danger'"
+      foot="After goods and the seller's costs" />
+    <app-kpi label="Export receivables" [value]="money(receivable())" icon="wallet" tone="warning" foot="Buyers still owe, in PKR" />
+    <app-kpi label="Shipments" [value]="number(shippedCount())" icon="truck" tone="info" [foot]="money(costsOwed()) + ' export costs unpaid'" />
+  </div>
+
+  <app-tabs [tabs]="tabs()" [(active)]="tab" ariaLabel="Export sections">
+    <ng-template appTabPanel="shipments">
+      <div class="card" data-flush>
+        <div class="card__head">
+          <div><h2>Container quotes & shipments</h2><p>A quote can be changed until it ships; a shipped container is locked</p></div>
+        </div>
+        <div class="card__body">
+          <app-data-table [columns]="columns" [rows]="shipments.value() ?? []" [actions]="actions" [loading]="shipments.isLoading()"
+            [error]="shipments.error() ? 'The server did not answer.' : null" searchPlaceholder="Search containers"
+            emptyTitle="No containers yet" emptyText="Build the first container quote to see its costing here."
+            (retry)="reload()" (action)="onAction($event)" />
+        </div>
+      </div>
+    </ng-template>
+
+    <ng-template appTabPanel="terms">
+      <div class="stack">
+        <div class="two-col">
+          <div class="card">
+            <div class="card__head">
+              <div><h2>Who pays what</h2><p>Simplified guidance. The contract with the buyer governs.</p></div>
+            </div>
+            <div class="card__body">
+              <ul class="terms">
+                @for (t of terms; track t.code) {
+                  <li><strong class="mono">{{ t.code }}</strong><span>{{ t.text }}</span></li>
+                }
+              </ul>
+            </div>
+          </div>
+
+          <div class="card" data-flush>
+            <div class="card__head">
+              <div><h2>Container capacity presets</h2><p>Planning limits only; check weight and volume yourself. Edited in Settings & Data.</p></div>
+            </div>
+            <div class="card__body">
+              <app-data-table [columns]="containerColumns" [rows]="containers.value() ?? []" [searchable]="false" [loading]="containers.isLoading()"
+                emptyTitle="No container types" emptyText="Container types are set up in Settings & Data." />
+            </div>
+          </div>
+        </div>
+
+        <div class="two-col">
+          <div class="card">
+            <div class="card__head">
+              <div><h2>How profit is worked out</h2><p>Container contribution, before central overheads</p></div>
+            </div>
+            <div class="card__body">
+              <ul class="lines">
+                <li><span>Invoice value</span><strong>Selling price per pack × packs in the container</strong></li>
+                <li><span>FOB equivalent</span><strong>Invoice less the freight and insurance it includes</strong></li>
+                <li><span>Goods cost</span><strong>Factory cost per carton, frozen when it ships</strong></li>
+                <li><span>Seller's costs</span><strong>The cost lines the Incoterm puts on the seller</strong></li>
+                <li><span>Contribution</span><strong>Invoice − goods cost − seller's costs</strong></li>
+              </ul>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="card__head">
+              <div><h2>Export documents</h2><p>A checklist only, not customs advice</p></div>
+            </div>
+            <div class="card__body">
+              <ul class="checklist">
+                @for (c of checklist; track c) {
+                  <li>{{ c }}</li>
+                }
+              </ul>
+            </div>
+          </div>
+        </div>
+      </div>
+    </ng-template>
+
+    <ng-template appTabPanel="collections">
+      <div class="stack">
+        <div class="card" data-flush>
+          <div class="card__head">
+            <div><h2>Buyer receipts</h2><p>The rate on the day can differ from the invoice rate: that is a realised gain or loss</p></div>
+          </div>
+          <div class="card__body">
+            <app-data-table [columns]="receiptColumns" [rows]="receipts.value() ?? []" [loading]="receipts.isLoading()"
+              [error]="receipts.error() ? 'The server did not answer.' : null" searchPlaceholder="Search receipts"
+              emptyTitle="No receipts yet" emptyText="Collect from a shipped container to see it here." (retry)="reload()" />
+          </div>
+        </div>
+
+        <div class="card" data-flush>
+          <div class="card__head">
+            <div><h2>Export cost payments</h2><p>Logistics paid in PKR; the cost itself was booked when the container shipped</p></div>
+          </div>
+          <div class="card__body">
+            <app-data-table [columns]="costColumns" [rows]="costPayments.value() ?? []" [loading]="costPayments.isLoading()"
+              [error]="costPayments.error() ? 'The server did not answer.' : null" searchPlaceholder="Search payments"
+              emptyTitle="No cost payments yet" emptyText="Pay the costs of a shipped container to see it here." (retry)="reload()" />
+          </div>
+        </div>
+      </div>
+    </ng-template>
+  </app-tabs>
+</div>
+
+<app-export-form [(open)]="quoteOpen" [quote]="editing()" [products]="products.value() ?? []" [containers]="containers.value() ?? []"
+  [currencies]="currencies.value() ?? []" [defaultContainer]="settings.value()?.containerSize ?? '40HC'"
+  [defaultIncoterm]="settings.value()?.defaultIncoterm ?? 'FOB'" [packsPerCarton]="settings.value()?.packsPerCarton ?? 432"
+  (saved)="reload()" />
+<app-export-collect-form [(open)]="collectOpen" [shipment]="target()" (saved)="reload()" />
+<app-export-cost-form [(open)]="costOpen" [shipment]="target()" (saved)="reload()" />

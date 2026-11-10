@@ -37,11 +37,11 @@ const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 const T = {};
 const accounts = {
   owner: 'owner@example.test', factory: 'factory@example.test', finance: 'finance@example.test',
-  partner: 'partner@example.test', sales: 'sales@example.test', audit: 'audit@example.test', dist: 'distributor@demo.local',
+  partner: 'partner@example.test', sales: 'sales@example.test', exporter: 'export@example.test', audit: 'audit@example.test', dist: 'distributor@demo.local',
 };
 for (const [k, e] of Object.entries(accounts)) T[k] = await login(e);
 
-ok('all 7 test logins work', Object.values(T).every(Boolean));
+ok('all 8 test logins work', Object.values(T).every(Boolean));
 if (process.env.ROOT_EMAIL) {
   const rootToken = (await call(null, 'POST', '/auth/login', { email: process.env.ROOT_EMAIL, password: process.env.ROOT_PASSWORD })).json?.access_token;
   const root = rootToken ? (await call(rootToken, 'GET', '/auth/me')).json : null;
@@ -166,6 +166,97 @@ ok('cash book running balance ends at the dashboard cash', cb.at(-1).balance ===
 const flows = (await call(T.owner, 'GET', '/reports/cash-flows')).json;
 ok('cash flows add up to the cash balance', flows?.net === finalCash, `${flows?.net} vs ${finalCash}`);
 ok('cash flows list capital as an inflow', flows?.inflows?.some((r) => r.label === 'Capital and partner loans'));
+
+
+// ── exports ──
+const net = (tb, name) => tb.accounts.find((a) => a.name === name)?.net ?? 0;
+const prodList = (await call(T.owner, 'GET', '/products')).json;
+const sku = prodList.find((p) => p.stockCartons >= 10);
+ok('a product has stock for the export test', !!sku);
+const quote = {
+  date: '2026-11-10', buyer: 'Dubai Foods LLC', country: 'UAE', port: 'Jebel Ali', container: '40HC', incoterm: 'CIF',
+  productId: sku?.id, cartons: 10, currency: 'USD', fxRate: 280, rate: 0.06, origin: 300, ocean: 1000, insurance: 200, bankFees: 50,
+};
+const tbBefore = (await call(T.owner, 'GET', '/reports/trial-balance')).json;
+const q = await call(T.exporter, 'POST', '/exports', quote);
+ok('Exports role creates a container quote', q.status === 201 && q.json?.status === 'Quote', JSON.stringify(q.json).slice(0, 120));
+ok('Viewer cannot create a quote -> 403', (await call(T.audit, 'POST', '/exports', quote)).status === 403);
+ok('Distribution cannot read exports -> 403', (await call(T.sales, 'GET', '/exports')).status === 403);
+const packs = q.json?.packsPerCarton;
+ok('quote costing: CIF seller pays origin + ocean + insurance + bank fees (1,550)', q.json?.costs?.seller === 1550, JSON.stringify(q.json?.costs));
+ok('quote invoice value = cartons x packs x rate', Math.abs(q.json?.revenueForeign - 10 * packs * 0.06) < 0.01, String(q.json?.revenueForeign));
+ok('a quote posts nothing to the ledger', (await call(T.owner, 'GET', '/reports/trial-balance')).json.totalDebit === tbBefore.totalDebit);
+ok('collecting on a quote -> 400', (await call(T.exporter, 'POST', `/exports/${q.json.id}/collect`, { date: '2026-11-10', foreignAmount: 10, fxRate: 280 })).status === 400);
+const bigQuote = await call(T.exporter, 'POST', '/exports', { ...quote, cartons: 999999 });
+ok('shipping more cartons than the stock -> 400', (await call(T.exporter, 'POST', `/exports/${bigQuote.json.id}/ship`, {})).status === 400);
+ok('a quote can be deleted', (await call(T.exporter, 'DELETE', `/exports/${bigQuote.json.id}`)).status === 200);
+const shipped = await call(T.exporter, 'POST', `/exports/${q.json.id}/ship`, { shipDate: '2026-11-10' });
+ok('ship the quote -> Shipped', shipped.json?.status === 'Shipped', JSON.stringify(shipped.json).slice(0, 150));
+const X = shipped.json;
+const tbShip = (await call(T.owner, 'GET', '/reports/trial-balance')).json;
+ok('shipping books export sales revenue at the invoice rate', Math.abs(-net(tbShip, 'Export Sales Revenue') - X.revenuePKR) < 0.01, `${net(tbShip, 'Export Sales Revenue')} vs ${X.revenuePKR}`);
+ok('shipping accrues the seller-borne logistics', Math.abs(-net(tbShip, 'Export Costs Payable') - X.sellerCostPKR) < 0.01 && X.sellerCostPKR === 1550 * 280);
+ok('ledger is still balanced after shipping', tbShip.balanced === true);
+ok('a shipped container cannot be edited -> 400', (await call(T.exporter, 'PATCH', `/exports/${X.id}`, { buyer: 'x' })).status === 400);
+ok('a shipped container cannot be deleted -> 400', (await call(T.exporter, 'DELETE', `/exports/${X.id}`)).status === 400);
+ok('shipping twice -> 400', (await call(T.exporter, 'POST', `/exports/${X.id}/ship`, {})).status === 400);
+ok('collecting more than is owed -> 400', (await call(T.exporter, 'POST', `/exports/${X.id}/collect`, { date: '2026-11-11', foreignAmount: X.revenueForeign + 1, fxRate: 280 })).status === 400);
+const half = Math.round((X.revenueForeign / 2) * 100) / 100;
+const gain = await call(T.exporter, 'POST', `/exports/${X.id}/collect`, { date: '2026-11-12', foreignAmount: half, fxRate: 290 });
+ok('collect half at a better rate -> due halves', Math.abs(gain.json?.due - (X.revenueForeign - half)) < 0.01, JSON.stringify(gain.json).slice(0, 100));
+const tbGain = (await call(T.owner, 'GET', '/reports/trial-balance')).json;
+ok('a better rate books an FX gain of half x 10 PKR', Math.abs(-net(tbGain, 'FX Gain') - half * 10) < 0.01, String(net(tbGain, 'FX Gain')));
+const rest = Math.round((X.revenueForeign - half) * 100) / 100;
+await call(T.exporter, 'POST', `/exports/${X.id}/collect`, { date: '2026-11-13', foreignAmount: rest, fxRate: 275 });
+const tbLoss = (await call(T.owner, 'GET', '/reports/trial-balance')).json;
+ok('a worse rate books an FX loss of the rest x 5 PKR', Math.abs(net(tbLoss, 'FX Loss') - rest * 5) < 0.01, String(net(tbLoss, 'FX Loss')));
+const xs = (await call(T.exporter, 'GET', '/exports')).json.find((e) => e.id === X.id);
+ok('fully collected container has nothing due', xs.due === 0 && xs.collected === X.revenueForeign, JSON.stringify({ due: xs.due, collected: xs.collected }));
+ok('paying more export cost than owed -> 400', (await call(T.exporter, 'POST', `/exports/${X.id}/pay-costs`, { date: '2026-11-14', amount: X.sellerCostPKR + 5 })).status === 400);
+const paidCost = await call(T.exporter, 'POST', `/exports/${X.id}/pay-costs`, { date: '2026-11-14', amount: X.sellerCostPKR });
+ok('paying the export costs clears the accrual', paidCost.json?.costDue === 0, JSON.stringify(paidCost.json).slice(0, 100));
+const tbPaid = (await call(T.owner, 'GET', '/reports/trial-balance')).json;
+ok('export costs payable is back to zero and the ledger balances', Math.abs(net(tbPaid, 'Export Costs Payable')) < 0.01 && tbPaid.balanced === true);
+
+// ── manual vouchers, account ledger, balance sheet, ageing ──
+const cashVoucher = (await call(T.owner, 'GET', '/reports/dashboard')).json.cash;
+ok('an unbalanced voucher -> 400', (await call(T.finance, 'POST', '/journal-vouchers', {
+  date: '2026-11-10', memo: 'bad', lines: [{ account: 'Cash & Bank', debit: 1000, credit: 0 }, { account: 'Owner Equity', debit: 0, credit: 900 }],
+})).status === 400);
+ok('a voucher on an unknown account -> 400', (await call(T.finance, 'POST', '/journal-vouchers', {
+  date: '2026-11-10', memo: 'bad', lines: [{ account: 'Nope', debit: 1000, credit: 0 }, { account: 'Owner Equity', debit: 0, credit: 1000 }],
+})).status === 400);
+ok('Viewer cannot post a voucher -> 403', (await call(T.audit, 'POST', '/journal-vouchers', {})).status === 403);
+const jv = await call(T.finance, 'POST', '/journal-vouchers', {
+  date: '2026-11-10', memo: 'Opening cash', lines: [{ account: 'Cash & Bank', debit: 1000, credit: 0 }, { account: 'Owner Equity', debit: 0, credit: 1000 }],
+});
+ok('a balanced voucher posts', jv.status === 201 && jv.json?.status === 'Posted', JSON.stringify(jv.json).slice(0, 100));
+ok('the voucher raises cash by 1,000', (await call(T.owner, 'GET', '/reports/dashboard')).json.cash === cashVoucher + 1000);
+const rev = await call(T.finance, 'POST', `/journal-vouchers/${jv.json.id}/reverse`);
+ok('reversing posts an opposite voucher', rev.status === 201 && rev.json?.reverses === jv.json.refNo);
+ok('cash is back after the reversal', (await call(T.owner, 'GET', '/reports/dashboard')).json.cash === cashVoucher);
+ok('reversing twice -> 400', (await call(T.finance, 'POST', `/journal-vouchers/${jv.json.id}/reverse`)).status === 400);
+ok('the original voucher is marked Reversed', (await call(T.finance, 'GET', '/journal-vouchers')).json.find((v) => v.id === jv.json.id)?.status === 'Reversed');
+const cashCode = (await call(T.owner, 'GET', '/accounts')).json.find((a) => a.name === 'Cash & Bank').code;
+const led = (await call(T.owner, 'GET', `/reports/account-ledger?code=${cashCode}`)).json;
+ok('account ledger runs to the cash balance', led.at(-1)?.running === cashVoucher, `${led.at(-1)?.running} vs ${cashVoucher}`);
+const bs = (await call(T.owner, 'GET', '/reports/balance-sheet')).json;
+ok('balance sheet balances (assets = liabilities + equity + profit)', bs.difference === 0, String(bs.difference));
+const ageing = (await call(T.owner, 'GET', '/reports/aged-receivables')).json;
+const recv = (await call(T.owner, 'GET', '/reports/receivables')).json;
+ok('ageing adds up to the receivables', ageing.total === recv.total && Math.abs(ageing.buckets.reduce((n, b) => n + b.total, 0) - ageing.total) < 0.01);
+const newAcc = await call(T.finance, 'POST', '/accounts', { code: '9990', name: 'Smoke Test Account', type: 'Expense' });
+ok('add an account to the chart', newAcc.status === 201, JSON.stringify(newAcc.json).slice(0, 100));
+ok('a duplicate account -> 409', (await call(T.finance, 'POST', '/accounts', { code: '9990', name: 'Another', type: 'Expense' })).status === 409);
+
+// ── agreed rates ──
+const dists = (await call(T.owner, 'GET', '/distributors')).json;
+const setRate = await call(T.sales, 'PUT', '/distributor-rates', { distributorId: dists[0].id, productId: sku.id, rate: 12.5 });
+ok('set an agreed rate', setRate.status === 200 && Number(setRate.json?.rate) === 12.5, JSON.stringify(setRate.json).slice(0, 100));
+const again = await call(T.sales, 'PUT', '/distributor-rates', { distributorId: dists[0].id, productId: sku.id, rate: 13 });
+ok('setting it again changes it (one rate per distributor and SKU)', again.json?.id === setRate.json?.id && Number(again.json?.rate) === 13);
+ok('Manufacturing cannot set an agreed rate -> 403', (await call(T.factory, 'PUT', '/distributor-rates', { distributorId: dists[0].id, productId: sku.id, rate: 1 })).status === 403);
+ok('delete an agreed rate', (await call(T.sales, 'DELETE', `/distributor-rates/${setRate.json.id}`)).status === 200);
 
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

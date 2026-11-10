@@ -2,7 +2,7 @@ import { Body, Controller, Get, Param, ParseUUIDPipe, Patch, Post, Query } from 
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
 import { Write } from '../auth/roles.decorator';
 import { AccountsService, CatalogListsService, CategoriesService, SettingsService } from './setup.service';
-import { CreateCostCenterDto, SetBudgetDto, UpdateSettingsDto } from './setup.dto';
+import { CreateAccountDto, CreateCostCenterDto, SetBudgetDto, UpdateAccountDto, UpdateSettingsDto } from './setup.dto';
 
 @ApiTags('setup')
 @Controller()
@@ -40,6 +40,20 @@ export class SetupController {
   @ApiOperation({ summary: 'Chart of accounts' })
   accountList() {
     return this.accounts.list();
+  }
+
+  @Post('accounts')
+  @Write('finance')
+  @ApiOperation({ summary: 'Add an account to the chart of accounts' })
+  addAccount(@Body() dto: CreateAccountDto) {
+    return this.accounts.create(dto);
+  }
+
+  @Patch('accounts/:id')
+  @Write('finance')
+  @ApiOperation({ summary: 'Rename or switch off an account' })
+  editAccount(@Param('id', ParseUUIDPipe) id: string, @Body() dto: UpdateAccountDto) {
+    return this.accounts.update(id, dto);
   }
 
   @Get('categories')

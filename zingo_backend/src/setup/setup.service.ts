@@ -34,6 +34,24 @@ export class AccountsService {
     return this.repo.find({ order: { code: 'ASC' } });
   }
 
+  /** add an account; the code and the name must both be new */
+  async create(dto: { code: string; name: string; type: Account['type'] }) {
+    if (await this.repo.findOne({ where: [{ code: dto.code }, { name: dto.name }] })) {
+      throw new ConflictException('An account with this code or name already exists.');
+    }
+    return this.repo.save(this.repo.create({ ...dto, active: true }));
+  }
+
+  /** rename or switch off; a used account keeps its postings */
+  async update(id: string, patch: { name?: string; active?: boolean }) {
+    const a = await this.repo.findOne({ where: { id } });
+    if (!a) throw new NotFoundException('Account not found');
+    if (patch.name && patch.name !== a.name && (await this.repo.findOne({ where: { name: patch.name } }))) {
+      throw new ConflictException('An account with this name already exists.');
+    }
+    return this.repo.save(this.repo.merge(a, patch));
+  }
+
   /**
    * Account code for a ledger account name. "Expense · X" and "Income · X" accounts are
    * created on first use, so a new cost center or category just works.

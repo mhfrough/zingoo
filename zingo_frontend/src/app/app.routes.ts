@@ -10,6 +10,9 @@ const BUILT: Record<string, () => Promise<unknown>> = {
   distribution: () => import('./features/distribution/distribution').then((m) => m.Distribution),
   finance: () => import('./features/finance/finance').then((m) => m.Finance),
   accounting: () => import('./features/accounting/accounting').then((m) => m.Accounting),
+  pricing: () => import('./features/pricing/pricing').then((m) => m.Pricing),
+  exports: () => import('./features/exports/exports').then((m) => m.Exports),
+  ledger: () => import('./features/ledger/ledger').then((m) => m.Ledger),
 };
 
 export const routes: Routes = [

@@ -4,6 +4,7 @@ import { DataSource } from 'typeorm';
 import { StockService } from '../catalog/stock.service';
 import { round2 } from '../common/numeric.transformer';
 import { OrdersService } from '../distribution/distribution.service';
+import { ExportsService } from '../exports/exports.service';
 import { AccountingService, FinanceService } from '../finance/finance.service';
 import { BatchesService } from '../manufacturing/manufacturing.service';
 import { SettingsService } from '../setup/setup.service';
@@ -25,6 +26,7 @@ export class ReportsService {
     private readonly batches: BatchesService,
     private readonly finance: FinanceService,
     private readonly accounting: AccountingService,
+    private readonly exportsSvc: ExportsService,
   ) {}
 
   /** net balance (debit - credit) of one ledger account */
@@ -85,6 +87,62 @@ export class ReportsService {
     const debit = round2(accounts.reduce((s, r) => s + r.debit, 0));
     const credit = round2(accounts.reduce((s, r) => s + r.credit, 0));
     return { accounts, totalDebit: debit, totalCredit: credit, balanced: Math.abs(debit - credit) < 0.005 };
+  }
+
+  /**
+   * One account's ledger (or every account with code "all"), oldest first, with the running balance
+   * (debit - credit). The period only filters the rows; the running balance carries on from earlier months.
+   */
+  async accountLedger(code = 'all', period: Period = 'all') {
+    const rows: any[] = await this.db.query(
+      `SELECT l.id, to_char(l."entryDate", 'YYYY-MM-DD') AS date, l.reference, l.source, l.description,
+              a.code AS "accountCode", a.name AS account, l.debit::float8 AS debit, l.credit::float8 AS credit
+         FROM ledger_entries l JOIN accounts a ON a.code = l."accountCode"
+        WHERE $1::text = 'all' OR a.code = $1::text
+        ORDER BY l."entryDate", l.seq`,
+      [code],
+    );
+    let running = 0;
+    const all = rows.map((r) => ({ ...r, running: (running = round2(running + r.debit - r.credit)) }));
+    return period === 'all' ? all : all.filter((r) => r.date.slice(0, 7) === period);
+  }
+
+  /** assets, liabilities and equity from the ledger; current profit is shown on its own line */
+  async balanceSheet() {
+    const tb = await this.trialBalance();
+    const of = (type: string, sign: 1 | -1) =>
+      tb.accounts.filter((a) => a.type === type && Math.abs(a.net) > 0.004).map((a) => ({ code: a.code, name: a.name, balance: round2(sign * a.net) }));
+    const sum = (rows: { balance: number }[]) => round2(rows.reduce((s, r) => s + r.balance, 0));
+    const assets = of('Asset', 1);
+    const liabilities = of('Liability', -1);
+    const equity = of('Equity', -1);
+    const revenue = round2(-tb.accounts.filter((a) => a.type === 'Revenue').reduce((s, a) => s + a.net, 0));
+    const expense = round2(tb.accounts.filter((a) => a.type === 'COGS' || a.type === 'Expense').reduce((s, a) => s + a.net, 0));
+    const profit = round2(revenue - expense);
+    return {
+      assets, liabilities, equity, revenue, expense, profit,
+      totalAssets: sum(assets), totalLiabilities: sum(liabilities), totalEquity: round2(sum(equity) + profit),
+      difference: round2(sum(assets) - sum(liabilities) - sum(equity) - profit),
+    };
+  }
+
+  /** open receivables by how far past due they are, as of today */
+  async agedReceivables() {
+    const { rows } = await this.receivables();
+    const asOf = new Date().toISOString().slice(0, 10);
+    const day = 86_400_000;
+    const buckets = ['Not yet due', '1-30 days', '31-60 days', '61-90 days', 'Over 90 days'];
+    const aged = rows.map((r) => {
+      const overdue = Math.floor((Date.parse(asOf) - Date.parse(String(r.dueDate).slice(0, 10))) / day);
+      const bucket = overdue <= 0 ? 0 : overdue <= 30 ? 1 : overdue <= 60 ? 2 : overdue <= 90 ? 3 : 4;
+      return { ...r, daysOverdue: Math.max(0, overdue), bucket: buckets[bucket], bucketIndex: bucket };
+    });
+    return {
+      asOf,
+      total: round2(aged.reduce((s, r) => s + r.outstanding, 0)),
+      buckets: buckets.map((label, i) => ({ label, total: round2(aged.filter((r) => r.bucketIndex === i).reduce((s, r) => s + r.outstanding, 0)) })),
+      rows: aged,
+    };
   }
 
   async cashBook(period: Period = 'all') {
@@ -174,8 +232,12 @@ export class ReportsService {
   // ───────────── money owed ─────────────
 
   async receivables() {
-    const [orders, docs] = await Promise.all([this.orders.list(), this.accounting.list()]);
+    const [orders, docs, shipments] = await Promise.all([this.orders.list(), this.accounting.list(), this.exportsSvc.list()]);
     const rows = [
+      ...shipments.filter((e) => e.status === 'Shipped' && e.due > 0.01).map((e) => ({
+        reference: e.refNo, type: `Export · ${e.currency}`, party: e.buyer,
+        date: e.shipDate ?? e.date, dueDate: e.shipDate ?? e.date, outstanding: round2(e.due * Number(e.fxRate)),
+      })),
       ...orders.filter((o) => o.status === 'Dispatched' && o.outstanding > 0.01).map((o) => ({
         reference: o.refNo, type: 'Distributor invoice', party: o.distributor.name,
         date: o.dispatchDate ?? o.date, dueDate: o.dueDate, outstanding: o.outstanding,
@@ -188,8 +250,12 @@ export class ReportsService {
   }
 
   async payables() {
-    const [docs, batches] = await Promise.all([this.accounting.list(), this.batches.list()]);
+    const [docs, batches, shipments] = await Promise.all([this.accounting.list(), this.batches.list(), this.exportsSvc.list()]);
     const rows = [
+      ...shipments.filter((e) => e.status === 'Shipped' && e.costDue > 0.01).map((e) => ({
+        reference: e.refNo, type: 'Export costs', party: `Export logistics · ${e.buyer}`,
+        dueDate: e.shipDate ?? e.date, outstanding: e.costDue,
+      })),
       ...docs.filter((d) => d.kind === 'Expense' && d.approved && d.due > 0.01).map((d) => ({
         reference: d.refNo, type: d.category, party: d.party, dueDate: d.dueDate ?? d.date, outstanding: d.due,
       })),

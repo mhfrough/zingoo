@@ -1,0 +1,220 @@
+<app-page-header eyebrow="Zingoo · Zen Foods" title="General ledger"
+  description="The books behind every page: trial balance, ledgers, profit and loss, balance sheet and vouchers.">
+  <ng-container pageActions>
+    @if (canWrite()) {
+      <button appBtn variant="primary" icon="plus" (click)="voucherOpen.set(true)">Post journal voucher</button>
+      <button appBtn icon="plus" (click)="openAccount()">Add account</button>
+    }
+    <button appBtn icon="download" (click)="exportCsv()">Ledger CSV</button>
+  </ng-container>
+</app-page-header>
+
+<div class="stack">
+  <div class="grid-auto">
+    <app-kpi label="Total debits" [value]="money(trial.value()?.totalDebit ?? 0)" icon="book" tone="info" foot="Every posted line" />
+    <app-kpi label="Total credits" [value]="money(trial.value()?.totalCredit ?? 0)" icon="book" tone="info" foot="Always equal to debits" />
+    <app-kpi label="Ledger check" [value]="trial.value()?.balanced ? 'Balanced' : 'Out of balance'" icon="shield-check"
+      [tone]="trial.value()?.balanced === false ? 'danger' : 'success'" [foot]="trial.value()?.balanced === false ? 'Review the last posting' : 'Debits equal credits'" />
+    <app-kpi label="Net profit" [value]="money(balance.value()?.profit ?? 0)" icon="coins"
+      [tone]="(balance.value()?.profit ?? 0) >= 0 ? 'success' : 'danger'" foot="Revenue less cost of goods and expenses" />
+  </div>
+
+  <app-tabs [tabs]="tabs()" [(active)]="tab" ariaLabel="General ledger sections">
+    <ng-template appTabPanel="trial">
+      <div class="card" data-flush>
+        <div class="card__head">
+          <div>
+            <h2>Trial balance <app-tag [tone]="trial.value()?.balanced === false ? 'danger' : 'success'">{{ trial.value()?.balanced === false ? 'Out of balance' : 'Balanced' }}</app-tag></h2>
+            <p>Accounts with a balance. Debit balances on the left, credit balances on the right.</p>
+          </div>
+        </div>
+        <div class="card__body">
+          <app-data-table [columns]="trialColumns" [rows]="trialRows()" [totals]="trialTotals()" [actions]="trialActions"
+            [loading]="trial.isLoading()" [error]="trial.error() ? 'The server did not answer.' : null"
+            searchPlaceholder="Search accounts" emptyTitle="Nothing posted yet" emptyText="Accounts appear as documents post to the journal."
+            (retry)="reload()" (action)="onTrialAction($event)" />
+        </div>
+      </div>
+    </ng-template>
+
+    <ng-template appTabPanel="ledger">
+      <div class="card" data-flush>
+        <div class="card__head">
+          <div><h2>Account ledger</h2><p>Every line of one account, with its running balance</p></div>
+        </div>
+        <div class="toolbar ledger-filters">
+          <label for="led-account">Account</label>
+          <select id="led-account" [value]="account()" (change)="account.set($any($event.target).value)">
+            <option value="all" [selected]="account() === 'all'">All accounts (combined)</option>
+            @for (a of accountOptions(); track a.id) {
+              <option [value]="a.code" [selected]="a.code === account()">{{ a.code }} · {{ a.name }}</option>
+            }
+          </select>
+          <label for="led-period">Period</label>
+          <select id="led-period" [value]="period()" (change)="period.set($any($event.target).value)">
+            @for (o of periodOptions(); track o.value) {
+              <option [value]="o.value" [selected]="o.value === period()">{{ o.label }}</option>
+            }
+          </select>
+        </div>
+        <div class="card__body">
+          <app-data-table [columns]="ledgerColumns" [rows]="ledgerRows()" [loading]="lines.isLoading()"
+            [error]="lines.error() ? 'The server did not answer.' : null" searchPlaceholder="Search this ledger"
+            emptyTitle="No lines" emptyText="Nothing is posted to this account in this period." (retry)="reload()" />
+        </div>
+      </div>
+    </ng-template>
+
+    <ng-template appTabPanel="pnl">
+      <div class="stack">
+        <div class="toolbar ledger-filters">
+          <label for="pnl-period">Period</label>
+          <select id="pnl-period" [value]="period()" (change)="period.set($any($event.target).value)">
+            @for (o of periodOptions(); track o.value) {
+              <option [value]="o.value" [selected]="o.value === period()">{{ o.label }}</option>
+            }
+          </select>
+        </div>
+        <div class="two-col">
+          <div class="card">
+            <div class="card__head">
+              <div><h2>Profit & loss · {{ period() === 'all' ? 'all dates' : period() }}</h2><p>Capital and fixed assets are not profit or loss</p></div>
+            </div>
+            <div class="card__body">
+              <ul class="lines">
+                <li><span>Sales and export revenue</span><strong class="mono">{{ money(statement.value()?.sales ?? 0) }}</strong></li>
+                <li><span>Other income and realised FX gain</span><strong class="mono">{{ money(statement.value()?.other ?? 0) }}</strong></li>
+                <li><span>Total revenue</span><strong class="mono">{{ money(statement.value()?.revenue ?? 0) }}</strong></li>
+                <li><span>Cost of goods sold</span><strong class="mono">− {{ money(statement.value()?.cogs ?? 0) }}</strong></li>
+                <li><span>Gross profit</span><strong class="mono">{{ money(statement.value()?.grossProfit ?? 0) }}</strong></li>
+                <li><span>Operating expenses</span><strong class="mono">− {{ money(statement.value()?.operatingExpenses ?? 0) }}</strong></li>
+                <li class="lines__total">
+                  <strong>Net profit / (loss)</strong>
+                  <strong class="mono" [class.positive]="(statement.value()?.netProfit ?? 0) >= 0"
+                    [class.negative]="(statement.value()?.netProfit ?? 0) < 0">{{ money(statement.value()?.netProfit ?? 0) }}</strong>
+                </li>
+              </ul>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="card__head">
+              <div><h2>Cash flows</h2><p>Where cash came from and went, from the cash and bank lines</p></div>
+            </div>
+            <div class="card__body">
+              <ul class="lines">
+                @for (r of flows.value()?.inflows ?? []; track r.label) {
+                  <li><span>{{ r.label }}</span><strong class="mono">{{ money(r.amount) }}</strong></li>
+                }
+                @for (r of flows.value()?.outflows ?? []; track r.label) {
+                  <li><span>{{ r.label }}</span><strong class="mono">− {{ money(r.amount) }}</strong></li>
+                }
+                <li class="lines__total">
+                  <strong>Cash position</strong>
+                  <strong class="mono positive">{{ money(flows.value()?.net ?? 0) }}</strong>
+                </li>
+              </ul>
+            </div>
+          </div>
+        </div>
+      </div>
+    </ng-template>
+
+    <ng-template appTabPanel="balance">
+      <div class="stack">
+        <div class="notice" [attr.data-tone]="(balance.value()?.difference ?? 0) === 0 ? null : 'danger'">
+          <span>
+            @if ((balance.value()?.difference ?? 0) === 0) {
+              <strong>The books balance.</strong> Assets equal liabilities plus equity plus current profit.
+            } @else {
+              <strong>Out of balance by {{ money(balance.value()?.difference ?? 0) }}.</strong> Review the latest postings.
+            }
+            This is a management view from the journal, not an audited balance sheet.
+          </span>
+        </div>
+        <div class="three-col">
+          <div class="card" data-flush>
+            <div class="card__head"><div><h2>Assets</h2><p>{{ money(balance.value()?.totalAssets ?? 0) }}</p></div></div>
+            <div class="card__body">
+              <app-data-table [columns]="balanceColumns" [rows]="balance.value()?.assets ?? []" [searchable]="false" [loading]="balance.isLoading()"
+                emptyTitle="No assets" emptyText="Cash, stock and receivables appear here." />
+            </div>
+          </div>
+          <div class="card" data-flush>
+            <div class="card__head"><div><h2>Liabilities</h2><p>{{ money(balance.value()?.totalLiabilities ?? 0) }}</p></div></div>
+            <div class="card__body">
+              <app-data-table [columns]="balanceColumns" [rows]="balance.value()?.liabilities ?? []" [searchable]="false" [loading]="balance.isLoading()"
+                emptyTitle="No liabilities" emptyText="Payables and accrued costs appear here." />
+            </div>
+          </div>
+          <div class="card" data-flush>
+            <div class="card__head"><div><h2>Equity</h2><p>{{ money(balance.value()?.totalEquity ?? 0) }} with current profit</p></div></div>
+            <div class="card__body">
+              <app-data-table [columns]="balanceColumns" [rows]="balance.value()?.equity ?? []" [searchable]="false" [loading]="balance.isLoading()"
+                emptyTitle="No equity" emptyText="Capital and partner loans appear here." />
+            </div>
+          </div>
+        </div>
+      </div>
+    </ng-template>
+
+    <ng-template appTabPanel="vouchers">
+      <div class="card" data-flush>
+        <div class="card__head">
+          <div><h2>Journal vouchers</h2><p>Manual entries. A posted voucher is undone by a reversing voucher, never edited.</p></div>
+          @if (canWrite()) {
+            <button appBtn size="sm" icon="plus" (click)="voucherOpen.set(true)">Post voucher</button>
+          }
+        </div>
+        <div class="card__body">
+          <app-data-table [columns]="voucherColumns" [rows]="vouchers.value() ?? []" [actions]="voucherActions" [loading]="vouchers.isLoading()"
+            [error]="vouchers.error() ? 'The server did not answer.' : null" searchPlaceholder="Search vouchers"
+            emptyTitle="No manual vouchers" emptyText="Adjustments and corrections you post by hand appear here."
+            (retry)="reload()" (action)="onVoucherAction($event)" />
+        </div>
+      </div>
+    </ng-template>
+
+    <ng-template appTabPanel="accounts">
+      <div class="card" data-flush>
+        <div class="card__head">
+          <div><h2>Chart of accounts</h2><p>An account that has postings can be renamed or switched off, not deleted</p></div>
+          @if (canWrite()) {
+            <button appBtn size="sm" icon="plus" (click)="openAccount()">Add account</button>
+          }
+        </div>
+        <div class="card__body">
+          <app-data-table [columns]="accountColumns" [rows]="accounts.value() ?? []" [actions]="accountActions" [loading]="accounts.isLoading()"
+            [error]="accounts.error() ? 'The server did not answer.' : null" searchPlaceholder="Search accounts"
+            emptyTitle="No accounts" emptyText="Add the first account." (retry)="reload()" (action)="onAccountAction($event)" />
+        </div>
+      </div>
+    </ng-template>
+
+    <ng-template appTabPanel="aged">
+      <div class="stack">
+        <div class="buckets">
+          @for (b of aged.value()?.buckets ?? []; track b.label) {
+            <div class="bucket">
+              <span class="bucket__label">{{ b.label }}</span>
+              <strong class="mono">{{ money(b.total) }}</strong>
+            </div>
+          }
+        </div>
+        <div class="card" data-flush>
+          <div class="card__head">
+            <div><h2>Aged receivables</h2><p>Open invoices by how far past due they are{{ aged.value()?.asOf ? ', as of ' + aged.value()!.asOf : '' }}</p></div>
+          </div>
+          <div class="card__body">
+            <app-data-table [columns]="agedColumns" [rows]="aged.value()?.rows ?? []" [totals]="agedTotals()" [loading]="aged.isLoading()"
+              [error]="aged.error() ? 'The server did not answer.' : null" searchPlaceholder="Search invoices"
+              emptyTitle="Nothing is overdue" emptyText="Every invoice is paid." (retry)="reload()" />
+          </div>
+        </div>
+      </div>
+    </ng-template>
+  </app-tabs>
+</div>
+
+<app-voucher-form [(open)]="voucherOpen" [accounts]="activeAccounts()" [currencies]="currencies.value() ?? []" (saved)="reload()" />
+<app-account-form [(open)]="accountOpen" [account]="editingAccount()" (saved)="reload()" />

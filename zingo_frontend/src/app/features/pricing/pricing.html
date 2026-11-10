@@ -1,0 +1,121 @@
+<app-page-header eyebrow="Zingoo · Zen Foods" title="Pricing & margins"
+  description="From the factory rate to the distributor price, per pack, with the margin at each step.">
+  <ng-container pageActions>
+    @if (canRates()) {
+      <button appBtn variant="primary" icon="plus" (click)="productOpen.set(true)">Add SKU</button>
+    }
+    @if (canOverhead()) {
+      <button appBtn icon="edit" (click)="overheadOpen.set(true)">Set overhead per pack</button>
+    }
+  </ng-container>
+</app-page-header>
+
+<div class="stack">
+  <div class="notice">
+    <span>
+      <strong>Every rate is per pack, in PKR.</strong>
+      Product pricing is for planning. A dispatched order freezes its own cost, and company profit also subtracts operating
+      expenses and export costs; see Income & Expenses.
+    </span>
+  </div>
+
+  <div class="grid-auto">
+    <app-kpi label="Active SKUs" [value]="number(activeCount())" icon="package" tone="accent" foot="With editable cost build-ups" />
+    <app-kpi label="Average net per pack" [value]="'PKR ' + amount(avgNet())" icon="coins" [tone]="avgNet() >= 0 ? 'success' : 'danger'"
+      foot="After the overhead share" />
+    <app-kpi label="Overhead per pack" [value]="'PKR ' + amount(overhead())" icon="scale" tone="info" foot="Set once for every SKU" />
+    <app-kpi label="Dispatched sales booked" [value]="money(turnover())" icon="truck" tone="warning" foot="Distribution orders only" />
+  </div>
+
+  <div class="card" data-flush>
+    <div class="card__head">
+      <div><h2>Manufacturer → distributor price bridge</h2><p>Rate and margin per pack, one row per SKU</p></div>
+    </div>
+    <div class="card__body">
+      <app-data-table [columns]="bridgeColumns" [rows]="rows()" [actions]="bridgeActions" [loading]="products.isLoading()"
+        [error]="products.error() ? 'The server did not answer.' : null" searchPlaceholder="Search SKUs"
+        emptyTitle="No products yet" emptyText="Add a SKU to start its price bridge." (retry)="reload()"
+        (action)="onBridgeAction($event)" />
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card__head">
+      <div><h2>Rate cards</h2><p>Distributor price per pack and how much of it is gross margin</p></div>
+    </div>
+    <div class="card__body">
+      <div class="rate-cards">
+        @for (c of cards(); track c.product.id) {
+          <div class="rate-card">
+            <span class="rate-card__sku">{{ c.product.sku }}</span>
+            <strong class="rate-card__price mono">PKR {{ amount(c.eco.distributor) }}</strong>
+            <span class="rate-card__note">Factory {{ amount(c.eco.factory) }} + extras {{ amount(c.eco.addOns) }}</span>
+            <div class="bar" role="progressbar" [attr.aria-valuenow]="c.fill" aria-valuemin="0" aria-valuemax="100"
+                 [attr.aria-label]="c.product.sku + ' gross margin'">
+              <div class="bar__fill" [attr.data-tone]="c.tone" [style.width.%]="c.fill"></div>
+            </div>
+            @if (canRates()) {
+              <button type="button" class="rate-card__edit" (click)="openRates(c.product)">Edit margin · {{ pct(c.eco.grossPct) }}</button>
+            } @else {
+              <span class="rate-card__note">Margin {{ pct(c.eco.grossPct) }}</span>
+            }
+          </div>
+        } @empty {
+          <p class="muted">No SKUs yet.</p>
+        }
+      </div>
+    </div>
+  </div>
+
+  <div class="two-col">
+    <div class="card" data-flush>
+      <div class="card__head">
+        <div><h2>Recent selling margins</h2><p>Dispatched orders at today's cost assumptions</p></div>
+      </div>
+      <div class="card__body">
+        <app-data-table [columns]="marginColumns" [rows]="dispatched()" [loading]="orders.isLoading()" [searchable]="false"
+          emptyTitle="Nothing dispatched yet" emptyText="Margins appear here once an order is dispatched." />
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card__head">
+        <div><h2>Formula & pricing policy</h2><p>A planning model, not a booked expense</p></div>
+      </div>
+      <div class="card__body stack">
+        <ul class="lines">
+          <li><span>Landed cost</span><strong>Factory + packaging + printing + inbound</strong></li>
+          <li><span>Gross margin</span><strong>Distributor price − landed cost</strong></li>
+          <li><span>After overhead</span><strong>Gross − overhead per pack</strong></li>
+          <li><span>Gross margin %</span><strong>Gross ÷ distributor price</strong></li>
+          <li><span>Company net profit</span><strong>Revenue − COGS − expenses</strong></li>
+        </ul>
+        <p class="muted">
+          Profit after marketing, salaries, rent, export costs and utilities is on the Income & Expenses statement. Enter
+          packaging or printing only if the factory bills them apart from its rate.
+        </p>
+      </div>
+    </div>
+  </div>
+
+  <div class="card" data-flush>
+    <div class="card__head">
+      <div><h2>Agreed rates</h2><p>A distributor's own price per pack. New orders start from it.</p></div>
+      @if (canAgree()) {
+        <button appBtn size="sm" icon="plus" (click)="openAgreed()">Agree a rate</button>
+      }
+    </div>
+    <div class="card__body">
+      <app-data-table [columns]="agreedColumns" [rows]="rates.value() ?? []" [actions]="agreedActions" [loading]="rates.isLoading()"
+        [error]="rates.error() ? 'The server did not answer.' : null" searchPlaceholder="Search agreed rates"
+        emptyTitle="No agreed rates" emptyText="Every distributor pays the standard price until you agree another." (retry)="reload()"
+        (action)="onAgreedAction($event)" />
+    </div>
+  </div>
+</div>
+
+<app-product-form [(open)]="productOpen" [product]="null" (saved)="reload()" />
+<app-price-form [(open)]="ratesOpen" [product]="editing()" [overhead]="overhead()" (saved)="reload()" />
+<app-overhead-form [(open)]="overheadOpen" [current]="overhead()" (saved)="reload()" />
+<app-agreed-rate-form [(open)]="agreedOpen" [rate]="editingRate()" [distributors]="distributors.value() ?? []"
+  [products]="products.value() ?? []" (saved)="reload()" />

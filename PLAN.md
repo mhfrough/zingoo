@@ -13,7 +13,8 @@ This plan **replaces my first guess** of the business. The client's v4 model is 
 | 2 Schema + data | **Done** (2026-11-10). 29 tables, double-entry posting engine, roles + seats, 42 API paths, client seed. Prototype parity: 12 of 12 checks pass; API rule smoke test: 49 of 49 (`npm run test:api`). |
 | 3 Operations pages | **Done** (2026-11-10). Overview, Manufacturing, Distribution: 7 forms, 8 tables, confirm dialogs, credit hold with Finance override, role-aware menu / buttons / page guard (checked as Admin, Manufacturing and Viewer), root account. 54 API rule checks pass. |
 | 4 Money pages | **Done** (2026-11-10). Investment & Finance (capital, two-signature approval desk, budgets, cost centers, capital target) and Income & Expenses (invoices and bills in any currency, part collections and payments, income statement, journal, cash book, period selector, CSV export): 8 forms, 9 tables, confirm dialogs, role-aware buttons (checked as Admin and Viewer), no page scroll at 1440 / 1024 / 820 / 390 / 320. New `GET /reports/cash-flows`; 56 API rule checks pass. |
-| 5 - 8 | Not started (5 Pricing, Exports, General Ledger is next) |
+| 5 Trade pages | **Done** (2026-11-10). Pricing & Margins (price bridge, rate cards, margins, agreed rates), Export Containers (quote, Incoterm costing, ship, foreign-currency collections with FX gain / loss, cost payments) and General Ledger (trial balance, account ledger, profit and loss with cash flows, balance sheet, journal vouchers with reversal, chart of accounts, aged receivables). 10 forms, 18 tables. New endpoints for exports, vouchers, accounts, agreed rates, account ledger, balance sheet and ageing; exports now count in receivables and payables. 99 API rule checks pass. Design pass at the same time: one 0.45rem corner radius and a tighter compact scale (spacing, controls, cards, tables). |
+| 6 - 8 | Not started (6 Settings & Data + Users & Roles is next; it must hold every list and assumption, see the client rule under Phase 6) |
 | 9 Platform upgrade | Queued after phase 8 (the user chose to finish phases 3-8 first). The design session keeps working on the design-system items in 9.2 (U1) in parallel; platform services (U2) and docs (U4) are stopped. |
 
 Phase 2 scope note: tables for exports, manual journal vouchers and the partner portal exist and are seeded where the client had data, but their **endpoints and posting** come with their own phase (5 and 7), so they are tested with real screens. Also deferred to later phases: users / currencies / chart-of-accounts CRUD (6), distributor credit-limit check at dispatch (3), advance and credit-note postings (7).
@@ -168,6 +169,14 @@ New entities, chart of accounts, posting engine, approvals, roles guard, `db:res
 **Phase 5 - Trade pages**: Pricing & Margins (unit economics, rate cards, agreed rates), Export Containers (quotes, costing, collections, cost payments), General Ledger (trial balance, account ledger, vouchers, chart of accounts, aged receivables, cash flows).
 
 **Phase 6 - Admin pages**: Users & Roles, Settings & Data (currencies, containers, Incoterms, categories, cost centers, manufacturers, payment cycles, assumptions, CSV export).
+
+**Client rule (2026-11-10, Sir Mudassir, Arittek): "Make sure everything is controlled from settings."** Phase 6 is therefore the control centre, and nothing a business user may want to change stays hard-coded.
+Moves into Settings & Data (database-backed, editable, used by every form and report):
+- Lists: payment methods, payment cycles, currencies and exchange rates, container types and planning cartons, Incoterms (code, meaning, and which cost lines the seller carries), income / expense categories, cost centers and budgets, funding types, QC result options.
+- Numbers: approval threshold, signatories, capital target, packs per carton, low-stock level, overhead per pack, sales tax rate, credit defaults, aged-receivable buckets, default container, default Incoterm, document number prefixes, fiscal year start, number locale, company name.
+- Chart of accounts (already editable on the General Ledger page; also reachable here).
+Stays fixed because the posting rules and permissions depend on it: roles and which page each sees, order / batch / export status flow, account types, finance entry types.
+Audit to do while building it: the frontend still carries copies of `PAY_METHODS`, `QC_OPTIONS`, the Incoterm list and `ACCOUNT_TYPES` (ops/models.ts, exports/models.ts, ledger/models.ts) and the backend validates them with `@IsIn` lists in `common/enums.ts`. Each editable list gets a table and an endpoint; forms read their options from the API; DTOs validate against the table.
 
 **Phase 7 - Distributor partner portal**: replenishment requests, my orders, cargo receipt and damage claims, payment advices, agreed rates, statement, Zingoo approval desk.
 

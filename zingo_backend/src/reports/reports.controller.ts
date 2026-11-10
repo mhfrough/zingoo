@@ -35,6 +35,29 @@ export class ReportsController {
     return this.service.incomeStatement(period);
   }
 
+  @Get('account-ledger')
+  @Read('ledger', 'accounting')
+  @ApiOperation({ summary: 'Lines of one account (or all) with the running balance' })
+  @ApiQuery({ name: 'code', required: false, example: 'all' })
+  @ApiQuery({ name: 'period', required: false })
+  accountLedger(@Query('code') code = 'all', @Query('period') period = 'all') {
+    return this.service.accountLedger(code, period);
+  }
+
+  @Get('balance-sheet')
+  @Read('ledger')
+  @ApiOperation({ summary: 'Assets, liabilities and equity from the ledger' })
+  balanceSheet() {
+    return this.service.balanceSheet();
+  }
+
+  @Get('aged-receivables')
+  @Read('ledger', 'accounting')
+  @ApiOperation({ summary: 'Open receivables by age past the due date' })
+  aged() {
+    return this.service.agedReceivables();
+  }
+
   @Get('cash-flows')
   @Read('accounting', 'ledger', 'finance')
   @ApiOperation({ summary: 'Cash in and out by source, adding up to the cash balance' })

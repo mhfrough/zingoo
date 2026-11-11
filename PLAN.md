@@ -264,3 +264,23 @@ this block comes first.
 All twelve house rules hold (lint scripts pass), Phase 3 pages use the new kit and services, two browser windows see each other's
 changes within a second, an idle session is signed out after the configured time, a half-filled form can be discarded or restored,
 and the README describes all of it.
+
+---
+
+## 10. Deployment (Render, 2026-11-11)
+
+Everything runs on Render from `render.yaml` (a Blueprint named `zingoo`, repo `mhfrough/zingoo`, branch `main`, Singapore):
+
+| Piece | Name | Address |
+| --- | --- | --- |
+| PostgreSQL | `zingo-db` | internal only |
+| API (NestJS) | `zingo-api` | https://zingo-api.onrender.com/api (Swagger: `/api/docs`) |
+| Web app (Angular) | `zingo-web` | https://zingo-web.onrender.com |
+
+- The API start command first runs the seed with `DB_SYNC=true` (creates or updates the tables, loads the client's sample data only when the database is empty), then starts the API.
+- Secrets live only in the Render dashboard: `SEED_PASSWORD` (sample users), `ROOT_EMAIL`, `ROOT_PASSWORD`; `JWT_SECRET` is generated.
+- The repo was connected as a public URL, so Render does **not** auto-deploy on push. To release a change: push to `main`, then on the Blueprint page press **Manual sync** (approve any change it lists), then **Manual Deploy → Deploy latest commit** on the changed service. Connecting the GitHub app to the repo in Render turns auto-deploy on.
+- Build uses `npm install` because Render's npm refuses these lock files with `npm ci`.
+- Free plan: the database expires after 30 days and the API sleeps when idle (first request about 30 to 50 seconds).
+- The web app is built with `API_URL` (see `zingo_frontend/scripts/set-env.mjs`); if Render ever gives a service another address, change `API_URL` on `zingo-web` and `CORS_ORIGIN` on `zingo-api`.
+- Before real customer data: move from `DB_SYNC` to migrations, and move off the free database.

@@ -177,6 +177,13 @@ export class PostingService implements OnModuleInit {
 
   // ───────────── finance ─────────────
 
+  /** equity goes to Owner Equity; a loan or advance source to its own liability account ("Partner Loan" keeps the old one) */
+  private async capitalAccount(em: EntityManager, funding: string): Promise<string> {
+    if (!funding || funding === 'Equity') return ACC.EQUITY;
+    if (funding === 'Partner Loan') return ACC.PARTNER_LOANS;
+    return (await this.lookups.isLiability(em, funding)) ? `Capital Source · ${funding}` : ACC.EQUITY;
+  }
+
   async syncFinance(em: EntityManager, id: string) {
     const f = await em.findOne(FinanceEntry, { where: { id } });
     if (!f) return;
@@ -191,7 +198,7 @@ export class PostingService implements OnModuleInit {
           rows = this.pair(
             f.chequeStatus === 'Cleared' ? f.clearanceDate ?? f.date : f.date, 'Investment', f.refNo,
             f.chequeStatus === 'Cleared' ? `Funding · ${f.party} · cheque ${f.chequeNo}` : `Funding · ${f.party}`,
-            ACC.CASH, f.funding === 'Partner Loan' ? ACC.PARTNER_LOANS : ACC.EQUITY, n);
+            ACC.CASH, await this.capitalAccount(em, f.funding), n);
           break;
         case 'Operating Expense':
           rows = this.pair(f.date, 'Investment', f.refNo, `Operating expense · ${f.category}`, `Expense · ${f.category}`, ACC.CASH, n);

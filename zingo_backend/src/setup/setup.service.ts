@@ -2,6 +2,7 @@ import { BadRequestException, ConflictException, Injectable, NotFoundException }
 import { InjectRepository } from '@nestjs/typeorm';
 import { Subject } from 'rxjs';
 import { EntityManager, Repository } from 'typeorm';
+import { LookupsService } from './lookups.service';
 import { Account, Category, ContainerType, Currency, Lookup, Setting } from './setup.entities';
 import { DEFAULT_SETTINGS } from './setup.constants';
 
@@ -79,9 +80,10 @@ export class AccountsService {
     const found = await repo.findOne({ where: { name } });
     if (found) return found.code;
 
-    const m = /^(Expense|Income) · (.+)$/.exec(name);
+    const m = /^(Expense|Income|Capital Source) · (.+)$/.exec(name);
     if (!m) throw new BadRequestException(`Unknown ledger account "${name}"`);
-    const [kind, base] = m[1] === 'Expense' ? ['Expense', 6000] : ['Revenue', 4500];
+    // a loan or advance source (Shareholder Loan ...) gets its own liability account
+    const [kind, base] = m[1] === 'Expense' ? ['Expense', 6000] : m[1] === 'Income' ? ['Revenue', 4500] : ['Liability', 2310];
     const last = await repo
       .createQueryBuilder('a')
       .select('MAX(CAST(a.code AS INT))', 'max')
@@ -98,18 +100,36 @@ export class CategoriesService {
   constructor(
     @InjectRepository(Category) private readonly repo: Repository<Category>,
     @InjectRepository(Account) private readonly accounts: Repository<Account>,
+    private readonly lookups: LookupsService,
   ) {}
 
   list(kind?: string) {
     return this.repo.find({ where: kind ? { kind: kind as Category['kind'] } : {}, order: { kind: 'ASC', name: 'ASC' } });
   }
 
-  async createCostCenter(name: string, budget: number) {
+  /** a known stream type (or none) and a depreciation rate that is kept only for a depreciable type */
+  private async streamFields(type: string | undefined, rate: number | undefined) {
+    const streamType = (type ?? '').trim();
+    if (!streamType) return { streamType: '', depreciationRate: 0 };
+    await this.lookups.assertActive('STREAM_TYPE', streamType);
+    const depreciable = await this.lookups.isDepreciable(undefined, streamType);
+    return { streamType, depreciationRate: depreciable ? Math.round((rate ?? 0) * 100) / 100 : 0 };
+  }
+
+  async createCostCenter(name: string, budget: number, streamType?: string, depreciationRate?: number) {
     const clean = name.trim();
     if (!clean) throw new BadRequestException('Enter a name.');
     const exists = await this.repo.findOne({ where: { kind: 'COST_CENTER', name: clean } });
     if (exists) throw new ConflictException('This cost center already exists.');
-    return this.repo.save(this.repo.create({ kind: 'COST_CENTER', name: clean, budget }));
+    return this.repo.save(this.repo.create({ kind: 'COST_CENTER', name: clean, budget, ...(await this.streamFields(streamType, depreciationRate)) }));
+  }
+
+  /** the type of an investment stream, and its depreciation rate when the type is depreciable */
+  async setStream(id: string, streamType: string, depreciationRate?: number) {
+    const row = await this.repo.findOne({ where: { id, kind: 'COST_CENTER' } });
+    if (!row) throw new NotFoundException('Cost center not found');
+    Object.assign(row, await this.streamFields(streamType, depreciationRate));
+    return this.repo.save(row);
   }
 
   async setBudget(id: string, budget: number) {

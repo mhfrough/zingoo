@@ -113,6 +113,14 @@ export class Category extends AppEntity {
   /** PKR allocation, only used by cost centers */
   @Column({ type: 'decimal', precision: 16, scale: 2, default: 0, transformer: numeric })
   budget: number;
+
+  /** cost centers: the type of investment stream, from the STREAM_TYPE list in Settings ('' = not set) */
+  @Column({ type: 'varchar', length: 40, default: '' })
+  streamType: string;
+
+  /** cost centers of a depreciable type: percent of the value lost per year */
+  @Column({ type: 'decimal', precision: 5, scale: 2, default: 0, transformer: numeric })
+  depreciationRate: number;
 }
 
 @Entity('container_types')
@@ -128,7 +136,7 @@ export class ContainerType {
 @Entity('lookups')
 @Unique(['list', 'code'])
 export class Lookup extends AppEntity {
-  /** PAY_METHOD or INCOTERM */
+  /** PAY_METHOD, INCOTERM, CAPITAL_SOURCE or STREAM_TYPE */
   @Column({ type: 'varchar', length: 20 })
   list: string;
 
@@ -138,7 +146,7 @@ export class Lookup extends AppEntity {
   @Column({ type: 'varchar', length: 250, default: '' })
   description: string;
 
-  /** Incoterms: which cost lines the seller carries ({ origin, ocean, insurance, destination, duty }) */
+  /** switches of the list: Incoterm cost lines, capital source { liability }, stream type { depreciable } */
   @Column({ type: 'jsonb', default: () => "'{}'" })
   flags: Record<string, boolean>;
 

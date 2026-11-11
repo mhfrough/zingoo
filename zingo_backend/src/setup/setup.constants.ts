@@ -72,6 +72,24 @@ export const STARTER_ACCOUNTS: [string, string, AccountType][] = [
   ...INCOME_CATEGORIES.map((c, i): [string, string, AccountType] => [String(4500 + i * 10), `Income · ${c}`, 'Revenue']),
 ];
 
+/**
+ * Starting capital sources. Equity is owner money; a loan or an advance is money to pay back (a liability).
+ * "Partner Loan" is the older name: kept switched off so earlier entries stay valid. Editable on Settings & Data.
+ */
+export const CAPITAL_SOURCE_DEFAULTS: { code: string; description: string; liability: boolean; active: boolean }[] = [
+  { code: 'Equity', description: 'Owner or shareholder capital', liability: false, active: true },
+  { code: 'Shareholder Loan', description: 'A shareholder lends money to the company', liability: true, active: true },
+  { code: 'Partner Advance', description: 'A partner advances money', liability: true, active: true },
+  { code: 'Partner Loan', description: 'Earlier name, kept for existing entries', liability: true, active: false },
+];
+
+/** Starting types of investment stream. A depreciable type carries a depreciation rate. Editable on Settings & Data. */
+export const STREAM_TYPE_DEFAULTS: { code: string; description: string; depreciable: boolean }[] = [
+  { code: 'Fixed Asset', description: 'Long-life equipment and property that lose value over time', depreciable: true },
+  { code: 'Movable Asset', description: 'Assets that can be moved or resold', depreciable: false },
+  { code: 'Operation Cost', description: 'Running costs of the business', depreciable: false },
+];
+
 /** Starting payment methods. Editable on Settings & Data. */
 export const PAYMENT_METHODS = ['Bank Transfer', 'Cash', 'Cheque', 'Other'];
 

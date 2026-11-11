@@ -23,14 +23,14 @@ import { SettingsApi } from './settings.api';
     <div class="stack">
       <div class="card" data-flush>
         <div class="card__head">
-          <div><h2>Cost centers</h2><p>The investment streams spending is booked against, each with its budget</p></div>
+          <div><h2>Investment streams</h2><p>Where spending and investments are booked, each with its budget and type</p></div>
           @if (canEdit()) {
-            <button appBtn size="sm" icon="plus" (click)="costCenterOpen.set(true)">Add cost center</button>
+            <button appBtn size="sm" icon="plus" (click)="openCenter(null)">Add stream</button>
           }
         </div>
         <div class="card__body">
           <app-data-table [columns]="centerColumns" [rows]="centers()" [actions]="centerActions" [searchable]="false" [loading]="budgets.isLoading()"
-            emptyTitle="No cost centers" emptyText="Add the first one." (action)="onCenterAction($event)" />
+            emptyTitle="No streams" emptyText="Add the first one." (action)="onCenterAction($event)" />
         </div>
       </div>
 
@@ -64,7 +64,7 @@ import { SettingsApi } from './settings.api';
 
     <app-category-form [(open)]="categoryOpen" [category]="editingCategory()" [kind]="newKind()" (saved)="reload()" />
     <app-budget-form [(open)]="budgetOpen" [centers]="budgets.value() ?? []" [only]="editingCenter()" (saved)="reload()" />
-    <app-cost-center-form [(open)]="costCenterOpen" (saved)="reload()" />
+    <app-cost-center-form [(open)]="costCenterOpen" [center]="typeCenter()" (saved)="reload()" />
   `,
   styles: `
     .two-col {
@@ -94,11 +94,15 @@ export class SettingsCategories {
   protected centers = computed(() => this.budgets.value() ?? []);
   /** cost center rows by name, so a budget row can be renamed (it needs the category id, which the budget row also carries) */
   protected centerColumns: TableColumn<Budget>[] = [
-    { id: 'name', label: 'Cost center', value: (b) => b.name },
+    { id: 'name', label: 'Stream', value: (b) => b.name },
+    {
+      id: 'type', label: 'Type', value: (b) => b.streamType || 'Not set', priority: 2,
+      sub: (b) => (b.depreciationRate > 0 ? `Depreciates ${b.depreciationRate}% a year` : null),
+    },
     { id: 'budget', label: 'Budget (PKR)', kind: 'money', value: (b) => b.budget },
     { id: 'spent', label: 'Spent', kind: 'money', priority: 2, value: (b) => b.spent, sub: (b) => `${b.usedPct}% used` },
   ];
-  protected centerActions = (): RowAction[] => !this.canEdit() ? [] : [{ id: 'budget', label: 'Edit budget' }, { id: 'rename', label: 'Rename' }, { id: 'delete', label: 'Delete', tone: 'danger' }];
+  protected centerActions = (): RowAction[] => !this.canEdit() ? [] : [{ id: 'budget', label: 'Edit budget' }, { id: 'type', label: 'Set type' }, { id: 'rename', label: 'Rename' }, { id: 'delete', label: 'Delete', tone: 'danger' }];
 
   protected categoryColumns: TableColumn<CategoryRow>[] = [{ id: 'name', label: 'Category', value: (c) => c.name }];
   protected categoryActions = (): RowAction[] => !this.canEdit() ? [] : [{ id: 'rename', label: 'Rename' }, { id: 'delete', label: 'Delete', tone: 'danger' }];
@@ -112,6 +116,13 @@ export class SettingsCategories {
   protected budgetOpen = signal(false);
   protected editingCenter = signal<Budget | null>(null);
   protected costCenterOpen = signal(false);
+  /** the stream whose type is being set (null = adding a new stream) */
+  protected typeCenter = signal<Budget | null>(null);
+
+  protected openCenter(b: Budget | null) {
+    this.typeCenter.set(b);
+    this.costCenterOpen.set(true);
+  }
 
   protected reload() {
     this.tick.update((n) => n + 1);
@@ -130,6 +141,7 @@ export class SettingsCategories {
 
   protected onCenterAction(e: RowActionEvent<Budget>) {
     if (e.id === 'budget') { this.editingCenter.set(e.row); this.budgetOpen.set(true); return; }
+    if (e.id === 'type') return this.openCenter(e.row);
     if (e.id === 'rename') return this.openCategory('EXPENSE', this.centerRow(e.row));
     void this.remove(this.centerRow(e.row));
   }

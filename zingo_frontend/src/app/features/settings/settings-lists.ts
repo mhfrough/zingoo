@@ -1,6 +1,6 @@
 import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
 import { AuthService } from '../../core/auth.service';
-import { Lookup, SettingsStore } from '../../core/settings.store';
+import { Lookup, LookupList, SettingsStore } from '../../core/settings.store';
 import { errorText } from '../../shared/errors';
 import { Tone, fmtAmount2, fmtNumber } from '../../shared/format';
 import { Btn, ConfirmService, DataTable, RowAction, RowActionEvent, TableColumn, ToastService } from '../../ui';
@@ -49,6 +49,36 @@ const LINES = ['origin', 'ocean', 'insurance', 'destination', 'duty'];
             <app-data-table [columns]="containerColumns" [rows]="store.containers()" [actions]="containerActions" [searchable]="false"
               [loading]="store.containersRes.isLoading()" emptyTitle="No container types" emptyText="Add the first one."
               (action)="onContainerAction($event)" />
+          </div>
+        </div>
+      </div>
+
+      <div class="two-col">
+        <div class="card" data-flush>
+          <div class="card__head">
+            <div><h2>Capital sources</h2><p>Where investor money comes from. A loan or advance is booked as money to pay back</p></div>
+            @if (canEdit()) {
+              <button appBtn size="sm" icon="plus" (click)="openLookup('CAPITAL_SOURCE')">Add source</button>
+            }
+          </div>
+          <div class="card__body">
+            <app-data-table [columns]="sourceColumns" [rows]="sources()" [actions]="lookupActions" [searchable]="false"
+              [loading]="store.lookupsRes.isLoading()" emptyTitle="No capital sources" emptyText="Add the first one."
+              (action)="onLookupAction($event)" />
+          </div>
+        </div>
+
+        <div class="card" data-flush>
+          <div class="card__head">
+            <div><h2>Investment stream types</h2><p>Each investment stream has a type, such as a fixed asset with its depreciation</p></div>
+            @if (canEdit()) {
+              <button appBtn size="sm" icon="plus" (click)="openLookup('STREAM_TYPE')">Add type</button>
+            }
+          </div>
+          <div class="card__body">
+            <app-data-table [columns]="typeColumns" [rows]="streamTypes()" [actions]="lookupActions" [searchable]="false"
+              [loading]="store.lookupsRes.isLoading()" emptyTitle="No stream types" emptyText="Add the first one."
+              (action)="onLookupAction($event)" />
           </div>
         </div>
       </div>
@@ -106,11 +136,25 @@ export class SettingsLists {
 
   protected methods = computed(() => this.store.lookups().filter((l) => l.list === 'PAY_METHOD'));
   protected incoterms = computed(() => this.store.lookups().filter((l) => l.list === 'INCOTERM'));
+  protected sources = computed(() => this.store.lookups().filter((l) => l.list === 'CAPITAL_SOURCE'));
+  protected streamTypes = computed(() => this.store.lookups().filter((l) => l.list === 'STREAM_TYPE'));
 
   private statusTone = (l: Lookup): Tone => (l.active ? 'success' : 'neutral');
 
   protected methodColumns: TableColumn<Lookup>[] = [
     { id: 'code', label: 'Method', value: (l) => l.code },
+    { id: 'status', label: 'Status', kind: 'tag', value: (l) => (l.active ? 'Active' : 'Switched off'), tone: this.statusTone },
+  ];
+
+  protected sourceColumns: TableColumn<Lookup>[] = [
+    { id: 'code', label: 'Source', value: (l) => l.code, sub: (l) => l.description },
+    { id: 'kind', label: 'Booked as', priority: 2, value: (l) => (l.flags['liability'] ? 'Loan or advance (to pay back)' : 'Owner equity') },
+    { id: 'status', label: 'Status', kind: 'tag', value: (l) => (l.active ? 'Active' : 'Switched off'), tone: this.statusTone },
+  ];
+
+  protected typeColumns: TableColumn<Lookup>[] = [
+    { id: 'code', label: 'Type', value: (l) => l.code, sub: (l) => l.description },
+    { id: 'dep', label: 'Depreciation', priority: 2, value: (l) => (l.flags['depreciable'] ? 'Has a depreciation rate' : 'None') },
     { id: 'status', label: 'Status', kind: 'tag', value: (l) => (l.active ? 'Active' : 'Switched off'), tone: this.statusTone },
   ];
 
@@ -143,14 +187,14 @@ export class SettingsLists {
 
   // forms
   protected lookupOpen = signal(false);
-  protected lookupList = signal<'PAY_METHOD' | 'INCOTERM'>('PAY_METHOD');
+  protected lookupList = signal<LookupList>('PAY_METHOD');
   protected editingLookup = signal<Lookup | null>(null);
   protected containerOpen = signal(false);
   protected editingContainer = signal<ContainerType | null>(null);
   protected currencyOpen = signal(false);
   protected editingCurrency = signal<Currency | null>(null);
 
-  protected openLookup(list: 'PAY_METHOD' | 'INCOTERM', entry: Lookup | null = null) {
+  protected openLookup(list: LookupList, entry: Lookup | null = null) {
     this.lookupList.set(list);
     this.editingLookup.set(entry);
     this.lookupOpen.set(true);

@@ -47,6 +47,10 @@ export class FinanceApi {
 
   // ── budgets, cost centers, settings ──
   setBudget = (categoryId: string, budget: number) => this.api.patch(`categories/${categoryId}/budget`, { budget });
-  createCostCenter = (name: string, budget: number) => this.api.post('categories/cost-center', { name, budget });
+  createCostCenter = (name: string, budget: number, streamType = '', depreciationRate = 0) =>
+    this.api.post('categories/cost-center', { name, budget, streamType, depreciationRate });
+  /** set the type of an investment stream (and its depreciation rate when the type is depreciable) */
+  setStream = (categoryId: string, streamType: string, depreciationRate = 0) =>
+    this.api.patch(`categories/${categoryId}/stream`, { streamType, depreciationRate });
   updateSettings = (body: unknown) => this.api.patch('settings', body);
 }

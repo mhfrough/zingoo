@@ -1,5 +1,6 @@
-import { IsArray, IsBoolean, IsIn, IsInt, IsNotEmpty, IsNumber, IsObject, IsOptional, IsPositive, IsString, Length, MaxLength, Min } from 'class-validator';
+import { IsArray, IsBoolean, IsIn, IsInt, IsNotEmpty, IsNumber, IsObject, IsOptional, IsPositive, IsString, Length, Max, MaxLength, Min } from 'class-validator';
 import { ACCOUNT_TYPES } from '../common/enums';
+import { LOOKUP_LISTS, LookupList } from './lookups.service';
 
 export class UpdateSettingsDto {
   @IsOptional() @IsString() @IsNotEmpty() companyName?: string;
@@ -26,6 +27,16 @@ export class UpdateSettingsDto {
 export class CreateCostCenterDto {
   @IsString() @IsNotEmpty() name: string;
   @IsNumber() @Min(0) budget: number;
+  /** a type from the stream types list in Settings */
+  @IsOptional() @IsString() @MaxLength(40) streamType?: string;
+  /** percent per year; only kept for a depreciable type */
+  @IsOptional() @IsNumber() @Min(0) @Max(100) depreciationRate?: number;
+}
+
+/** Set the type of an investment stream (and the depreciation rate for a depreciable type). */
+export class SetStreamDto {
+  @IsString() @MaxLength(40) streamType: string;
+  @IsOptional() @IsNumber() @Min(0) @Max(100) depreciationRate?: number;
 }
 
 export class SetBudgetDto {
@@ -47,7 +58,7 @@ export class UpdateAccountDto {
 
 /** Add an entry to an editable pick-list. */
 export class CreateLookupDto {
-  @IsIn(['PAY_METHOD', 'INCOTERM']) list: 'PAY_METHOD' | 'INCOTERM';
+  @IsIn([...LOOKUP_LISTS]) list: LookupList;
   @IsString() @IsNotEmpty() @MaxLength(40) code: string;
   @IsOptional() @IsString() @MaxLength(250) description?: string;
   @IsOptional() @IsObject() flags?: Record<string, boolean>;

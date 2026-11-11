@@ -22,13 +22,13 @@ const streamGroup = (fb: NonNullableFormBuilder, stream = '', amount = 0, pct = 
   fb.group({ stream: [stream, Validators.required], amount: [amount], pct: [pct], by: [by] });
 
 /** One investor with everything about their payment. */
-const investorGroup = (fb: NonNullableFormBuilder, stream: string) =>
+const investorGroup = (fb: NonNullableFormBuilder, stream: string, funding: string) =>
   fb.group({
     party: ['', Validators.required],
     amount: [0, [Validators.required, Validators.min(0.01)]],
     pct: [0],
     by: ['amount' as Basis],
-    funding: ['Equity'],
+    funding: [funding],
     date: [today(), Validators.required],
     paymentSource: ['Bank Transfer'],
     paymentReference: [''],
@@ -97,9 +97,10 @@ type StreamForm = ReturnType<typeof streamGroup>;
       color: var(--text-3);
     }
 
-    /* streams: stream, amount, percent, remove */
+    /* streams: stream, amount, percent, remove. On a narrow panel the stream takes its own line. */
     .streams {
       grid-column: 1 / -1;
+      container-type: inline-size;
       display: flex;
       flex-direction: column;
       gap: var(--space-2);
@@ -108,7 +109,7 @@ type StreamForm = ReturnType<typeof streamGroup>;
       & .streams__head,
       & .stream-row {
         display: grid;
-        grid-template-columns: minmax(0, 1fr) minmax(0, 9rem) minmax(0, 6rem) var(--btn-h-sm);
+        grid-template-columns: minmax(0, 1fr) minmax(9.5rem, 13rem) minmax(5rem, 6.5rem) var(--btn-h-sm);
         gap: var(--space-2);
         inline-size: 100%;
         align-items: center;
@@ -118,6 +119,37 @@ type StreamForm = ReturnType<typeof streamGroup>;
         font-size: var(--text-xs);
         font-weight: var(--weight-semibold);
         color: var(--text-3);
+      }
+
+      & .cell {
+        min-inline-size: 0;
+      }
+
+      & .cell__cap {
+        display: none;
+        margin-block-end: var(--space-1);
+        font-size: var(--text-xs);
+        font-weight: var(--weight-semibold);
+        color: var(--text-3);
+      }
+    }
+
+    @container (max-width: 36rem) {
+      .streams .streams__head {
+        display: none;
+      }
+
+      .streams .stream-row {
+        grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) var(--btn-h-sm);
+        align-items: end;
+      }
+
+      .streams .cell--stream {
+        grid-column: 1 / -1;
+      }
+
+      .streams .cell__cap {
+        display: block;
       }
     }
 
@@ -169,17 +201,18 @@ type StreamForm = ReturnType<typeof streamGroup>;
                   <input type="text" formControlName="party" placeholder="Name" />
                 </app-field>
                 <app-field label="Amount invested" [required]="true" [error]="bad(inv, 'amount') ? 'Enter an amount above zero' : null">
-                  <app-money-input formControlName="amount" (input)="onAmount(inv)" />
+                  <app-money-input formControlName="amount" [max]="investorMax()" (input)="onAmount(inv)" />
                 </app-field>
                 @if (shared()) {
                   <app-field label="Share of total" hint="Type a % instead of the amount">
-                    <app-money-input formControlName="pct" currency="" [decimals]="2" (input)="onPct(inv)" />
+                    <app-money-input formControlName="pct" currency="" [decimals]="2" [max]="100" (input)="onPct(inv)" />
                   </app-field>
                 }
                 <app-field label="Capital source">
                   <select formControlName="funding">
-                    <option value="Equity">Equity</option>
-                    <option value="Partner Loan">Partner loan</option>
+                    @for (c of sources(); track c) {
+                      <option [value]="c">{{ c }}</option>
+                    }
                   </select>
                 </app-field>
                 <app-field label="Investment date" [required]="true"><input type="date" formControlName="date" /></app-field>
@@ -193,32 +226,41 @@ type StreamForm = ReturnType<typeof streamGroup>;
 
                 <h4 class="investor__section">Invested against</h4>
                 <div class="streams" formArrayName="streams">
-                  <div class="streams__head" aria-hidden="true"><span>Stream</span><span>Amount</span><span>% of this amount</span><span></span></div>
+                  <span class="sum" [attr.data-bad]="streamGap(inv) ? '' : null">{{ streamText(inv) }}</span>
+                  <div class="streams__head" aria-hidden="true"><span>Stream</span><span>Amount (PKR)</span><span>%</span><span></span></div>
                   @for (s of inv.controls.streams.controls; track s; let si = $index) {
                     <div class="stream-row" [formGroupName]="si">
-                      <div class="field"><div class="field__control">
-                        <select formControlName="stream" [attr.aria-label]="'Stream, investor ' + (i + 1) + ', line ' + (si + 1)">
-                          <option value="">Choose a stream</option>
-                          @for (name of streamNames(); track name) {
-                            <option [value]="name" [disabled]="usedElsewhere(inv, s, name)">{{ name }}</option>
-                          }
-                        </select>
-                      </div></div>
-                      <div class="field"><div class="field__control">
-                        <app-money-input formControlName="amount" (input)="onStreamAmount(inv, s)" [ariaLabel]="'Stream amount, investor ' + (i + 1) + ', line ' + (si + 1)" />
-                      </div></div>
-                      <div class="field"><div class="field__control">
-                        <app-money-input formControlName="pct" currency="" [decimals]="2" (input)="onStreamPct(inv, s)" [ariaLabel]="'Stream percent, investor ' + (i + 1) + ', line ' + (si + 1)" />
-                      </div></div>
+                      <div class="cell cell--stream">
+                        <span class="cell__cap" aria-hidden="true">Stream</span>
+                        <div class="field"><div class="field__control">
+                          <select formControlName="stream" [attr.aria-label]="'Stream, investor ' + (i + 1) + ', line ' + (si + 1)">
+                            <option value="">Choose a stream</option>
+                            @for (o of streamOptions(); track o.name) {
+                              <option [value]="o.name" [disabled]="usedElsewhere(inv, s, o.name)">{{ o.name }}{{ o.type ? ' · ' + o.type : '' }}</option>
+                            }
+                          </select>
+                        </div></div>
+                      </div>
+                      <div class="cell">
+                        <span class="cell__cap" aria-hidden="true">Amount (PKR)</span>
+                        <div class="field"><div class="field__control">
+                          <app-money-input formControlName="amount" currency="" [max]="amountMax(inv)" (input)="onStreamAmount(inv, s)"
+                            [ariaLabel]="'Stream amount, investor ' + (i + 1) + ', line ' + (si + 1)" />
+                        </div></div>
+                      </div>
+                      <div class="cell">
+                        <span class="cell__cap" aria-hidden="true">%</span>
+                        <div class="field"><div class="field__control">
+                          <app-money-input formControlName="pct" currency="" [decimals]="2" [max]="100" (input)="onStreamPct(inv, s)"
+                            [ariaLabel]="'Stream percent, investor ' + (i + 1) + ', line ' + (si + 1)" />
+                        </div></div>
+                      </div>
                       <button appBtn type="button" size="sm" variant="ghost" icon="x" [disabled]="inv.controls.streams.length <= 1"
                               [attr.aria-label]="'Remove stream line ' + (si + 1)" (click)="removeStream(inv, si)"></button>
                     </div>
                   }
                   <div class="add-row">
                     <button appBtn type="button" size="sm" icon="plus" (click)="addStream(inv)">Add a stream</button>
-                    <span class="sum" [attr.data-bad]="streamGap(inv) ? '' : null">
-                      @if (streamGap(inv)) { {{ money(streamGap(inv)) }} {{ streamGap(inv) > 0 ? 'left to place' : 'too much' }} } @else { Fully placed. }
-                    </span>
                   </div>
                 </div>
 
@@ -247,10 +289,7 @@ type StreamForm = ReturnType<typeof streamGroup>;
         @if (shared()) {
           <div class="add-row">
             <button appBtn type="button" size="sm" icon="plus" [disabled]="investors.length >= 20" (click)="addInvestor()">Add another investor</button>
-            <span class="sum" [attr.data-bad]="totalGap() ? '' : null">
-              Added up {{ money(summary().allocated) }} of {{ money(summary().total) }}
-              @if (totalGap()) { · {{ money(totalGap()) }} {{ totalGap() > 0 ? 'left to place' : 'too much' }} } @else { · matches. }
-            </span>
+            <span class="sum" [attr.data-bad]="totalGap() ? '' : null">{{ totalText() }}</span>
           </div>
         } @else {
           <span class="sum sum--line">Total {{ money(summary().allocated) }}</span>
@@ -269,12 +308,16 @@ type StreamForm = ReturnType<typeof streamGroup>;
   `,
 })
 export class CapitalInjectionForm extends FormModal {
-  /** cost center names offered as "invested against" */
-  readonly streams = input<string[]>([]);
+  /** the streams offered as "invested against", with their type */
+  readonly streams = input<{ name: string; type: string }[]>([]);
   readonly formId = 'form-capital-injection';
   protected money = fmtMoney;
-  protected methods = inject(SettingsStore).paymentMethods;
-  protected streamNames = computed(() => this.streams());
+  private store = inject(SettingsStore);
+  protected methods = this.store.paymentMethods;
+  /** capital sources from Settings (Equity, Shareholder Loan, Partner Advance ...) */
+  protected sources = this.store.capitalSources;
+  protected streamOptions = computed(() => this.streams());
+  protected streamNames = computed(() => this.streams().map((s) => s.name));
   private fin = inject(FinanceApi);
   private nfb = this.fb.nonNullable;
 
@@ -313,7 +356,8 @@ export class CapitalInjectionForm extends FormModal {
   // ───────────── investors ─────────────
 
   protected addInvestor() {
-    this.investors.push(investorGroup(this.nfb, this.streams()[0] ?? ''));
+    const sources = this.sources();
+    this.investors.push(investorGroup(this.nfb, this.streamNames()[0] ?? '', sources.includes('Equity') ? 'Equity' : sources[0] ?? 'Equity'));
     this.form.markAsDirty();
   }
 
@@ -417,6 +461,29 @@ export class CapitalInjectionForm extends FormModal {
     this.value(); // re-read on every change of the form
     const gap = round2((Number(inv.controls.amount.value) || 0) - this.streamSum(inv));
     return Math.abs(gap) > SLACK ? gap : 0;
+  }
+
+  /** a stream amount never goes over the investor's amount (no cap while that is still empty) */
+  protected amountMax(inv: InvestorForm): number | null {
+    const base = Number(inv.controls.amount.value) || 0;
+    return base > 0 ? base : null;
+  }
+
+  /** an investor never puts in more than the total of a shared investment */
+  protected investorMax(): number | null {
+    const total = Number(this.form.controls.total.value) || 0;
+    return this.shared() && total > 0 ? total : null;
+  }
+
+  protected streamText(inv: InvestorForm): string {
+    const gap = this.streamGap(inv);
+    return gap ? `${fmtMoney(Math.abs(gap))} ${gap > 0 ? 'left to place' : 'too much'}` : 'Fully placed.';
+  }
+
+  protected totalText(): string {
+    const gap = this.totalGap();
+    const s = this.summary();
+    return `Added up ${fmtMoney(s.allocated)} of ${fmtMoney(s.total)}` + (gap ? ` · ${fmtMoney(Math.abs(gap))} ${gap > 0 ? 'left to place' : 'too much'}` : ' · matches.');
   }
 
   protected usedElsewhere(inv: InvestorForm, current: StreamForm, name: string) {

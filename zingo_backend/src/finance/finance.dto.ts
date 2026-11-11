@@ -4,7 +4,7 @@ import {
   ArrayMaxSize, ArrayMinSize, IsArray, IsDateString, IsIn, IsNotEmpty, IsNumber, IsOptional, IsPositive, IsString, IsUUID,
   Max, MaxLength, Min, ValidateNested,
 } from 'class-validator';
-import { DOC_KINDS, FINANCE_TYPES, FUNDING } from '../common/enums';
+import { DOC_KINDS, FINANCE_TYPES } from '../common/enums';
 
 export class CreateFinanceDto {
   @IsDateString() date: string;
@@ -13,7 +13,7 @@ export class CreateFinanceDto {
   @IsString() @IsNotEmpty() category: string;
   @IsNumber() @IsPositive() amount: number;
   @IsOptional() @IsString() party?: string;
-  @IsOptional() @IsIn([...FUNDING]) funding?: (typeof FUNDING)[number];
+  @IsOptional() @IsString() @MaxLength(40) funding?: string;
   @IsOptional() @IsString() note?: string;
 }
 export class UpdateFinanceDto extends PartialType(CreateFinanceDto) {}
@@ -30,7 +30,8 @@ export class CapitalLineDto {
   @IsString() @IsNotEmpty() @MaxLength(150) party: string;
   @IsNumber() @IsPositive() amount: number;
   @IsDateString() date: string;
-  @IsOptional() @IsIn(['Equity', 'Partner Loan']) funding?: 'Equity' | 'Partner Loan';
+  /** a capital source from Settings */
+  @IsOptional() @IsString() @MaxLength(40) funding?: string;
   /** a payment method from Settings; a cheque needs chequeNo and clearanceDate */
   @IsOptional() @IsString() @MaxLength(30) paymentSource?: string;
   @IsOptional() @IsString() @MaxLength(100) paymentReference?: string;

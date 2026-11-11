@@ -81,6 +81,7 @@ export class FinanceService {
     const amount = round2(l.amount);
     const source = (l.paymentSource ?? '').trim();
     if (source) await this.lookups.assertActive('PAY_METHOD', source, em);
+    await this.lookups.assertActive('CAPITAL_SOURCE', l.funding ?? 'Equity', em);
 
     // a cheque is not cash until it clears
     let chequeNo = '';
@@ -180,6 +181,7 @@ export class FinanceService {
   create(dto: CreateFinanceDto, opts: { refNo?: string } = {}) {
     return this.db.transaction(async (em) => {
       await this.checkCategory(em, dto.category);
+      if (dto.type === 'Capital Injection') await this.lookups.assertActive('CAPITAL_SOURCE', dto.funding ?? 'Equity', em);
       const s = await this.settings.get(em);
       const refNo = opts.refNo ?? (await nextRef(em, FinanceEntry, s.docPrefixes['finance'] ?? 'FIN', 3));
       const f = await em.save(em.create(FinanceEntry, {

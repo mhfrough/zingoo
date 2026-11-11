@@ -5,7 +5,7 @@ import { LookupsService } from './lookups.service';
 import { AccountsService, CatalogListsService, CategoriesService, SettingsService } from './setup.service';
 import {
   CreateAccountDto, CreateCategoryDto, CreateContainerDto, CreateCostCenterDto, CreateCurrencyDto, CreateLookupDto, RenameCategoryDto,
-  SetBudgetDto, UpdateAccountDto, UpdateContainerDto, UpdateCurrencyDto, UpdateLookupDto, UpdateSettingsDto,
+  SetBudgetDto, SetStreamDto, UpdateAccountDto, UpdateContainerDto, UpdateCurrencyDto, UpdateLookupDto, UpdateSettingsDto,
 } from './setup.dto';
 
 @ApiTags('setup')
@@ -70,7 +70,14 @@ export class SetupController {
   @Post('categories/cost-center')
   @Write('admin')
   createCostCenter(@Body() dto: CreateCostCenterDto) {
-    return this.categories.createCostCenter(dto.name, dto.budget);
+    return this.categories.createCostCenter(dto.name, dto.budget, dto.streamType, dto.depreciationRate);
+  }
+
+  @Patch('categories/:id/stream')
+  @Write('admin')
+  @ApiOperation({ summary: 'Set the type of an investment stream (and its depreciation rate)' })
+  setStream(@Param('id', ParseUUIDPipe) id: string, @Body() dto: SetStreamDto) {
+    return this.categories.setStream(id, dto.streamType, dto.depreciationRate);
   }
 
   @Patch('categories/:id/budget')

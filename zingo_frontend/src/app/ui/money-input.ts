@@ -50,6 +50,8 @@ export class MoneyInput implements ControlValueAccessor, DoCheck {
   /** Most decimals allowed: 2 for amounts, 4 to 6 for per-pack rates and exchange rates. */
   readonly decimals = input(2);
   readonly allowNegative = input(false);
+  /** The biggest value allowed: typing more shows this value instead (a percent never goes over 100). */
+  readonly max = input<number | null>(null);
   readonly placeholder = input('');
   readonly name = input('');
   /** Accessible name when the box has no visible label (a table cell, a ledger line). */
@@ -90,16 +92,23 @@ export class MoneyInput implements ControlValueAccessor, DoCheck {
     const raw = el.value;
     let significant = countSignificant(raw, el.selectionStart ?? raw.length);
     const clean = cleanMoney(raw, this.decimals(), this.allowNegative());
-    const shown = groupMoney(clean);
+    let shown = groupMoney(clean);
     // a typed "." in an empty box becomes "0." (a "0" was added in front of the caret)
     if (raw.replace(/[^\d.]/g, '').startsWith('.') && clean.replace('-', '').startsWith('0.')) significant++;
+    let value = parseMoney(shown);
+    const max = this.max();
+    const clamped = max !== null && value !== null && value > max;
+    if (clamped) {
+      value = max;
+      shown = formatMoney(max, this.decimals());
+    }
     if (el.value !== shown) {
       el.value = shown;
-      const at = caretAfter(shown, significant);
+      const at = clamped ? shown.length : caretAfter(shown, significant);
       el.setSelectionRange(at, at);
     }
     this.text.set(shown);
-    this.onChange(parseMoney(shown));
+    this.onChange(value);
   }
 
   /** select all on focus so typing replaces the number; the mouse-up that ends the click must not undo it */

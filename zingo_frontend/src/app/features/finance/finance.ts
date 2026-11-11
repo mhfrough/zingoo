@@ -138,6 +138,8 @@ export class Finance {
   /** cost centers as cards (the catch-all "Other" has no card, as in the client's prototype) */
   protected streamCards = computed(() => (this.budgets.value() ?? []).filter((b) => b.name !== 'Other'));
   protected streamNames = computed(() => (this.budgets.value() ?? []).map((b) => b.name));
+  /** the streams with their type, for the "invested against" lists */
+  protected streamOptions = computed(() => (this.budgets.value() ?? []).map((b) => ({ name: b.name, type: b.streamType })));
 
   protected reload() {
     this.tick.update((n) => n + 1);

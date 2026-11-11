@@ -36,7 +36,7 @@
       <div><h2>Investments by business stream</h2><p>Approved operating expenses and asset purchases count toward the allocations</p></div>
       @if (isAdmin()) {
         <div class="cluster">
-          <button appBtn size="sm" icon="plus" (click)="centerOpen.set(true)">New cost center</button>
+          <button appBtn size="sm" icon="plus" (click)="centerOpen.set(true)">New stream</button>
           <button appBtn size="sm" icon="edit" (click)="openBudget()">Edit all budgets</button>
         </div>
       }
@@ -46,6 +46,9 @@
         @for (b of streamCards(); track b.id) {
           <div class="stream">
             <span class="stream__name">{{ b.name }}</span>
+            @if (b.streamType) {
+              <span class="stream__type">{{ b.streamType }}@if (b.depreciationRate) { · {{ b.depreciationRate }}% a year}</span>
+            }
             <strong class="stream__spent mono">{{ money(b.spent) }}</strong>
             <span class="stream__of">of {{ money(b.budget) }} allocated</span>
             <div class="progress" role="progressbar" [attr.aria-valuenow]="b.usedPct" aria-valuemin="0" aria-valuemax="100"
@@ -155,9 +158,9 @@
   </div>
 </div>
 
-<app-capital-injection-form [(open)]="capitalOpen" [streams]="streamNames()" (saved)="reload()" />
+<app-capital-injection-form [(open)]="capitalOpen" [streams]="streamOptions()" (saved)="reload()" />
 <app-finance-entry-form [(open)]="entryOpen" [entry]="editingEntry()" [streams]="streamNames()"
   [threshold]="settings.value()?.approvalThreshold ?? 50000" (saved)="reload()" />
 <app-budget-form [(open)]="budgetOpen" [centers]="budgets.value() ?? []" [only]="editingBudget()" (saved)="reload()" />
-<app-cost-center-form [(open)]="centerOpen" (saved)="reload()" />
+<app-cost-center-form [(open)]="centerOpen" [center]="null" (saved)="reload()" />
 <app-capital-target-form [(open)]="targetOpen" [current]="settings.value()?.capitalTarget ?? 0" (saved)="reload()" />

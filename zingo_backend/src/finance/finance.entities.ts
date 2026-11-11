@@ -26,9 +26,9 @@ export class FinanceEntry extends DocEntity {
   @Column({ type: 'text', nullable: true })
   note: string | null;
 
-  /** only for capital: Equity or Partner Loan */
-  @Column({ type: 'varchar', length: 15, default: '' })
-  funding: 'Equity' | 'Partner Loan' | '';
+  /** only for capital: a capital source from Settings (Equity, Shareholder Loan, Partner Advance ...) */
+  @Column({ type: 'varchar', length: 40, default: '' })
+  funding: string;
 
   // ── capital injection details (empty for other types) ──
 

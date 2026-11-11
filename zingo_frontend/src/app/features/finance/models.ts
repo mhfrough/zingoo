@@ -101,6 +101,10 @@ export interface Budget {
   budget: number;
   spent: number;
   usedPct: number;
+  /** type of investment stream from Settings (Fixed Asset, Operation Cost ...), empty when not set */
+  streamType: string;
+  /** percent of value lost per year, for a depreciable type */
+  depreciationRate: number;
 }
 
 export interface Currency {

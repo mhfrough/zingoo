@@ -26,6 +26,11 @@
     color: var(--text-2);
   }
 
+  & .stream__type {
+    font-size: var(--text-xs);
+    color: var(--text-3);
+  }
+
   & .stream__spent {
     font-size: var(--text-xl);
     overflow-wrap: anywhere;

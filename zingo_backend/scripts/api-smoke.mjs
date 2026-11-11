@@ -503,12 +503,12 @@ ok('it is marked cleared (in the bank)', ciS?.cleared === true && ciS?.chequeSta
 
 const ciShared = await ciPost({ note: 'Joint venture', investors: [
   ciLine({ party: 'Sara Ahmed', amount: 60000, streams: [{ stream: 'Marketing', amount: 60000 }] }),
-  ciLine({ party: 'Bilal Sheikh', amount: 40000, funding: 'Partner Loan', paymentSource: 'Cash', streams: [{ stream: 'Marketing', pct: 25 }, { stream: 'Printing', pct: 75 }] }),
+  ciLine({ party: 'Bilal Sheikh', amount: 40000, funding: 'Shareholder Loan', paymentSource: 'Cash', streams: [{ stream: 'Marketing', pct: 25 }, { stream: 'Printing', pct: 75 }] }),
 ] });
 const [ciA, ciB] = ciShared.json ?? [];
 ok('a shared investment makes one entry per investor', ciShared.status === 201 && ciShared.json?.length === 2 && ciA?.refNo !== ciB?.refNo);
 ok('they share one group and know each other', !!ciA?.groupId && ciA?.groupId === ciB?.groupId && ciA?.coInvestors?.[0] === 'Bilal Sheikh' && ciB?.coInvestors?.[0] === 'Sara Ahmed');
-ok('each investor has their own funding type and note', ciA?.funding === 'Equity' && ciB?.funding === 'Partner Loan' && ciA?.note === 'Joint venture' && ciB?.note === 'Joint venture');
+ok('each investor has their own funding type and note', ciA?.funding === 'Equity' && ciB?.funding === 'Shareholder Loan' && ciA?.note === 'Joint venture' && ciB?.note === 'Joint venture');
 ok('both amounts post to cash', (await ciCash()) === ciCash0 + 200000);
 
 // the rules
@@ -573,6 +573,45 @@ ok('a missing file id -> 400', (await ciPost({ investors: [ciLine({ party: 'Ghos
 const ciList = await list('/finance');
 ok('the listing carries the files', ciList.find((e) => e.id === ciFiles.json[0].id)?.proof?.name === 'proof.png');
 ok('every entry in the listing has streams and a cleared flag', ciList.every((e) => Array.isArray(e.streams) && typeof e.cleared === 'boolean'));
+
+// ── capital sources and stream types (controlled from Settings) ──
+const slLookups = (await call(T.owner, 'GET', '/lookups')).json ?? [];
+const slSources = slLookups.filter((l) => l.list === 'CAPITAL_SOURCE');
+ok('capital sources start as Equity, Shareholder Loan and Partner Advance', ['Equity', 'Shareholder Loan', 'Partner Advance'].every((c) => slSources.some((l) => l.code === c && l.active)));
+ok('the old "Partner Loan" is kept but switched off', slSources.some((l) => l.code === 'Partner Loan' && !l.active));
+ok('loans and advances are marked as money to pay back; equity is not', slSources.find((l) => l.code === 'Shareholder Loan')?.flags?.liability === true && slSources.find((l) => l.code === 'Equity')?.flags?.liability === false);
+ok('a switched-off capital source is refused -> 400', (await ciPost({ investors: [ciLine({ funding: 'Partner Loan' })] })).status === 400);
+ok('an unknown capital source is refused -> 400', (await ciPost({ investors: [ciLine({ funding: 'Gift' })] })).status === 400);
+ok('the old capital route refuses an unknown source too -> 400', (await call(T.finance, 'POST', '/finance', { date: ciDay, type: 'Capital Injection', category: 'Other', amount: 10, funding: 'Gift' })).status === 400);
+const slBefore = await ciCash();
+const slLoan = (await ciPost({ investors: [ciLine({ party: 'Loan Lara', amount: 20000, funding: 'Partner Advance' })] })).json?.[0];
+ok('a loan or advance posts cash in', slLoan?.funding === 'Partner Advance' && (await ciCash()) === slBefore + 20000);
+const slJournal = (await call(T.finance, 'GET', '/reports/journal?period=all')).json ?? [];
+ok('it is booked to its own liability account, not equity', slJournal.some((l) => l.reference === slLoan.refNo && l.account === 'Capital Source · Partner Advance' && l.credit === 20000));
+const slEq = (await ciPost({ investors: [ciLine({ party: 'Equity Eli', amount: 5000 })] })).json?.[0];
+ok('equity is booked to Owner Equity', ((await call(T.finance, 'GET', '/reports/journal?period=all')).json ?? []).some((l) => l.reference === slEq.refNo && l.account === 'Owner Equity' && l.credit === 5000));
+ok('a Finance user cannot add a capital source -> 403', (await call(T.finance, 'POST', '/lookups', { list: 'CAPITAL_SOURCE', code: 'Gift', flags: {} })).status === 403);
+const slAdded = await call(T.owner, 'POST', '/lookups', { list: 'CAPITAL_SOURCE', code: 'Director Loan', flags: { liability: true } });
+ok('an Admin adds a capital source in Settings', slAdded.status === 201 && slAdded.json?.flags?.liability === true);
+ok('it can be used at once', (await ciPost({ investors: [ciLine({ party: 'Dir Dan', amount: 1000, funding: 'Director Loan' })] })).status === 201);
+
+const slTypes = slLookups.filter((l) => l.list === 'STREAM_TYPE');
+ok('stream types start as Fixed Asset, Movable Asset and Operation Cost', ['Fixed Asset', 'Movable Asset', 'Operation Cost'].every((c) => slTypes.some((l) => l.code === c)));
+ok('only Fixed Asset is depreciable', slTypes.find((l) => l.code === 'Fixed Asset')?.flags?.depreciable === true && slTypes.find((l) => l.code === 'Operation Cost')?.flags?.depreciable === false);
+const slCenter = await call(T.owner, 'POST', '/categories/cost-center', { name: 'Machinery', budget: 500000, streamType: 'Fixed Asset', depreciationRate: 12.5 });
+ok('a stream can have a type and a depreciation rate', slCenter.status === 201 && slCenter.json?.streamType === 'Fixed Asset' && slCenter.json?.depreciationRate === 12.5, JSON.stringify(slCenter.json));
+const slCenter2 = await call(T.owner, 'POST', '/categories/cost-center', { name: 'Running costs', budget: 1000, streamType: 'Operation Cost', depreciationRate: 20 });
+ok('a type that does not depreciate keeps the rate at 0', slCenter2.status === 201 && slCenter2.json?.depreciationRate === 0);
+ok('an unknown stream type -> 400', (await call(T.owner, 'POST', '/categories/cost-center', { name: 'Odd', budget: 0, streamType: 'Nope' })).status === 400);
+ok('a rate over 100 -> 400', (await call(T.owner, 'POST', '/categories/cost-center', { name: 'Odd2', budget: 0, streamType: 'Fixed Asset', depreciationRate: 150 })).status === 400);
+const slSet = await call(T.owner, 'PATCH', `/categories/${slCenter2.json.id}/stream`, { streamType: 'Fixed Asset', depreciationRate: 10 });
+ok('the type of an existing stream can be changed', slSet.status === 200 && slSet.json?.streamType === 'Fixed Asset' && slSet.json?.depreciationRate === 10);
+const slClear = await call(T.owner, 'PATCH', `/categories/${slCenter2.json.id}/stream`, { streamType: '' });
+ok('and cleared', slClear.json?.streamType === '' && slClear.json?.depreciationRate === 0);
+ok('only an Admin sets the type -> 403', (await call(T.finance, 'PATCH', `/categories/${slCenter2.json.id}/stream`, { streamType: 'Fixed Asset' })).status === 403);
+const slBudgets = (await call(T.finance, 'GET', '/reports/budgets')).json ?? [];
+ok('the budgets list carries each stream type and rate', slBudgets.find((b) => b.name === 'Machinery')?.streamType === 'Fixed Asset' && slBudgets.find((b) => b.name === 'Machinery')?.depreciationRate === 12.5);
+ok('a capital injection can go against the new stream', (await ciPost({ investors: [ciLine({ party: 'Mach Mo', amount: 3000, streams: [{ stream: 'Machinery', pct: 100 }] })] })).status === 201);
 
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

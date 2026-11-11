@@ -288,7 +288,7 @@ export class ReportsService {
 
   async budgets() {
     const [centers, entries, docs] = await Promise.all([
-      this.db.query(`SELECT id, name, budget::float8 AS budget FROM categories WHERE kind = 'COST_CENTER' ORDER BY name`),
+      this.db.query(`SELECT id, name, budget::float8 AS budget, "streamType", "depreciationRate"::float8 AS "depreciationRate" FROM categories WHERE kind = 'COST_CENTER' ORDER BY name`),
       this.finance.list(),
       this.accounting.list(),
     ]);

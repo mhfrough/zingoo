@@ -1,4 +1,5 @@
 import { ChangeDetectionStrategy, Component, computed, inject, input } from '@angular/core';
+import { toSignal } from '@angular/core/rxjs-interop';
 import { ReactiveFormsModule, Validators } from '@angular/forms';
 import { Lookup, LookupList } from '../../core/settings.store';
 import { Btn, Field, Offcanvas } from '../../ui';
@@ -21,6 +22,12 @@ const LIST_TEXT: Record<LookupList, { word: string; use: string; code: string; m
   CAPITAL_SOURCE: { word: 'capital source', use: 'Offered on every capital injection as its type of funding. A loan or advance is booked as money to pay back, equity as owner capital.', code: 'Name', meaning: 'Meaning' },
   STREAM_TYPE: { word: 'stream type', use: 'The type of an investment stream. A depreciable type carries a depreciation rate.', code: 'Name', meaning: 'Meaning' },
   PERSON: { word: 'person', use: 'A shareholder or partner who can put money in. Each person gets a separate account in the books.', code: 'Name', meaning: 'Role or contact' },
+  LOAN_TENURE: { word: 'loan tenure', use: 'Offered on every loan.', code: 'Name', meaning: 'Meaning' },
+  REPAY_PLAN: { word: 'repayment plan', use: 'Offered on every loan.', code: 'Name', meaning: 'Meaning' },
+  REPAY_FREQUENCY: { word: 'repayment frequency', use: 'Offered on a loan that is repaid in installments.', code: 'Name', meaning: 'Meaning' },
+  ADVANCE_PURPOSE: { word: 'advance purpose', use: 'Offered on every advance.', code: 'Name', meaning: 'Meaning' },
+  SETTLEMENT_METHOD: { word: 'settlement method', use: 'How an advance is expected to be settled. Offered on every advance.', code: 'Name', meaning: 'Meaning' },
+  BANK_ACCOUNT: { word: 'bank or cash account', use: 'The account that took or paid the money. It is recorded on the entry; the books keep one Cash & Bank account.', code: 'Name', meaning: 'Details' },
 };
 
 /**
@@ -55,6 +62,9 @@ const LIST_TEXT: Record<LookupList, { word: string; use: string; code: string; m
         }
         @if (list() === 'CAPITAL_SOURCE') {
           <label class="check field--wide"><input type="checkbox" formControlName="liability" /> A loan or advance (money to pay back), not owner equity</label>
+          @if (liability()) {
+            <label class="check field--wide"><input type="checkbox" formControlName="advance" /> An advance (temporary funding): asks for purpose, settlement method and direction instead of loan terms</label>
+          }
         }
         @if (list() === 'STREAM_TYPE') {
           <label class="check field--wide"><input type="checkbox" formControlName="depreciable" /> Loses value over time (the stream carries a depreciation rate)</label>
@@ -104,8 +114,12 @@ export class LookupForm extends FormModal {
     destination: [false],
     duty: [false],
     liability: [false],
+    advance: [false],
     depreciable: [false],
   });
+
+  private liabilityOn = toSignal(this.form.controls.liability.valueChanges, { initialValue: false });
+  protected liability = computed(() => this.liabilityOn());
 
   protected reset() {
     const e = this.entry();
@@ -113,7 +127,7 @@ export class LookupForm extends FormModal {
       code: e?.code ?? '', description: e?.description ?? '', active: String(e?.active ?? true),
       origin: !!e?.flags?.['origin'], ocean: !!e?.flags?.['ocean'], insurance: !!e?.flags?.['insurance'],
       destination: !!e?.flags?.['destination'], duty: !!e?.flags?.['duty'],
-      liability: !!e?.flags?.['liability'], depreciable: !!e?.flags?.['depreciable'],
+      liability: !!e?.flags?.['liability'], advance: !!e?.flags?.['advance'], depreciable: !!e?.flags?.['depreciable'],
     });
     if (e) this.form.controls.code.disable({ emitEvent: false });
     else this.form.controls.code.enable({ emitEvent: false });
@@ -124,7 +138,7 @@ export class LookupForm extends FormModal {
     const list = this.entry()?.list ?? this.list();
     const flags: Record<string, boolean> =
       list === 'INCOTERM' ? { origin: v.origin, ocean: v.ocean, insurance: v.insurance, destination: v.destination, duty: v.duty }
-      : list === 'CAPITAL_SOURCE' ? { liability: v.liability }
+      : list === 'CAPITAL_SOURCE' ? { liability: v.liability, advance: v.liability && v.advance }
       : list === 'STREAM_TYPE' ? { depreciable: v.depreciable }
       : {};
     const e = this.entry();

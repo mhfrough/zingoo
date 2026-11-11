@@ -83,6 +83,23 @@ const LINES = ['origin', 'ocean', 'insurance', 'destination', 'duty'];
         </div>
       </div>
 
+      <div class="two-col">
+        @for (s of simpleLists; track s.list) {
+          <div class="card" data-flush>
+            <div class="card__head">
+              <div><h2>{{ s.title }}</h2><p>{{ s.sub }}</p></div>
+              @if (canEdit()) {
+                <button appBtn size="sm" icon="plus" (click)="openLookup(s.list)">{{ s.add }}</button>
+              }
+            </div>
+            <div class="card__body">
+              <app-data-table [columns]="simpleColumns" [rows]="simpleRows()[s.list] ?? []" [actions]="lookupActions" [searchable]="false"
+                [loading]="store.lookupsRes.isLoading()" emptyTitle="Nothing here yet" emptyText="Add the first one." (action)="onLookupAction($event)" />
+            </div>
+          </div>
+        }
+      </div>
+
       <div class="card" data-flush>
         <div class="card__head">
           <div><h2>People</h2><p>Shareholders and partners who can put money in. Each one gets a separate account. Manufacturers and distributors are added under Partners</p></div>
@@ -154,6 +171,25 @@ export class SettingsLists {
   protected streamTypes = computed(() => this.store.lookups().filter((l) => l.list === 'STREAM_TYPE'));
   protected people = computed(() => this.store.lookups().filter((l) => l.list === 'PERSON'));
 
+  /** the small lists behind the loan and advance forms and the bank accounts: a name and a status each */
+  protected simpleLists: { list: LookupList; title: string; sub: string; add: string }[] = [
+    { list: 'LOAN_TENURE', title: 'Loan tenure', sub: 'How long a loan runs', add: 'Add tenure' },
+    { list: 'REPAY_PLAN', title: 'Repayment plan', sub: 'How a loan is paid back', add: 'Add plan' },
+    { list: 'REPAY_FREQUENCY', title: 'Repayment frequency', sub: 'For a loan paid in installments', add: 'Add frequency' },
+    { list: 'ADVANCE_PURPOSE', title: 'Advance purpose', sub: 'Why a partner advances money', add: 'Add purpose' },
+    { list: 'SETTLEMENT_METHOD', title: 'Settlement method', sub: 'How an advance is expected to be settled', add: 'Add method' },
+    { list: 'BANK_ACCOUNT', title: 'Bank and cash accounts', sub: 'Which account took or paid the money. A label on each entry', add: 'Add account' },
+  ];
+  protected simpleRows = computed(() => {
+    const out: Partial<Record<LookupList, Lookup[]>> = {};
+    for (const s of this.simpleLists) out[s.list] = this.store.lookups().filter((l) => l.list === s.list);
+    return out;
+  });
+  protected simpleColumns: TableColumn<Lookup>[] = [
+    { id: 'code', label: 'Name', value: (l) => l.code, sub: (l) => l.description || null },
+    { id: 'status', label: 'Status', kind: 'tag', value: (l) => (l.active ? 'Active' : 'Switched off'), tone: (l): Tone => (l.active ? 'success' : 'neutral') },
+  ];
+
   private statusTone = (l: Lookup): Tone => (l.active ? 'success' : 'neutral');
 
   protected methodColumns: TableColumn<Lookup>[] = [
@@ -163,7 +199,7 @@ export class SettingsLists {
 
   protected sourceColumns: TableColumn<Lookup>[] = [
     { id: 'code', label: 'Source', value: (l) => l.code, sub: (l) => l.description },
-    { id: 'kind', label: 'Booked as', priority: 2, value: (l) => (l.flags['liability'] ? 'Loan or advance (to pay back)' : 'Owner equity') },
+    { id: 'kind', label: 'Booked as', priority: 2, value: (l) => (l.flags['liability'] ? (l.flags['advance'] ? 'Advance (to pay back)' : 'Loan (to pay back)') : 'Owner equity') },
     { id: 'status', label: 'Status', kind: 'tag', value: (l) => (l.active ? 'Active' : 'Switched off'), tone: this.statusTone },
   ];
 

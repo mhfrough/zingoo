@@ -120,6 +120,29 @@
     </div>
   }
 
+  @if (loans().length) {
+    <div class="card" data-flush>
+      <div class="card__head">
+        <div>
+          <h2>Loans & advances <app-tag [tone]="loanSummary().outstanding || loanSummary().receivable ? 'warning' : 'success'">{{ loans().length }}</app-tag></h2>
+          <p>Money to pay back, what has been paid, and what is left. Spending does not reduce a loan.</p>
+        </div>
+      </div>
+      <div class="card__body stack">
+        <div class="grid-auto">
+          <app-kpi label="Funds received" [value]="money(loanSummary().funded)" icon="piggy-bank" tone="accent"
+            [foot]="loanSummary().lent ? money(loanSummary().lent) + ' advanced to partners' : 'Loans and advances in'" />
+          <app-kpi label="Principal repaid" [value]="money(loanSummary().repaid)" icon="wallet" tone="success" foot="Paid back so far" />
+          <app-kpi label="Outstanding balance" [value]="money(loanSummary().outstanding)" icon="clock" tone="warning"
+            [foot]="loanSummary().receivable ? money(loanSummary().receivable) + ' due back from partners' : 'Still to pay back'" />
+          <app-kpi label="Used for spending" [value]="money(loanSummary().used)" icon="coins" tone="info" foot="Spent from the funded streams" />
+        </div>
+        <app-data-table [columns]="loanColumns" [rows]="loans()" [actions]="loanActions" [loading]="entries.isLoading()"
+          [searchable]="false" (action)="onLoanAction($event)" />
+      </div>
+    </div>
+  }
+
   @if (investors().length) {
     <div class="card" data-flush>
       <div class="card__head">
@@ -159,8 +182,10 @@
 </div>
 
 <app-capital-injection-form [(open)]="capitalOpen" [streams]="streamOptions()" [accounts]="accounts.value() ?? []" (saved)="reload()" />
-<app-finance-entry-form [(open)]="entryOpen" [entry]="editingEntry()" [streams]="streamNames()"
+<app-finance-entry-form [(open)]="entryOpen" [entry]="editingEntry()" [streams]="streamNames()" [fundings]="fundingRooms()"
   [threshold]="settings.value()?.approvalThreshold ?? 50000" (saved)="reload()" />
+<app-funding-position [(open)]="positionOpen" [entryId]="positionId()" [canWrite]="canWrite()" [version]="version()" (repay)="openRepay($event)" />
+<app-repayment-form [(open)]="repayOpen" [entry]="repayEntry()" (saved)="reload()" />
 <app-budget-form [(open)]="budgetOpen" [centers]="budgets.value() ?? []" [only]="editingBudget()" (saved)="reload()" />
 <app-cost-center-form [(open)]="centerOpen" [center]="null" (saved)="reload()" />
 <app-capital-target-form [(open)]="targetOpen" [current]="settings.value()?.capitalTarget ?? 0" (saved)="reload()" />

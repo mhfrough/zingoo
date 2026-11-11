@@ -80,13 +80,15 @@ export class AccountsService {
     const found = await repo.findOne({ where: { name } });
     if (found) return found.code;
 
-    const m = /^(Expense|Income|Capital Source|Owner Equity) · (.+)$/.exec(name);
+    const m = /^(Expense|Income|Capital Source|Owner Equity|Advance Receivable) · (.+)$/.exec(name);
     if (!m) throw new BadRequestException(`Unknown ledger account "${name}"`);
-    // each investor gets their own account: a loan or advance a liability, equity an equity account
+    // each investor gets their own account: a loan or advance a liability, equity an equity account,
+    // an advance the company paid out a receivable (asset)
     const [kind, base] =
       m[1] === 'Expense' ? ['Expense', 6000]
       : m[1] === 'Income' ? ['Revenue', 4500]
       : m[1] === 'Owner Equity' ? ['Equity', 3200]
+      : m[1] === 'Advance Receivable' ? ['Asset', 1700]
       : ['Liability', 2500];
     const last = await repo
       .createQueryBuilder('a')

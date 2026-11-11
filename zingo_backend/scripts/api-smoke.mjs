@@ -665,5 +665,98 @@ ok('a person can be switched off', iaOff.status === 200 && iaOff.json?.active ==
 ok('a switched-off person is refused -> 400', (await ciPost({ investors: [ciLine({ party: 'Dir Dan' })] })).status === 400);
 ok('and no longer offered', !((await call(T.finance, 'GET', '/finance/accounts')).json ?? []).some((a) => a.id === ciPeople['Dir Dan']));
 
+// ── loan and advance terms (options come from Settings) ──
+const rpLookups = (await call(T.owner, 'GET', '/lookups')).json ?? [];
+const rpHas = (list, code) => rpLookups.some((l) => l.list === list && l.code === code && l.active);
+ok('Settings holds the loan and advance options', rpHas('LOAN_TENURE', 'On demand') && rpHas('REPAY_PLAN', 'Installments') && rpHas('REPAY_FREQUENCY', 'Monthly') && rpHas('ADVANCE_PURPOSE', 'Expense float') && rpHas('SETTLEMENT_METHOD', 'Cash repayment') && rpHas('BANK_ACCOUNT', 'Cash in Hand'));
+ok('only Partner Advance is marked as an advance', rpLookups.find((l) => l.code === 'Partner Advance')?.flags?.advance === true && rpLookups.find((l) => l.code === 'Shareholder Loan')?.flags?.advance === false && rpLookups.find((l) => l.code === 'Equity')?.flags?.advance === false);
+ok('a Finance user cannot edit the options -> 403', (await call(T.finance, 'POST', '/lookups', { list: 'LOAN_TENURE', code: 'Never' })).status === 403);
+const rpLoan = (await ciPost({ funding: 'Shareholder Loan', tenure: 'Long-term (over 12 months)', repaymentPlan: 'Installments', repaymentFrequency: 'Quarterly', markupPct: 12, bankAccount: 'Zen Foods Bank Account', purpose: 'Procurement', investors: [ciLine({ party: 'Loan Lara', amount: 100000, expectedReturnDate: ciIso(365) })] })).json?.[0];
+ok('a loan keeps its terms', rpLoan?.tenure === 'Long-term (over 12 months)' && rpLoan?.repaymentPlan === 'Installments' && rpLoan?.repaymentFrequency === 'Quarterly' && rpLoan?.markupPct === 12 && rpLoan?.bankAccount === 'Zen Foods Bank Account');
+ok('advance-only fields are dropped from a loan', rpLoan?.purpose === '' && rpLoan?.direction === 'in');
+const rpEq = (await ciPost({ tenure: 'On demand', markupPct: 9, bankAccount: 'Cash in Hand', investors: [ciLine({ party: 'Equity Eli', amount: 1000 })] })).json?.[0];
+ok('equity has no loan terms, only the bank account', rpEq?.tenure === '' && rpEq?.markupPct === 0 && rpEq?.bankAccount === 'Cash in Hand');
+ok('an option that is not in Settings -> 400', (await ciPost({ funding: 'Shareholder Loan', tenure: 'Forever', investors: [ciLine({ party: 'Loan Lara' })] })).status === 400);
+ok('a bank account that is not in Settings -> 400', (await ciPost({ bankAccount: 'Offshore', investors: [ciLine({ party: 'Loan Lara' })] })).status === 400);
+ok('a markup over 100 -> 400', (await ciPost({ funding: 'Shareholder Loan', markupPct: 150, investors: [ciLine({ party: 'Loan Lara' })] })).status === 400);
+const rpAdv = (await ciPost({ funding: 'Partner Advance', purpose: 'Expense float', settlementMethod: 'Cash repayment', linkedReference: 'PO-77', tenure: 'On demand', investors: [ciLine({ party: 'Reuse', amount: 30000 })] })).json?.[0];
+ok('an advance keeps its purpose, settlement and linked reference', rpAdv?.purpose === 'Expense float' && rpAdv?.settlementMethod === 'Cash repayment' && rpAdv?.linkedReference === 'PO-77' && rpAdv?.tenure === '');
+ok('only an advance can be paid out -> 400', (await ciPost({ funding: 'Shareholder Loan', direction: 'out', investors: [ciLine({ party: 'Mach Mo' })] })).status === 400 && (await ciPost({ direction: 'out', investors: [ciLine({ party: 'Mach Mo' })] })).status === 400);
+
+// ── repayments ──
+const rpPost = (id, body, token = T.finance) => call(token, 'POST', `/finance/${id}/repayments`, body);
+const rpCash0 = await ciCash();
+const rpPos0 = (await call(T.finance, 'GET', `/finance/${rpLoan.id}/position`)).json;
+ok('a new loan owes its full amount', rpPos0?.entry?.outstanding === 100000 && rpPos0?.entry?.repaid === 0 && rpPos0?.entry?.liability === true);
+ok('the position shows the projected markup (12% for a year on 100,000)', rpPos0?.projectedMarkup === 12000);
+ok('the position lists the streams with nothing spent yet', rpPos0?.streams?.length === 1 && rpPos0.streams[0].allocated === 100000 && rpPos0.streams[0].spent === 0 && rpPos0.streams[0].available === 100000);
+const rpPart = await rpPost(rpLoan.id, { date: ciDay, amount: 30000, kind: 'principal', method: 'Bank Transfer', reference: 'RPY-TRF-1' });
+ok('a part repayment is recorded', rpPart.status === 201 && rpPart.json?.repayments?.length === 1 && rpPart.json?.entry?.repaid === 30000 && rpPart.json?.entry?.outstanding === 70000, JSON.stringify(rpPart.json).slice(0, 160));
+ok('it takes cash out', (await ciCash()) === rpCash0 - 30000);
+const rpJournal = (await call(T.finance, 'GET', '/reports/journal?period=all')).json ?? [];
+const rpRef = rpPart.json?.repayments?.[0]?.refNo;
+ok('it clears the investor\'s liability account', rpJournal.some((l) => l.reference === rpRef && l.account === 'Capital Source · Shareholder Loan · Loan Lara' && l.debit === 30000));
+ok('it has a reference number of its own', /^RPY-\d+$/.test(rpRef ?? ''));
+ok('more than the outstanding -> 400', (await rpPost(rpLoan.id, { date: ciDay, amount: 70001, kind: 'principal' })).status === 400);
+ok('a repayment in the future -> 400', (await rpPost(rpLoan.id, { date: ciIso(2), amount: 10, kind: 'principal' })).status === 400);
+ok('a repayment before the money arrived -> 400', (await rpPost(rpLoan.id, { date: ciIso(-5), amount: 10, kind: 'principal' })).status === 400);
+ok('a payment method that is not in Settings -> 400', (await rpPost(rpLoan.id, { date: ciDay, amount: 10, kind: 'principal', method: 'Barter' })).status === 400);
+ok('equity cannot be repaid -> 400', (await rpPost(rpEq.id, { date: ciDay, amount: 10, kind: 'principal' })).status === 400);
+ok('a Viewer cannot record a repayment -> 403', (await rpPost(rpLoan.id, { date: ciDay, amount: 10, kind: 'principal' }, T.audit)).status === 403);
+ok('Manufacturing cannot see a position -> 403', (await call(T.factory, 'GET', `/finance/${rpLoan.id}/position`)).status === 403);
+const rpMark = await rpPost(rpLoan.id, { date: ciDay, amount: 1500, kind: 'markup', reference: 'MK-1' });
+ok('markup paid does not reduce the principal', rpMark.status === 201 && rpMark.json?.entry?.outstanding === 70000 && rpMark.json?.entry?.markupPaid === 1500);
+ok('markup is booked as an interest expense', ((await call(T.finance, 'GET', '/reports/journal?period=all')).json ?? []).some((l) => /Markup paid/.test(l.description) && l.account === 'Expense · Interest & Bank Fees' && l.debit === 1500));
+const rpFile = await upload(T.finance, PNG, 'repay.png', 'image/png');
+const rpFull = await rpPost(rpLoan.id, { date: ciDay, amount: 70000, kind: 'principal', proofId: rpFile.json.id });
+ok('the last repayment settles the loan, with its proof', rpFull.status === 201 && rpFull.json?.entry?.outstanding === 0 && rpFull.json?.repayments?.length === 3 && rpFull.json.repayments.some((r) => r.proof?.name === 'repay.png'));
+ok('nothing more can be repaid -> 400', (await rpPost(rpLoan.id, { date: ciDay, amount: 1, kind: 'principal' })).status === 400);
+ok('cash went out by the repayments and the markup', (await ciCash()) === rpCash0 - 101500);
+ok('the cash flow report names them', ((await call(T.finance, 'GET', '/reports/cash-flows')).json?.outflows ?? []).some((o) => o.label === 'Loan and advance repayments' && o.amount >= 101500));
+ok('the listing carries repaid, outstanding and liability', (await list('/finance')).find((e) => e.id === rpLoan.id)?.outstanding === 0);
+// a loan that falls due soon reminds with what is still outstanding, and stops once it is paid back
+const rpDue = (await ciPost({ funding: 'Shareholder Loan', investors: [ciLine({ party: 'Bilal Sheikh', amount: 8000, expectedReturnDate: ciIso(5) })] })).json?.[0];
+const rpReminder = () => call(T.owner, 'GET', '/reports/alerts').then((r) => (r.json ?? []).find((a) => a.kind === 'return' && /Bilal Sheikh/.test(a.title)));
+ok('a loan due soon shows what is still outstanding', /8000 still outstanding/.test((await rpReminder())?.text ?? ''));
+await rpPost(rpDue.id, { date: ciDay, amount: 3000, kind: 'principal' });
+ok('after a part repayment it shows the rest', /5000 still outstanding/.test((await rpReminder())?.text ?? ''));
+await rpPost(rpDue.id, { date: ciDay, amount: 5000, kind: 'principal' });
+ok('a settled loan raises no reminder', (await rpReminder()) === undefined);
+ok('the journal still balances after repayments', Math.abs(((await call(T.finance, 'GET', '/reports/journal?period=all')).json ?? []).reduce((n, l) => n + l.debit - l.credit, 0)) < 0.01);
+
+// ── an advance the company pays out to a partner ──
+const rpCashOut0 = await ciCash();
+const rpRaised0 = await ciRaised();
+const rpOut = (await ciPost({ funding: 'Partner Advance', direction: 'out', purpose: 'Distribution', investors: [ciLine({ party: 'Mach Mo', amount: 20000 })] })).json?.[0];
+ok('an advance paid out is recorded', rpOut?.direction === 'out' && rpOut?.outstanding === 20000);
+ok('it takes cash out', (await ciCash()) === rpCashOut0 - 20000);
+ok('it is not capital raised', (await ciRaised()) === rpRaised0);
+const rpOutJ = (await call(T.finance, 'GET', '/reports/journal?period=all')).json ?? [];
+ok('it is booked to a receivable account of that partner', rpOutJ.some((l) => l.reference === rpOut.refNo && l.account === 'Advance Receivable · Mach Mo' && l.debit === 20000));
+ok('that account is an asset', ((await call(T.owner, 'GET', '/accounts')).json ?? []).find((a) => a.name === 'Advance Receivable · Mach Mo')?.type === 'Asset');
+const rpBack = await rpPost(rpOut.id, { date: ciDay, amount: 5000, kind: 'principal' });
+ok('the partner paying it back brings cash in', rpBack.status === 201 && rpBack.json?.entry?.outstanding === 15000 && (await ciCash()) === rpCashOut0 - 15000);
+ok('the cash flow report names the advance paid out', ((await call(T.finance, 'GET', '/reports/cash-flows')).json?.outflows ?? []).some((o) => o.label === 'Advances paid to partners'));
+
+// ── spend paid from a funding ──
+const fuFund = (await ciPost({ funding: 'Shareholder Loan', investors: [ciLine({ party: 'File One', amount: 60000, streams: [{ stream: 'Marketing', amount: 40000 }, { stream: 'Printing', amount: 20000 }] })] })).json?.[0];
+const fuSpend = (body) => call(T.finance, 'POST', '/finance', { date: ciDay, type: 'Operating Expense', category: 'Marketing', amount: 15000, party: 'Agency', fundedById: fuFund.id, ...body });
+const fuA = await fuSpend({});
+ok('a spend can be paid from a funding', fuA.status === 201 && fuA.json?.fundedById === fuFund.id);
+ok('a second spend within what is left', (await fuSpend({ amount: 20000 })).status === 201);
+ok('a spend over what is left on the stream -> 400', (await fuSpend({ amount: 6000 })).status === 400);
+ok('a stream with nothing set aside -> 400', (await fuSpend({ category: 'Exports' })).status === 400);
+ok('only a spend can be paid from a funding -> 400', (await call(T.finance, 'POST', '/finance', { date: ciDay, type: 'Other Receipt', category: 'Marketing', amount: 10, fundedById: fuFund.id })).status === 400);
+ok('a made-up funding -> 400', (await fuSpend({ fundedById: '00000000-0000-4000-8000-000000000000' })).status === 400);
+const fuPos = (await call(T.finance, 'GET', `/finance/${fuFund.id}/position`)).json;
+const fuMk = fuPos?.streams?.find((s) => s.stream === 'Marketing');
+ok('the position shows spent and left per stream', fuMk?.allocated === 40000 && fuMk?.spent === 35000 && fuMk?.available === 5000 && fuPos.streams.find((s) => s.stream === 'Printing')?.available === 20000);
+ok('and the spends that used it', fuPos?.spends?.length === 2 && fuPos.entry.usedAmount === 35000);
+ok('raising a spend past the room left -> 400', (await call(T.finance, 'PATCH', `/finance/${fuA.json.id}`, { amount: 30000 })).status === 400);
+ok('lowering it is fine', (await call(T.finance, 'PATCH', `/finance/${fuA.json.id}`, { amount: 10000 })).status === 200);
+const fuChq = (await ciPost({ funding: 'Shareholder Loan', investors: [ciLine({ party: 'File Two', amount: 5000, paymentSource: 'Cheque', chequeNo: 'FU-1', clearanceDate: ciIso(3), streams: [{ stream: 'Marketing', pct: 100 }] })] })).json?.[0];
+ok('a funding whose cheque has not cleared cannot be spent -> 400', (await fuSpend({ fundedById: fuChq.id, amount: 100 })).status === 400);
+ok('a repayment on a waiting cheque -> 400', (await rpPost(fuChq.id, { date: ciDay, amount: 100, kind: 'principal' })).status === 400);
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

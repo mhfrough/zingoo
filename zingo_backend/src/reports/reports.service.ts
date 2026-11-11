@@ -200,9 +200,10 @@ export class ReportsService {
           WHEN l."refType" = 'EXPORT_RECEIPT' THEN 'Export receipts'
           WHEN l."refType" = 'EXPORT_COST'    THEN 'Export costs paid'
           WHEN l."refType" = 'VOUCHER'        THEN 'Journal vouchers'
+          WHEN l."refType" = 'FUNDING_REPAY'  THEN 'Loan and advance repayments'
           WHEN l."refType" = 'FINANCE' THEN
             CASE f.type
-              WHEN 'Capital Injection'  THEN 'Capital and partner loans'
+              WHEN 'Capital Injection'  THEN CASE f.direction WHEN 'out' THEN 'Advances paid to partners' ELSE 'Capital and partner loans' END
               WHEN 'Other Receipt'      THEN 'Other receipts'
               WHEN 'Operating Expense'  THEN 'Approved operating expenses'
               ELSE 'Capital asset purchases'
@@ -319,9 +320,12 @@ export class ReportsService {
         kind: 'cheque', page: 'finance', title: `Cheque awaiting clearance · ${f.party}`,
         text: `PKR ${f.amount} · cheque ${f.chequeNo} · clears ${f.clearanceDate}`,
       })),
-      ...entries.filter((f) => f.type === 'Capital Injection' && f.cleared && f.expectedReturnDate && returnDue(f.expectedReturnDate)).map((f) => ({
-        kind: 'return', page: 'finance', title: `Investor return due · ${f.party}`,
-        text: `PKR ${f.amount} invested ${f.date} · expected back ${f.expectedReturnDate}`,
+      // a loan or advance that is fully paid back no longer needs a reminder
+      ...entries.filter((f) => f.type === 'Capital Injection' && f.cleared && f.expectedReturnDate && returnDue(f.expectedReturnDate) && (!f.liability || f.outstanding > 0)).map((f) => ({
+        kind: 'return', page: 'finance', title: f.direction === 'out' ? `Advance due back · ${f.party}` : `Investor return due · ${f.party}`,
+        text: f.liability
+          ? `PKR ${f.outstanding} still outstanding of PKR ${f.amount} · due ${f.expectedReturnDate}`
+          : `PKR ${f.amount} invested ${f.date} · expected back ${f.expectedReturnDate}`,
       })),
       ...stock.filter((p: any) => p.active && p.low).map((p: any) => ({
         kind: 'stock', page: 'manufacturing', title: `Low stock · ${p.sku}`,
@@ -350,7 +354,7 @@ export class ReportsService {
       this.alerts(),
       this.orders.list(),
       this.settings.get(),
-      this.db.query(`SELECT COALESCE(SUM(amount), 0)::float8 AS total FROM finance_entries WHERE type = 'Capital Injection' AND "chequeStatus" IN ('', 'Cleared')`),
+      this.db.query(`SELECT COALESCE(SUM(amount), 0)::float8 AS total FROM finance_entries WHERE type = 'Capital Injection' AND direction = 'in' AND "chequeStatus" IN ('', 'Cleared')`),
     ]);
     return {
       cash,

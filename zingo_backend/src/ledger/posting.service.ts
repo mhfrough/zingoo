@@ -8,7 +8,7 @@ import { CreditNote } from '../portal/portal.entities';
 import { flagsFor, shipmentMath } from '../exports/export-math';
 import { LookupsService } from '../setup/lookups.service';
 import { ExportCostPayment, ExportReceipt, ExportShipment } from '../exports/exports.entities';
-import { AccountingDocument, AccountingSettlement, Approval, FinanceEntry } from '../finance/finance.entities';
+import { AccountingDocument, AccountingSettlement, Approval, FinanceEntry, FundingRepayment } from '../finance/finance.entities';
 import { ManufacturerPayment, ProductionBatch } from '../manufacturing/manufacturing.entities';
 import { Setting } from '../setup/setup.entities';
 import { SettingsService } from '../setup/setup.service';
@@ -182,8 +182,10 @@ export class PostingService implements OnModuleInit {
    * "Capital Source · <type> · <name>" (a liability). Older entries without an account keep the shared accounts
    * (Owner Equity, Partner Loans, or one account per capital source).
    */
-  private async capitalAccount(em: EntityManager, funding: string, party: string, hasAccount: boolean): Promise<string> {
+  private async capitalAccount(em: EntityManager, funding: string, party: string, hasAccount: boolean, direction: 'in' | 'out' = 'in'): Promise<string> {
     const liability = !!funding && funding !== 'Equity' && (funding === 'Partner Loan' || (await this.lookups.isLiability(em, funding)));
+    // an advance the company pays out is money it will get back: an asset account of its own per partner
+    if (direction === 'out' && hasAccount && party) return `Advance Receivable · ${party}`.slice(0, 80).trim();
     // an account name holds at most 80 characters
     if (hasAccount && party) return (liability ? `Capital Source · ${funding} · ${party}` : `${ACC.EQUITY} · ${party}`).slice(0, 80).trim();
     if (!funding || funding === 'Equity') return ACC.EQUITY;
@@ -202,10 +204,15 @@ export class PostingService implements OnModuleInit {
         case 'Capital Injection':
           // a cheque is not cash until it clears; a bounced one never is
           if (f.chequeStatus === 'Pending' || f.chequeStatus === 'Bounced') break;
-          rows = this.pair(
-            f.chequeStatus === 'Cleared' ? f.clearanceDate ?? f.date : f.date, 'Investment', f.refNo,
-            f.chequeStatus === 'Cleared' ? `Funding · ${f.party} · cheque ${f.chequeNo}` : `Funding · ${f.party}`,
-            ACC.CASH, await this.capitalAccount(em, f.funding, f.party, !!f.partyId), n);
+          {
+            const account = await this.capitalAccount(em, f.funding, f.party, !!f.partyId, f.direction);
+            const date = f.chequeStatus === 'Cleared' ? f.clearanceDate ?? f.date : f.date;
+            const paidOut = f.direction === 'out'; // an advance the company pays to a partner
+            const text = paidOut ? `Advance paid · ${f.party}` : f.chequeStatus === 'Cleared' ? `Funding · ${f.party} · cheque ${f.chequeNo}` : `Funding · ${f.party}`;
+            rows = paidOut
+              ? this.pair(date, 'Investment', f.refNo, text, account, ACC.CASH, n)
+              : this.pair(date, 'Investment', f.refNo, text, ACC.CASH, account, n);
+          }
           break;
         case 'Operating Expense':
           rows = this.pair(f.date, 'Investment', f.refNo, `Operating expense · ${f.category}`, `Expense · ${f.category}`, ACC.CASH, n);
@@ -219,6 +226,30 @@ export class PostingService implements OnModuleInit {
       }
     }
     await this.ledger.replace(em, 'FINANCE', id, rows);
+  }
+
+  /**
+   * A repayment of a loan or advance. Principal moves cash against the investor's own account (cash out and the
+   * liability down; for an advance the company paid out, cash in and the receivable down). Markup is the cost of
+   * the money: an interest expense when the company pays it, other income when a partner pays it.
+   */
+  async syncRepayment(em: EntityManager, id: string) {
+    const r = await em.findOne(FundingRepayment, { where: { id }, relations: ['entry'] });
+    if (!r) return;
+    const f = r.entry;
+    const account = await this.capitalAccount(em, f.funding, f.party, !!f.partyId, f.direction);
+    const out = f.direction === 'out';
+    let rows: LedgerRow[];
+    if (r.kind === 'markup') {
+      rows = out
+        ? this.pair(r.date, 'Investment', r.refNo, `Markup received · ${f.party}`, ACC.CASH, ACC.OTHER_INCOME, r.amount)
+        : this.pair(r.date, 'Investment', r.refNo, `Markup paid · ${f.party}`, 'Expense · Interest & Bank Fees', ACC.CASH, r.amount);
+    } else {
+      rows = out
+        ? this.pair(r.date, 'Investment', r.refNo, `Advance returned · ${f.party}`, ACC.CASH, account, r.amount)
+        : this.pair(r.date, 'Investment', r.refNo, `Repayment · ${f.party}`, account, ACC.CASH, r.amount);
+    }
+    await this.ledger.replace(em, 'FUNDING_REPAY', id, rows);
   }
 
   // ───────────── accounting (income invoices, expense bills) ─────────────

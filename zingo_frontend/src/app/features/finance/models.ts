@@ -51,6 +51,75 @@ export interface FinanceEntry {
   streams: StreamShare[];
   proof: AttachmentMeta | null;
   agreement: AttachmentMeta | null;
+
+  // ── loans and advances ──
+  /** a loan or an advance: money to pay back (or, for an advance paid out, to get back) */
+  liability: boolean;
+  /** 'in': the company receives the money. 'out': the company paid an advance to a partner. */
+  direction: 'in' | 'out';
+  /** principal paid back so far */
+  repaid: number;
+  markupPaid: number;
+  /** principal still open (0 until the money is in the bank) */
+  outstanding: number;
+  /** spent against this funding's streams */
+  usedAmount: number;
+  tenure: string;
+  repaymentPlan: string;
+  repaymentFrequency: string;
+  /** yearly markup in percent */
+  markupPct: number;
+  purpose: string;
+  settlementMethod: string;
+  linkedReference: string;
+  /** which of the company's bank or cash accounts took (or paid) the money */
+  bankAccount: string;
+  /** spend only: the capital entry this spend is paid from */
+  fundedById: string | null;
+}
+
+/** A funding a spend can be paid from, with what is left on each of its streams. */
+export interface FundingRoom {
+  id: string;
+  /** "FIN-004 · Mansoor · Shareholder Loan" */
+  label: string;
+  /** PKR still free per stream name */
+  left: Record<string, number>;
+}
+
+/** One repayment of a loan or advance, or markup paid on it. */
+export interface Repayment {
+  id: string;
+  refNo: string;
+  date: string;
+  amount: number;
+  kind: 'principal' | 'markup';
+  method: string;
+  reference: string;
+  note: string | null;
+  proof: AttachmentMeta | null;
+}
+
+/** What is allocated to one stream of a funding, what has been spent from it and what is left. */
+export interface StreamPosition {
+  stream: string;
+  allocated: number;
+  pct: number;
+  spent: number;
+  available: number;
+}
+
+/** A loan or advance now: terms, repayments, spending per stream. */
+export interface FundingPosition {
+  entry: FinanceEntry;
+  repayments: Repayment[];
+  streams: StreamPosition[];
+  /** spend entries paid from this funding */
+  spends: FinanceEntry[];
+  /** part of the amount not placed on any stream */
+  unallocated: number;
+  /** simple markup from the day the money arrived to the due date (informational) */
+  projectedMarkup: number;
 }
 
 export type ChequeStatus = '' | 'Pending' | 'Cleared' | 'Bounced';

@@ -87,6 +87,83 @@ export class FinanceEntry extends DocEntity {
 
   @Column({ type: 'uuid', nullable: true })
   agreementId: string | null;
+
+  // ── loan and advance terms (empty for equity), copied onto every investor of one injection ──
+
+  /** 'in': the company receives the money. 'out': the company pays an advance to a partner (money it will get back). */
+  @Column({ type: 'varchar', length: 3, default: 'in' })
+  direction: 'in' | 'out';
+
+  /** from Settings: Short-term, Long-term, On demand */
+  @Column({ type: 'varchar', length: 50, default: '' })
+  tenure: string;
+
+  /** from Settings: Lump sum, Installments, On demand */
+  @Column({ type: 'varchar', length: 50, default: '' })
+  repaymentPlan: string;
+
+  /** from Settings: Monthly, Quarterly ... (for installments) */
+  @Column({ type: 'varchar', length: 50, default: '' })
+  repaymentFrequency: string;
+
+  /** yearly markup (interest) in percent; 0 = interest-free. Informational: markup is booked when it is paid. */
+  @Column({ type: 'decimal', precision: 5, scale: 2, default: 0, transformer: numeric })
+  markupPct: number;
+
+  /** advance only, from Settings */
+  @Column({ type: 'varchar', length: 60, default: '' })
+  purpose: string;
+
+  /** advance only, from Settings: how it is expected to be settled */
+  @Column({ type: 'varchar', length: 60, default: '' })
+  settlementMethod: string;
+
+  /** advance only: invoice, PO or activity the advance is linked to */
+  @Column({ type: 'varchar', length: 100, default: '' })
+  linkedReference: string;
+
+  /** which of the company's bank or cash accounts took (or paid) the money: from Settings, a label only */
+  @Column({ type: 'varchar', length: 60, default: '' })
+  bankAccount: string;
+
+  /** spend only: the capital entry (a loan, an advance or equity) whose stream allocation this spend uses up */
+  @Column({ type: 'uuid', nullable: true })
+  fundedById: string | null;
+}
+
+/** A repayment of a loan or advance (or the markup paid on it): cash out against the investor's liability account. */
+@Entity('funding_repayments')
+@Index(['entryId'])
+export class FundingRepayment extends DocEntity {
+  @ManyToOne(() => FinanceEntry, { nullable: false, onDelete: 'RESTRICT' })
+  @JoinColumn({ name: 'entryId' })
+  entry: FinanceEntry;
+
+  @Column({ type: 'uuid' })
+  entryId: string;
+
+  @Column({ type: 'date' })
+  date: string;
+
+  @Column({ type: 'decimal', precision: 14, scale: 2, transformer: numeric })
+  amount: number;
+
+  /** principal reduces what is owed; markup is the cost of the loan and is not part of the balance */
+  @Column({ type: 'varchar', length: 10, default: 'principal' })
+  kind: 'principal' | 'markup';
+
+  /** a payment method from Settings */
+  @Column({ type: 'varchar', length: 30, default: '' })
+  method: string;
+
+  @Column({ type: 'varchar', length: 100, default: '' })
+  reference: string;
+
+  @Column({ type: 'text', nullable: true })
+  note: string | null;
+
+  @Column({ type: 'uuid', nullable: true })
+  proofId: string | null;
 }
 
 export type ChequeStatus = '' | 'Pending' | 'Cleared' | 'Bounced';

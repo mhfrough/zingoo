@@ -8,7 +8,9 @@ import { ApiService } from './api.service';
 import { AuthService } from './auth.service';
 
 /** The editable pick-lists on Settings & Data. */
-export type LookupList = 'PAY_METHOD' | 'INCOTERM' | 'CAPITAL_SOURCE' | 'STREAM_TYPE' | 'PERSON';
+export type LookupList =
+  | 'PAY_METHOD' | 'INCOTERM' | 'CAPITAL_SOURCE' | 'STREAM_TYPE' | 'PERSON'
+  | 'LOAN_TENURE' | 'REPAY_PLAN' | 'REPAY_FREQUENCY' | 'ADVANCE_PURPOSE' | 'SETTLEMENT_METHOD' | 'BANK_ACCOUNT';
 
 /** One entry of an editable pick-list (payment methods, Incoterms, capital sources, stream types, people). */
 export interface Lookup {
@@ -58,6 +60,16 @@ export class SettingsStore {
   readonly capitalSourceEntries = computed(() => this.lookups().filter((l) => l.list === 'CAPITAL_SOURCE' && l.active));
   /** types of investment stream a cost center may have (Fixed Asset, Movable Asset, Operation Cost ...) */
   readonly streamTypes = computed(() => this.lookups().filter((l) => l.list === 'STREAM_TYPE' && l.active));
+  /** the active choices of a simple list (loan tenure, repayment plan, advance purpose, bank account ...) */
+  options(list: LookupList) {
+    return this.lookups().filter((l) => l.list === list && l.active).map((l) => l.code);
+  }
+  readonly loanTenures = computed(() => this.options('LOAN_TENURE'));
+  readonly repayPlans = computed(() => this.options('REPAY_PLAN'));
+  readonly repayFrequencies = computed(() => this.options('REPAY_FREQUENCY'));
+  readonly advancePurposes = computed(() => this.options('ADVANCE_PURPOSE'));
+  readonly settlementMethods = computed(() => this.options('SETTLEMENT_METHOD'));
+  readonly bankAccounts = computed(() => this.options('BANK_ACCOUNT'));
   /** Incoterms a new quote may use */
   readonly incoterms = computed(() => this.lookups().filter((l) => l.list === 'INCOTERM' && l.active));
   /** the cost lines the seller carries, per Incoterm code */

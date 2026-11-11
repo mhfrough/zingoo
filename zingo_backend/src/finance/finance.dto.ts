@@ -16,6 +16,8 @@ export class CreateFinanceDto {
   @IsOptional() @IsString() party?: string;
   @IsOptional() @IsString() @MaxLength(40) funding?: string;
   @IsOptional() @IsString() note?: string;
+  /** spend only: the capital entry (loan, advance or equity) this spend is paid from; it must have room left on this stream */
+  @IsOptional() @IsUUID() fundedById?: string;
 }
 export class UpdateFinanceDto extends PartialType(CreateFinanceDto) {}
 
@@ -56,6 +58,20 @@ export class CreateCapitalDto {
   @IsOptional() @IsString() @MaxLength(40) funding?: string;
   /** terms of the investment, copied onto every investor line */
   @IsOptional() @IsString() note?: string;
+
+  // loan and advance terms (ignored for equity); the options come from Settings
+  /** advance only: 'out' = the company pays the partner an advance */
+  @IsOptional() @IsIn(['in', 'out']) direction?: 'in' | 'out';
+  @IsOptional() @IsString() @MaxLength(50) tenure?: string;
+  @IsOptional() @IsString() @MaxLength(50) repaymentPlan?: string;
+  @IsOptional() @IsString() @MaxLength(50) repaymentFrequency?: string;
+  @IsOptional() @IsNumber() @Min(0) @Max(100) markupPct?: number;
+  @IsOptional() @IsString() @MaxLength(60) purpose?: string;
+  @IsOptional() @IsString() @MaxLength(60) settlementMethod?: string;
+  @IsOptional() @IsString() @MaxLength(100) linkedReference?: string;
+  /** which of the company's bank or cash accounts took the money (Settings) */
+  @IsOptional() @IsString() @MaxLength(60) bankAccount?: string;
+
   @IsArray() @ArrayMinSize(1) @ArrayMaxSize(20) @ValidateNested({ each: true }) @Type(() => CapitalLineDto)
   investors: CapitalLineDto[];
 }
@@ -65,6 +81,18 @@ export class ChequeDto {
   @IsIn(['Cleared', 'Bounced']) status: 'Cleared' | 'Bounced';
   /** the day it cleared; defaults to the expected clearance date, never in the future */
   @IsOptional() @IsDateString() date?: string;
+}
+
+/** A repayment of a loan or advance, or the markup paid on it. */
+export class RepaymentDto {
+  @IsDateString() date: string;
+  @IsNumber() @IsPositive() amount: number;
+  @IsIn(['principal', 'markup']) kind: 'principal' | 'markup';
+  /** a payment method from Settings */
+  @IsOptional() @IsString() @MaxLength(30) method?: string;
+  @IsOptional() @IsString() @MaxLength(100) reference?: string;
+  @IsOptional() @IsString() note?: string;
+  @IsOptional() @IsUUID() proofId?: string;
 }
 
 export class SignDto {

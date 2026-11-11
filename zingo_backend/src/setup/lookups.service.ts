@@ -1,16 +1,21 @@
 import { BadRequestException, ConflictException, Injectable, NotFoundException, OnApplicationBootstrap } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { EntityManager, Repository } from 'typeorm';
-import { CAPITAL_SOURCE_DEFAULTS, INCOTERM_DEFAULTS, PAYMENT_METHODS, STREAM_TYPE_DEFAULTS } from './setup.constants';
+import { CAPITAL_SOURCE_DEFAULTS, INCOTERM_DEFAULTS, PAYMENT_METHODS, SIMPLE_LIST_DEFAULTS, STREAM_TYPE_DEFAULTS } from './setup.constants';
 import { Lookup } from './setup.entities';
 
+/** The simple pick-lists of the loan and advance forms: just a name (and a note), no switches. */
+export const SIMPLE_LISTS = ['LOAN_TENURE', 'REPAY_PLAN', 'REPAY_FREQUENCY', 'ADVANCE_PURPOSE', 'SETTLEMENT_METHOD', 'BANK_ACCOUNT'] as const;
+
 /** The pick-lists the client can edit on Settings & Data. */
-export const LOOKUP_LISTS = ['PAY_METHOD', 'INCOTERM', 'CAPITAL_SOURCE', 'STREAM_TYPE', 'PERSON'] as const;
+export const LOOKUP_LISTS = ['PAY_METHOD', 'INCOTERM', 'CAPITAL_SOURCE', 'STREAM_TYPE', 'PERSON', ...SIMPLE_LISTS] as const;
 export type LookupList = (typeof LOOKUP_LISTS)[number];
 
 /** what each list calls its entries in messages */
 const LIST_LABEL: Record<LookupList, string> = {
   PAY_METHOD: 'payment method', INCOTERM: 'Incoterm', CAPITAL_SOURCE: 'capital source', STREAM_TYPE: 'stream type', PERSON: 'person',
+  LOAN_TENURE: 'loan tenure', REPAY_PLAN: 'repayment plan', REPAY_FREQUENCY: 'repayment frequency', ADVANCE_PURPOSE: 'advance purpose',
+  SETTLEMENT_METHOD: 'settlement method', BANK_ACCOUNT: 'bank or cash account',
 };
 
 /** The cost lines an Incoterm can put on the seller. Bank charges and other costs are always the seller's. */
@@ -20,9 +25,11 @@ export const INCOTERM_FLAGS = ['origin', 'ocean', 'insurance', 'destination', 'd
 const LIST_FLAGS: Record<LookupList, readonly string[]> = {
   PAY_METHOD: [],
   INCOTERM: INCOTERM_FLAGS,
-  CAPITAL_SOURCE: ['liability'],
+  // liability: money to pay back; advance: temporary funding (purpose, settlement and direction instead of loan terms)
+  CAPITAL_SOURCE: ['liability', 'advance'],
   STREAM_TYPE: ['depreciable'],
   PERSON: [],
+  LOAN_TENURE: [], REPAY_PLAN: [], REPAY_FREQUENCY: [], ADVANCE_PURPOSE: [], SETTLEMENT_METHOD: [], BANK_ACCOUNT: [],
 };
 
 /**
@@ -49,13 +56,18 @@ export class LookupsService implements OnApplicationBootstrap {
       ...(have.has('PAY_METHOD') ? [] : PAYMENT_METHODS.map((code, i) => this.repo.create({ list: 'PAY_METHOD', code, sortOrder: i }))),
       ...(have.has('INCOTERM') ? [] : INCOTERM_DEFAULTS.map((t, i) => this.repo.create({ list: 'INCOTERM', code: t.code, description: t.description, flags: t.flags, sortOrder: i }))),
       ...(have.has('CAPITAL_SOURCE') ? [] : CAPITAL_SOURCE_DEFAULTS.map((c, i) => this.repo.create({
-        list: 'CAPITAL_SOURCE', code: c.code, description: c.description, flags: { liability: c.liability }, active: c.active, sortOrder: i,
+        list: 'CAPITAL_SOURCE', code: c.code, description: c.description, flags: { liability: c.liability, advance: c.advance }, active: c.active, sortOrder: i,
       }))),
       ...(have.has('STREAM_TYPE') ? [] : STREAM_TYPE_DEFAULTS.map((t, i) => this.repo.create({
         list: 'STREAM_TYPE', code: t.code, description: t.description, flags: { depreciable: t.depreciable }, sortOrder: i,
       }))),
+      ...SIMPLE_LISTS.flatMap((list) => (have.has(list) ? [] : SIMPLE_LIST_DEFAULTS[list].map((code, i) => this.repo.create({ list, code, sortOrder: i })))),
     ];
     if (rows.length) await this.repo.save(rows);
+    // capital sources made before the "advance" switch existed: the Partner Advance default is an advance
+    const olds = (await this.repo.find({ where: { list: 'CAPITAL_SOURCE' } })).filter((r) => r.flags?.['advance'] === undefined);
+    for (const r of olds) r.flags = { ...r.flags, advance: r.code === 'Partner Advance' };
+    if (olds.length) await this.repo.save(olds);
   }
 
   list(list?: string) {
@@ -106,6 +118,13 @@ export class LookupsService implements OnApplicationBootstrap {
   async isLiability(em: EntityManager, code: string): Promise<boolean> {
     const row = await em.getRepository(Lookup).findOne({ where: { list: 'CAPITAL_SOURCE', code } });
     return !!row?.flags?.['liability'];
+  }
+
+  /** the kind of a capital source: equity, a loan, or an advance */
+  async fundingKind(em: EntityManager, code: string): Promise<'equity' | 'loan' | 'advance'> {
+    const row = await em.getRepository(Lookup).findOne({ where: { list: 'CAPITAL_SOURCE', code } });
+    if (!row?.flags?.['liability']) return 'equity';
+    return row.flags['advance'] ? 'advance' : 'loan';
   }
 
   /** true when the stream type loses value over time and so carries a depreciation rate */

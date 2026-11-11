@@ -12,11 +12,12 @@ import { LookupsService } from '../setup/lookups.service';
 import { Currency, Lookup } from '../setup/setup.entities';
 import { SettingsService } from '../setup/setup.service';
 import {
-  CapitalLineDto, ChequeDto, CreateAccountingDto, CreateCapitalDto, CreateFinanceDto, SettleDto, UpdateAccountingDto,
-  UpdateFinanceDto,
+  CapitalLineDto, ChequeDto, CreateAccountingDto, CreateCapitalDto, CreateFinanceDto, RepaymentDto, SettleDto,
+  UpdateAccountingDto, UpdateFinanceDto,
 } from './finance.dto';
 import {
-  AccountingDocument, AccountingSettlement, Approval, ChequeStatus, FinanceEntry, FinanceEntryStream, InvestorType,
+  AccountingDocument, AccountingSettlement, Approval, ChequeStatus, FinanceEntry, FinanceEntryStream, FundingRepayment,
+  InvestorType,
 } from './finance.entities';
 
 const today = () => new Date().toISOString().slice(0, 10);
@@ -49,13 +50,33 @@ export class FinanceService {
     const files = await this.files.metasOf(rows.flatMap((r) => [r.proofId, r.agreementId]).filter((x): x is string => !!x));
     const groups = [...new Set(rows.map((r) => r.groupId).filter((x): x is string => !!x))];
     const mates = groups.length ? await em.find(FinanceEntry, { where: { groupId: In(groups) }, order: { refNo: 'ASC' } }) : [];
+    // loans and advances: what has been paid back so far, and what is spent against their streams
+    const capitalIds = rows.filter((r) => r.type === 'Capital Injection').map((r) => r.id);
+    const paid: { entryId: string; kind: string; total: number }[] = capitalIds.length
+      ? await em.query(`SELECT "entryId", kind, SUM(amount)::float8 AS total FROM funding_repayments WHERE "entryId" = ANY($1) GROUP BY 1, 2`, [capitalIds])
+      : [];
+    const used: { fundedById: string; total: number }[] = capitalIds.length
+      ? await em.query(`SELECT "fundedById", SUM(amount)::float8 AS total FROM finance_entries WHERE "fundedById" = ANY($1) GROUP BY 1`, [capitalIds])
+      : [];
+    const liabilities = new Set((await em.find(Lookup, { where: { list: 'CAPITAL_SOURCE' } })).filter((l) => l.flags?.['liability']).map((l) => l.code));
     return Promise.all(rows.map(async (f) => {
       const st = await this.posting.financeState(em, f);
+      const cleared = f.type !== 'Capital Injection' || f.chequeStatus === '' || f.chequeStatus === 'Cleared';
+      const liability = f.type === 'Capital Injection' && liabilities.has(f.funding);
+      const repaid = round2(paid.filter((p) => p.entryId === f.id && p.kind === 'principal').reduce((n, p) => n + p.total, 0));
       return {
         ...f,
         signatures: st.signed, requiredSignatures: st.required, needsApproval: st.needs, approved: st.approved,
         /** capital only: the money is in the bank (not a cheque that is still waiting, or bounced) */
-        cleared: f.type !== 'Capital Injection' || f.chequeStatus === '' || f.chequeStatus === 'Cleared',
+        cleared,
+        /** capital only: a loan or an advance (money to pay back, or to get back for an advance paid out) */
+        liability,
+        /** loans and advances: principal paid back so far, markup paid, and what is still open */
+        repaid,
+        markupPaid: round2(paid.filter((p) => p.entryId === f.id && p.kind === 'markup').reduce((n, p) => n + p.total, 0)),
+        outstanding: liability && cleared ? Math.max(0, round2(Number(f.amount) - repaid)) : 0,
+        /** spent against this funding's streams (spend entries tagged "funded from" it) */
+        usedAmount: round2(used.find((u) => u.fundedById === f.id)?.total ?? 0),
         streams: shares.filter((x) => x.entryId === f.id).map((x) => ({ stream: x.stream, amount: x.amount, pct: x.pct })),
         proof: (f.proofId && files.get(f.proofId)) || null,
         agreement: (f.agreementId && files.get(f.agreementId)) || null,
@@ -96,6 +117,36 @@ export class FinanceService {
     const row = type === 'Manufacturer' ? await em.findOne(Manufacturer, { where: { id } }) : await em.findOne(Distributor, { where: { id } });
     if (!row) throw new BadRequestException(`This ${type.toLowerCase()} does not exist. Choose an account from the list.`);
     return row.name;
+  }
+
+  /**
+   * The loan or advance terms of an injection. Equity has none; a loan has tenure, repayment plan, frequency and
+   * markup; an advance has a direction, purpose, settlement method and a linked reference. The options are Settings lists.
+   */
+  private async terms(em: EntityManager, dto: CreateCapitalDto, funding: string) {
+    const kind = await this.lookups.fundingKind(em, funding);
+    const blank = { direction: 'in' as 'in' | 'out', tenure: '', repaymentPlan: '', repaymentFrequency: '', markupPct: 0, purpose: '', settlementMethod: '', linkedReference: '', bankAccount: '' };
+    const pick = async (list: 'LOAN_TENURE' | 'REPAY_PLAN' | 'REPAY_FREQUENCY' | 'ADVANCE_PURPOSE' | 'SETTLEMENT_METHOD' | 'BANK_ACCOUNT', v?: string) => {
+      const s = (v ?? '').trim();
+      if (s) await this.lookups.assertActive(list, s, em);
+      return s;
+    };
+    const t = { ...blank, bankAccount: await pick('BANK_ACCOUNT', dto.bankAccount) };
+    if (kind === 'loan') {
+      t.tenure = await pick('LOAN_TENURE', dto.tenure);
+      t.repaymentPlan = await pick('REPAY_PLAN', dto.repaymentPlan);
+      t.repaymentFrequency = await pick('REPAY_FREQUENCY', dto.repaymentFrequency);
+      t.markupPct = round2(dto.markupPct ?? 0);
+    }
+    if (kind === 'advance') {
+      t.purpose = await pick('ADVANCE_PURPOSE', dto.purpose);
+      t.settlementMethod = await pick('SETTLEMENT_METHOD', dto.settlementMethod);
+      t.linkedReference = (dto.linkedReference ?? '').trim();
+      t.direction = dto.direction ?? 'in';
+    } else if (dto.direction === 'out') {
+      throw new BadRequestException('Only an advance can be paid out to a partner.');
+    }
+    return t;
   }
 
   /** checks one investor line and works out its stream split */
@@ -162,6 +213,7 @@ export class FinanceService {
       // the type of funding is one choice for the whole injection
       const funding = dto.funding ?? 'Equity';
       await this.lookups.assertActive('CAPITAL_SOURCE', funding, em);
+      const terms = await this.terms(em, dto, funding);
       const accounts = new Set<string>();
       const attached = new Set<string>(); // one agreement can serve every investor
       const ids: string[] = [];
@@ -171,7 +223,7 @@ export class FinanceService {
         accounts.add(key);
         const { entry, streams } = await this.capitalLine(em, line, funding);
         const refNo = await nextRef(em, FinanceEntry, prefix, 3);
-        const f = await em.save(em.create(FinanceEntry, { ...entry, refNo, type: 'Capital Injection', groupId, note }));
+        const f = await em.save(em.create(FinanceEntry, { ...entry, ...terms, refNo, type: 'Capital Injection', groupId, note }));
         await em.save(streams.map((x) => em.create(FinanceEntryStream, { ...x, entryId: f.id })));
         for (const fileId of [entry.proofId, entry.agreementId]) {
           if (!fileId || attached.has(fileId)) continue;
@@ -207,9 +259,87 @@ export class FinanceService {
     });
   }
 
+  /** a spend that says which funding it is paid from must fit what is left of that funding on its stream */
+  private async checkFunded(em: EntityManager, f: { type: string; category: string; amount: number; fundedById?: string | null }, selfId?: string) {
+    if (!f.fundedById) return;
+    if (f.type !== 'Operating Expense' && f.type !== 'Asset Purchase') throw new BadRequestException('Only a spend can be paid from a funding.');
+    const cap = await em.findOne(FinanceEntry, { where: { id: f.fundedById } });
+    if (!cap || cap.type !== 'Capital Injection') throw new BadRequestException('Choose a capital injection to pay this from.');
+    if (cap.direction === 'out') throw new BadRequestException('An advance paid out to a partner has no money to spend.');
+    if (cap.chequeStatus === 'Pending' || cap.chequeStatus === 'Bounced') throw new BadRequestException(`${cap.refNo} is not in the bank yet.`);
+    const alloc = await em.findOne(FinanceEntryStream, { where: { entryId: cap.id, stream: f.category } });
+    if (!alloc) throw new BadRequestException(`${cap.refNo} has nothing set aside for ${f.category}.`);
+    const [{ spent }] = await em.query(
+      `SELECT COALESCE(SUM(amount), 0)::float8 AS spent FROM finance_entries WHERE "fundedById" = $1 AND category = $2 AND ($3::uuid IS NULL OR id <> $3)`,
+      [cap.id, f.category, selfId ?? null],
+    );
+    const left = round2(Number(alloc.amount) - Number(spent));
+    if (Number(f.amount) > left + 0.005) throw new BadRequestException(`${cap.refNo} has only PKR ${left} left for ${f.category}.`);
+  }
+
+  /** what a loan or advance looks like now: terms, repayments, what is spent per stream and what is left */
+  async position(id: string, em: EntityManager = this.db.manager) {
+    const f = await em.findOne(FinanceEntry, { where: { id } });
+    if (!f) throw new NotFoundException('Entry not found');
+    if (f.type !== 'Capital Injection') throw new BadRequestException('Only capital has a position.');
+    const [entry] = await this.decorate(em, [f]);
+    const repayments = await em.find(FundingRepayment, { where: { entryId: id }, order: { date: 'ASC', refNo: 'ASC' } });
+    const files = await this.files.metasOf(repayments.map((r) => r.proofId).filter((x): x is string => !!x));
+    const alloc = await em.find(FinanceEntryStream, { where: { entryId: id }, order: { amount: 'DESC' } });
+    const spends = await this.decorate(em, await em.find(FinanceEntry, { where: { fundedById: id }, order: { date: 'DESC', refNo: 'DESC' } }));
+    const streams = alloc.map((a) => {
+      const spent = round2(spends.filter((s) => s.category === a.stream).reduce((n, s) => n + Number(s.amount), 0));
+      return { stream: a.stream, allocated: Number(a.amount), pct: Number(a.pct), spent, available: Math.max(0, round2(Number(a.amount) - spent)) };
+    });
+    // simple (not compounded) markup from the day the money arrived to the due date; informational only
+    const from = f.chequeStatus === 'Cleared' ? f.clearanceDate ?? f.date : f.date;
+    const days = f.expectedReturnDate ? Math.max(0, Math.round((Date.parse(f.expectedReturnDate) - Date.parse(from)) / 86400000)) : 0;
+    return {
+      entry,
+      repayments: repayments.map((r) => ({ ...r, proof: (r.proofId && files.get(r.proofId)) || null })),
+      streams,
+      spends,
+      unallocated: Math.max(0, round2(Number(f.amount) - alloc.reduce((n, a) => n + Number(a.amount), 0))),
+      projectedMarkup: round2((Number(f.amount) * Number(f.markupPct) * days) / 36500),
+    };
+  }
+
+  /** a repayment of a loan or advance, or the markup paid on it: cash moves against the investor's own account */
+  repay(id: string, dto: RepaymentDto) {
+    return this.db.transaction(async (em) => {
+      const f = await em.findOne(FinanceEntry, { where: { id } });
+      if (!f) throw new NotFoundException('Entry not found');
+      if (f.type !== 'Capital Injection' || !(await this.lookups.isLiability(em, f.funding))) {
+        throw new BadRequestException('Only a loan or an advance can be repaid. Equity stays in the business.');
+      }
+      if (f.chequeStatus === 'Pending' || f.chequeStatus === 'Bounced') throw new BadRequestException('The money has not reached the bank yet.');
+      const since = f.chequeStatus === 'Cleared' ? f.clearanceDate ?? f.date : f.date;
+      if (dto.date < since) throw new BadRequestException('A repayment cannot be dated before the money arrived.');
+      if (dto.date > today()) throw new BadRequestException('A repayment cannot be in the future. Record it when it is paid.');
+      const method = (dto.method ?? '').trim();
+      if (method) await this.lookups.assertActive('PAY_METHOD', method, em);
+      const amount = round2(dto.amount);
+      if (dto.kind === 'principal') {
+        const [{ paid }] = await em.query(`SELECT COALESCE(SUM(amount), 0)::float8 AS paid FROM funding_repayments WHERE "entryId" = $1 AND kind = 'principal'`, [id]);
+        const open = round2(Number(f.amount) - Number(paid));
+        if (amount > open + 0.005) throw new BadRequestException(`PKR ${amount} is more than the PKR ${open} still outstanding.`);
+      }
+      const s = await this.settings.get(em);
+      const refNo = await nextRef(em, FundingRepayment, s.docPrefixes['repayment'] ?? 'RPY', 3);
+      const r = await em.save(em.create(FundingRepayment, {
+        refNo, entryId: id, date: dto.date, amount, kind: dto.kind, method, reference: (dto.reference ?? '').trim(),
+        note: dto.note?.trim() || null, proofId: dto.proofId ?? null,
+      }));
+      if (dto.proofId) await this.files.attach(dto.proofId, 'REPAYMENT', r.id, em);
+      await this.posting.syncRepayment(em, r.id);
+      return this.position(id, em);
+    });
+  }
+
   create(dto: CreateFinanceDto, opts: { refNo?: string } = {}) {
     return this.db.transaction(async (em) => {
       await this.checkCategory(em, dto.category);
+      await this.checkFunded(em, dto);
       if (dto.type === 'Capital Injection') await this.lookups.assertActive('CAPITAL_SOURCE', dto.funding ?? 'Equity', em);
       const s = await this.settings.get(em);
       const refNo = opts.refNo ?? (await nextRef(em, FinanceEntry, s.docPrefixes['finance'] ?? 'FIN', 3));
@@ -228,6 +358,7 @@ export class FinanceService {
       const st = await this.posting.financeState(em, f);
       if (st.approved) throw new BadRequestException('Posted finance entries are locked to keep the cash trail.');
       if (dto.category) await this.checkCategory(em, dto.category);
+      await this.checkFunded(em, { ...f, ...dto }, id);
       await em.save(em.merge(FinanceEntry, f, dto));
       await em.delete(Approval, { docType: 'FINANCE', docId: id }); // editing starts the approval again
       await this.posting.syncFinance(em, id);

@@ -76,12 +76,25 @@ export const STARTER_ACCOUNTS: [string, string, AccountType][] = [
  * Starting capital sources. Equity is owner money; a loan or an advance is money to pay back (a liability).
  * "Partner Loan" is the older name: kept switched off so earlier entries stay valid. Editable on Settings & Data.
  */
-export const CAPITAL_SOURCE_DEFAULTS: { code: string; description: string; liability: boolean; active: boolean }[] = [
-  { code: 'Equity', description: 'Owner or shareholder capital', liability: false, active: true },
-  { code: 'Shareholder Loan', description: 'A shareholder lends money to the company', liability: true, active: true },
-  { code: 'Partner Advance', description: 'A partner advances money', liability: true, active: true },
-  { code: 'Partner Loan', description: 'Earlier name, kept for existing entries', liability: true, active: false },
+export const CAPITAL_SOURCE_DEFAULTS: { code: string; description: string; liability: boolean; advance: boolean; active: boolean }[] = [
+  { code: 'Equity', description: 'Owner or shareholder capital', liability: false, advance: false, active: true },
+  { code: 'Shareholder Loan', description: 'A shareholder lends money to the company', liability: true, advance: false, active: true },
+  { code: 'Partner Advance', description: 'A partner advances money', liability: true, advance: true, active: true },
+  { code: 'Partner Loan', description: 'Earlier name, kept for existing entries', liability: true, advance: false, active: false },
 ];
+
+/**
+ * Starting entries of the simple pick-lists behind the loan and advance forms (the client prototype's choices),
+ * plus the company's bank and cash accounts. Every one is editable on Settings & Data.
+ */
+export const SIMPLE_LIST_DEFAULTS: Record<'LOAN_TENURE' | 'REPAY_PLAN' | 'REPAY_FREQUENCY' | 'ADVANCE_PURPOSE' | 'SETTLEMENT_METHOD' | 'BANK_ACCOUNT', string[]> = {
+  LOAN_TENURE: ['Short-term (up to 12 months)', 'Long-term (over 12 months)', 'On demand'],
+  REPAY_PLAN: ['Lump sum', 'Installments', 'On demand'],
+  REPAY_FREQUENCY: ['Monthly', 'Quarterly', 'Half-yearly', 'Custom'],
+  ADVANCE_PURPOSE: ['Operational funding', 'Procurement', 'Expense float', 'Marketing / promotion', 'Distribution', 'Other'],
+  SETTLEMENT_METHOD: ['Cash repayment', 'Expense adjustment', 'Invoice settlement', 'Mixed / partial'],
+  BANK_ACCOUNT: ['Zen Foods Bank Account', 'Cash in Hand', 'Manufacturing Account', 'Distribution Account'],
+};
 
 /** Starting types of investment stream. A depreciable type carries a depreciation rate. Editable on Settings & Data. */
 export const STREAM_TYPE_DEFAULTS: { code: string; description: string; depreciable: boolean }[] = [

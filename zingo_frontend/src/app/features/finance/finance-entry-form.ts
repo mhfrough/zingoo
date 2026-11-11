@@ -5,7 +5,7 @@ import { fmtMoney } from '../../shared/format';
 import { Btn, Field, Offcanvas, MoneyInput } from '../../ui';
 import { FormModal } from '../ops/form-modal';
 import { FinanceApi } from './finance.api';
-import { FinanceEntry, FinanceType } from './models';
+import { FinanceEntry, FinanceType, FundingRoom } from './models';
 
 const today = () => new Date().toISOString().slice(0, 10);
 
@@ -48,6 +48,16 @@ const TYPES: FinanceType[] = ['Operating Expense', 'Asset Purchase', 'Other Rece
         <app-field label="Amount" [required]="true" [error]="invalid('amount') ? 'Enter an amount above zero' : null">
           <app-money-input formControlName="amount" />
         </app-field>
+        @if (needsApproval()) {
+          <app-field label="Paid from funding" [wide]="true" [hint]="roomText()">
+            <select formControlName="fundedById">
+              <option value="">Not tied to a funding</option>
+              @for (f of roomOptions(); track f.id) {
+                <option [value]="f.id">{{ f.label }} · {{ money(f.left[category()] ?? 0) }} left</option>
+              }
+            </select>
+          </app-field>
+        }
         <app-field label="Date" [required]="true"><input type="date" formControlName="date" /></app-field>
         <app-field label="Vendor / party" [wide]="true">
           <input type="text" formControlName="party" placeholder="Name" />
@@ -69,6 +79,8 @@ export class FinanceEntryForm extends FormModal {
   readonly streams = input<string[]>([]);
   /** amount from which two signatures are needed (shown in the hint) */
   readonly threshold = input(50000);
+  /** the fundings (capital that is in the bank) a spend can be paid from, with what is left per stream */
+  readonly fundings = input<FundingRoom[]>([]);
   readonly formId = 'form-finance-entry';
   protected types = TYPES;
   protected money = fmtMoney;
@@ -81,22 +93,29 @@ export class FinanceEntryForm extends FormModal {
     date: [today(), Validators.required],
     party: [''],
     funding: ['Equity'],
+    fundedById: [''],
     note: [''],
   });
 
   private type = toSignal(this.form.controls.type.valueChanges, { initialValue: this.form.controls.type.value });
+  protected category = toSignal(this.form.controls.category.valueChanges, { initialValue: this.form.controls.category.value });
+  private chosen = toSignal(this.form.controls.fundedById.valueChanges, { initialValue: '' });
   protected needsApproval = computed(() => this.type() === 'Operating Expense' || this.type() === 'Asset Purchase');
+  /** the fundings that still have room on the chosen stream (the one already chosen stays listed) */
+  protected roomOptions = computed(() => this.fundings().filter((f) => (f.left[this.category()] ?? 0) > 0 || f.id === this.chosen()));
+  protected roomText = computed(() =>
+    this.roomOptions().length ? 'Optional. Uses up what that funding set aside for this stream' : 'No funding has room left on this stream');
 
   protected reset() {
     const e = this.entry();
     this.form.reset(e
-      ? { type: e.type, category: e.category, amount: Number(e.amount), date: e.date, party: e.party, funding: e.funding || 'Equity', note: e.note ?? '' }
-      : { type: 'Operating Expense', category: this.streams()[0] ?? 'Marketing', amount: 0, date: today(), party: '', funding: 'Equity', note: '' });
+      ? { type: e.type, category: e.category, amount: Number(e.amount), date: e.date, party: e.party, funding: e.funding || 'Equity', fundedById: e.fundedById ?? '', note: e.note ?? '' }
+      : { type: 'Operating Expense', category: this.streams()[0] ?? 'Marketing', amount: 0, date: today(), party: '', funding: 'Equity', fundedById: '', note: '' });
   }
 
   protected request() {
-    const v = this.form.getRawValue();
-    return this.fin.saveEntry(this.entry()?.id ?? null, { ...v, funding: '' });
+    const { fundedById, ...v } = this.form.getRawValue();
+    return this.fin.saveEntry(this.entry()?.id ?? null, { ...v, funding: '', fundedById: this.needsApproval() && fundedById ? fundedById : null });
   }
 
   protected successMessage() {

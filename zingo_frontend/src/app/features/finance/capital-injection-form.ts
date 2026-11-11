@@ -278,7 +278,7 @@ type StreamForm = ReturnType<typeof streamGroup>;
                 }
               </div>
               <div class="form-grid">
-                <app-field label="Investor account" [required]="true" [error]="bad(inv, 'account') ? 'Choose the account' : null"
+                <app-field [label]="paidOut() ? 'Partner account' : 'Investor account'" [required]="true" [error]="bad(inv, 'account') ? 'Choose the account' : null"
                            [hint]="accounts().length ? '' : 'No accounts yet. Add people in Settings & Data'">
                   <select formControlName="account">
                     <option value="">Choose an account</option>
@@ -359,6 +359,7 @@ type StreamForm = ReturnType<typeof streamGroup>;
                   }
                   <div class="add-row">
                     <button appBtn type="button" size="sm" icon="plus" (click)="addStream(inv)">Add a stream</button>
+                    <button appBtn type="button" size="sm" [disabled]="!streamGap(inv)" (click)="fillRemainder(inv)">Allocate remainder</button>
                   </div>
                 </div>
 
@@ -395,6 +396,72 @@ type StreamForm = ReturnType<typeof streamGroup>;
           <span class="sum sum--line">Total {{ money(summary().allocated) }}</span>
         }
 
+        <h4 class="investor__section">{{ kind() === 'loan' ? 'Loan terms' : kind() === 'advance' ? 'Advance terms' : 'Bank account' }}</h4>
+        @if (kind() === 'loan') {
+          <app-field label="Loan tenure">
+            <select formControlName="tenure">
+              <option value="">Choose</option>
+              @for (t of tenures(); track t) {
+                <option [value]="t">{{ t }}</option>
+              }
+            </select>
+          </app-field>
+          <app-field label="Repayment plan">
+            <select formControlName="repaymentPlan">
+              <option value="">Choose</option>
+              @for (t of plans(); track t) {
+                <option [value]="t">{{ t }}</option>
+              }
+            </select>
+          </app-field>
+          @if (showFrequency()) {
+            <app-field label="Repayment frequency">
+              <select formControlName="repaymentFrequency">
+                <option value="">Choose</option>
+                @for (t of frequencies(); track t) {
+                  <option [value]="t">{{ t }}</option>
+                }
+              </select>
+            </app-field>
+          }
+          <app-field label="Annual markup %" hint="0 for an interest-free loan. Markup is booked when it is paid">
+            <app-money-input formControlName="markupPct" currency="" [decimals]="2" [max]="100" />
+          </app-field>
+        }
+        @if (kind() === 'advance') {
+          <app-field label="Advance direction" [required]="true">
+            <select formControlName="direction">
+              <option value="in">Partner → Zen Foods</option>
+              <option value="out">Zen Foods → Partner</option>
+            </select>
+          </app-field>
+          <app-field label="Advance purpose">
+            <select formControlName="purpose">
+              <option value="">Choose</option>
+              @for (t of purposes(); track t) {
+                <option [value]="t">{{ t }}</option>
+              }
+            </select>
+          </app-field>
+          <app-field label="Settlement method">
+            <select formControlName="settlementMethod">
+              <option value="">Choose</option>
+              @for (t of settlements(); track t) {
+                <option [value]="t">{{ t }}</option>
+              }
+            </select>
+          </app-field>
+          <app-field label="Linked invoice / PO" hint="Optional"><input type="text" formControlName="linkedReference" placeholder="Invoice, PO or activity" /></app-field>
+        }
+        <app-field [label]="paidOut() ? 'Paying account' : 'Receiving account'" hint="Which bank or cash account. From Settings">
+          <select formControlName="bankAccount">
+            <option value="">Choose</option>
+            @for (t of bankAccounts(); track t) {
+              <option [value]="t">{{ t }}</option>
+            }
+          </select>
+        </app-field>
+
         <app-field label="Terms" [wide]="true"><textarea formControlName="note" placeholder="Optional. Return, profit share, repayment"></textarea></app-field>
         <app-field label="Agreement" [wide]="true" hint="Optional. One agreement serves every investor">
           <app-file-input formControlName="agreement" label="Upload agreement" />
@@ -427,10 +494,30 @@ export class CapitalInjectionForm extends FormModal {
   private fin = inject(FinanceApi);
   private nfb = this.fb.nonNullable;
 
+  // the choices of the loan and advance terms come from Settings
+  protected tenures = this.store.loanTenures;
+  protected plans = this.store.repayPlans;
+  protected frequencies = this.store.repayFrequencies;
+  protected purposes = this.store.advancePurposes;
+  protected settlements = this.store.settlementMethods;
+  protected bankAccounts = this.store.bankAccounts;
+
   readonly form = this.nfb.group({
     funding: ['Equity'],
     mode: ['solo' as 'solo' | 'shared'],
     total: [0],
+    // loan terms
+    tenure: [''],
+    repaymentPlan: [''],
+    repaymentFrequency: [''],
+    markupPct: [0],
+    // advance terms
+    direction: ['in' as 'in' | 'out'],
+    purpose: [''],
+    settlementMethod: [''],
+    linkedReference: [''],
+    // every type
+    bankAccount: [''],
     note: [''],
     agreement: [null as AttachmentMeta | null],
     investors: this.nfb.array<InvestorForm>([]),
@@ -442,8 +529,17 @@ export class CapitalInjectionForm extends FormModal {
 
   private value = toSignal(this.form.valueChanges, { initialValue: this.form.getRawValue() });
   protected shared = computed(() => this.value().mode === 'shared');
+  /** equity, a loan, or an advance: what the chosen type of funding is (from its switches in Settings) */
+  protected kind = computed<'equity' | 'loan' | 'advance'>(() => {
+    const s = this.fundingTypes().find((x) => x.code === this.value().funding);
+    return !s?.flags['liability'] ? 'equity' : s.flags['advance'] ? 'advance' : 'loan';
+  });
   /** a loan or an advance is money to pay back: its date is a repayment date, not an expected return */
-  protected isLoan = computed(() => !!this.fundingTypes().find((s) => s.code === this.value().funding)?.flags['liability']);
+  protected isLoan = computed(() => this.kind() !== 'equity');
+  /** an advance the company pays out to a partner */
+  protected paidOut = computed(() => this.kind() === 'advance' && this.value().direction === 'out');
+  /** a loan repaid in installments has a frequency */
+  protected showFrequency = computed(() => /install/i.test(this.value().repaymentPlan ?? ''));
   protected summary = computed(() => {
     const v = this.value();
     const allocated = round2((v.investors ?? []).reduce((n, i) => n + (Number(i?.amount) || 0), 0));
@@ -458,7 +554,12 @@ export class CapitalInjectionForm extends FormModal {
 
   protected reset() {
     const codes = this.fundingTypes().map((s) => s.code);
-    this.form.reset({ funding: codes.includes('Equity') ? 'Equity' : codes[0] ?? 'Equity', mode: 'solo', total: 0, note: '', agreement: null });
+    this.form.reset({
+      funding: codes.includes('Equity') ? 'Equity' : codes[0] ?? 'Equity', mode: 'solo', total: 0,
+      tenure: '', repaymentPlan: '', repaymentFrequency: '', markupPct: 0,
+      direction: 'in', purpose: '', settlementMethod: '', linkedReference: '', bankAccount: '',
+      note: '', agreement: null,
+    });
     this.investors.clear();
     this.addInvestor();
   }
@@ -577,6 +678,17 @@ export class CapitalInjectionForm extends FormModal {
     return Math.abs(gap) > SLACK ? gap : 0;
   }
 
+  /** put what is left (or take what is too much) on the last stream line, so the streams add up to the amount */
+  protected fillRemainder(inv: InvestorForm) {
+    const gap = this.streamGap(inv);
+    const rows = inv.controls.streams.controls;
+    if (!gap || !rows.length) return;
+    const last = rows[rows.length - 1];
+    last.controls.amount.setValue(Math.max(0, round2((Number(last.controls.amount.value) || 0) + gap)));
+    this.onStreamAmount(inv, last);
+    this.form.markAsDirty();
+  }
+
   /** a stream amount never goes over the investor's amount (no cap while that is still empty) */
   protected amountMax(inv: InvestorForm): number | null {
     const base = Number(inv.controls.amount.value) || 0;
@@ -641,8 +753,18 @@ export class CapitalInjectionForm extends FormModal {
 
   protected request() {
     const v = this.form.getRawValue();
+    const kind = this.kind();
+    // only the terms of the chosen type are sent: equity has none, a loan has loan terms, an advance has advance terms
+    const terms =
+      kind === 'loan'
+        ? { tenure: v.tenure, repaymentPlan: v.repaymentPlan, repaymentFrequency: this.showFrequency() ? v.repaymentFrequency : '', markupPct: Number(v.markupPct) || 0 }
+        : kind === 'advance'
+          ? { direction: v.direction, purpose: v.purpose, settlementMethod: v.settlementMethod, linkedReference: v.linkedReference.trim() }
+          : {};
     return this.fin.saveCapital({
       funding: v.funding,
+      ...terms,
+      bankAccount: v.bankAccount,
       note: v.note.trim() || undefined,
       investors: v.investors.map((i) => {
         const cheque = isChequeMethod(i.paymentSource);

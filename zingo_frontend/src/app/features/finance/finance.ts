@@ -14,7 +14,9 @@ import { CapitalTargetForm } from './capital-target-form';
 import { CostCenterForm } from './cost-center-form';
 import { FinanceApi } from './finance.api';
 import { FinanceEntryForm } from './finance-entry-form';
-import { Budget, FinanceEntry } from './models';
+import { FundingPositionView } from './funding-position';
+import { Budget, FinanceEntry, FundingRoom } from './models';
+import { RepaymentForm } from './repayment-form';
 
 const today = () => new Date().toISOString().slice(0, 10);
 
@@ -51,6 +53,7 @@ const TYPE_TONE: Record<string, Tone> = {
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [
     Btn, DataTable, Kpi, PageHeader, Tag, FinanceEntryForm, BudgetForm, CostCenterForm, CapitalTargetForm, CapitalInjectionForm,
+    FundingPositionView, RepaymentForm,
   ],
   templateUrl: './finance.html',
   styleUrl: './finance.css',
@@ -64,6 +67,8 @@ export class Finance {
   protected auth = inject(AuthService);
 
   private tick = signal(0);
+  /** changes on every reload, so an open position drawer reads its data again */
+  protected version = this.tick.asReadonly();
   protected entries = rxResource({ params: () => this.tick(), stream: () => this.fin.entries() });
   protected budgets = rxResource({ params: () => this.tick(), stream: () => this.fin.budgets() });
   /** the accounts a capital injection can come from: people, manufacturers and distributors */
@@ -91,7 +96,36 @@ export class Finance {
   // ───────────── numbers ─────────────
   protected all = computed(() => this.entries.value() ?? []);
   protected pending = computed(() => this.all().filter((e) => e.needsApproval && !e.approved));
-  private capitalEntries = computed(() => this.all().filter((e) => e.type === 'Capital Injection'));
+  /** money put in by investors (an advance the company paid out to a partner is not capital) */
+  private capitalEntries = computed(() => this.all().filter((e) => e.type === 'Capital Injection' && e.direction !== 'out'));
+
+  /** loans and advances whose money is in the bank (or paid out): what is owed, repaid and used */
+  protected loans = computed(() => this.all().filter((e) => e.type === 'Capital Injection' && e.liability && e.cleared));
+  protected loanSummary = computed(() => {
+    const sum = (rows: FinanceEntry[], f: (e: FinanceEntry) => number) => rows.reduce((n, e) => n + f(e), 0);
+    const received = this.loans().filter((e) => e.direction !== 'out');
+    const paidOut = this.loans().filter((e) => e.direction === 'out');
+    return {
+      funded: sum(received, (e) => Number(e.amount)), repaid: sum(received, (e) => e.repaid), outstanding: sum(received, (e) => e.outstanding),
+      lent: sum(paidOut, (e) => Number(e.amount)), receivable: sum(paidOut, (e) => e.outstanding), used: sum(this.loans(), (e) => e.usedAmount),
+    };
+  });
+
+  /** the fundings a spend can be paid from: capital in the bank, with what is left on each stream */
+  protected fundingRooms = computed<FundingRoom[]>(() => {
+    const all = this.all();
+    const editing = this.editingEntry()?.id;
+    return all
+      .filter((e) => e.type === 'Capital Injection' && e.direction !== 'out' && e.cleared && e.streams.length)
+      .map((e) => ({
+        id: e.id,
+        label: `${e.refNo} · ${e.party} · ${e.funding || 'Equity'}`,
+        left: Object.fromEntries(e.streams.map((s) => [
+          s.stream,
+          Math.round((Number(s.amount) - all.filter((x) => x.fundedById === e.id && x.category === s.stream && x.id !== editing).reduce((n, x) => n + Number(x.amount), 0)) * 100) / 100,
+        ])),
+      }));
+  });
   /** capital that is really in the bank: a cheque still waiting, or bounced, does not count */
   protected capital = computed(() =>
     this.capitalEntries().filter((e) => e.cleared).reduce((n, e) => n + Number(e.amount), 0));
@@ -228,6 +262,53 @@ export class Finance {
       sub: (e) => (e.clearanceDate && e.clearanceDate < today() ? 'Past due. Check with the bank' : null),
     },
   ];
+
+  private loanStatus(e: FinanceEntry) {
+    if (e.outstanding < 0.005) return 'Settled';
+    if (e.expectedReturnDate && e.expectedReturnDate < today()) return 'Overdue';
+    return e.repaid > 0 ? 'Part repaid' : 'Open';
+  }
+
+  protected loanColumns: TableColumn<FinanceEntry>[] = [
+    { id: 'ref', label: 'Reference', value: (e) => e.refNo, sub: (e) => fmtDate(e.date) },
+    { id: 'party', label: 'Account', value: (e) => e.party, sub: (e) => `${e.funding}${e.direction === 'out' ? ' paid out' : ''}` },
+    { id: 'amount', label: 'Funding (PKR)', kind: 'money', value: (e) => e.amount },
+    { id: 'repaid', label: 'Repaid (PKR)', kind: 'money', value: (e) => e.repaid, priority: 2 },
+    { id: 'open', label: 'Outstanding (PKR)', kind: 'money', value: (e) => e.outstanding },
+    { id: 'due', label: 'Due', kind: 'date', value: (e) => e.expectedReturnDate, priority: 3 },
+    {
+      id: 'status', label: 'Status', kind: 'tag', value: (e) => this.loanStatus(e), priority: 2,
+      tone: (e): Tone => ({ Settled: 'success', Overdue: 'danger', 'Part repaid': 'info', Open: 'warning' } as Record<string, Tone>)[this.loanStatus(e)] ?? 'neutral',
+    },
+  ];
+
+  protected loanActions = (e: FinanceEntry): RowAction[] => [
+    { id: 'position', label: 'Position' },
+    ...(this.canWrite() ? [{ id: 'repay', label: 'Record payment', tone: 'success' } as RowAction] : []),
+    ...(e.agreement ? [{ id: 'agreement', label: 'Agreement', icon: 'download' } as RowAction] : []),
+  ];
+
+  // loan position drawer and repayment form
+  protected positionOpen = signal(false);
+  protected positionId = signal<string | null>(null);
+  protected repayOpen = signal(false);
+  protected repayEntry = signal<FinanceEntry | null>(null);
+
+  protected onLoanAction(e: RowActionEvent<FinanceEntry>) {
+    if (e.id === 'position') {
+      this.positionId.set(e.row.id);
+      this.positionOpen.set(true);
+    } else if (e.id === 'repay') {
+      this.openRepay(e.row);
+    } else if (e.id === 'agreement') {
+      void this.onEntryAction(e);
+    }
+  }
+
+  protected openRepay(entry: FinanceEntry) {
+    this.repayEntry.set(entry);
+    this.repayOpen.set(true);
+  }
 
   protected investorColumns: TableColumn<InvestorRow>[] = [
     {

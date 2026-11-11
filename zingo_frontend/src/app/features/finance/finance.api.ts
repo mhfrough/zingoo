@@ -2,7 +2,7 @@ import { Injectable, inject } from '@angular/core';
 import { ApiService } from '../../core/api.service';
 import {
   AccountingDoc, Budget, CashBookRow, CashFlows, CategoryRow, Currency, FinanceEntry, IncomeStatement,
-  InvestorAccount, JournalLine, OpenItems, Settlement,
+  FundingPosition, InvestorAccount, JournalLine, OpenItems, Settlement,
 } from './models';
 
 /** Every call the Investment & Finance and Income & Expenses pages make. */
@@ -33,6 +33,10 @@ export class FinanceApi {
   deleteEntry = (id: string) => this.api.delete(`finance/${id}`);
   /** a capital injection by one investor or several: one entry comes back per investor */
   saveCapital = (body: unknown) => this.api.post<FinanceEntry[]>('finance/capital-injection', body);
+  /** a loan or advance now: terms, repayments, spending per stream */
+  position = (id: string) => this.api.get<FundingPosition>(`finance/${id}/position`);
+  /** record a repayment of a loan or advance (or the markup paid on it); the new position comes back */
+  repay = (id: string, body: unknown) => this.api.post<FundingPosition>(`finance/${id}/repayments`, body);
   /** a cheque cleared (cash posts on the clearing date) or bounced */
   markCheque = (id: string, status: 'Cleared' | 'Bounced', date?: string) =>
     this.api.post<FinanceEntry>(`finance/${id}/cheque`, { status, date });

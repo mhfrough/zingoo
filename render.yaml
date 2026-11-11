@@ -21,8 +21,9 @@ services:
     runtime: node
     region: singapore
     plan: free
+    # npm install (not ci): the lock files come from a newer npm than Render runs, and ci refuses them
     rootDir: zingo_backend
-    buildCommand: npm ci --include=dev && npm run build
+    buildCommand: npm install --include=dev --no-audit --no-fund && npm run build
     # step 1 creates or updates the tables and loads the sample data on an empty database (it skips when data exists);
     # step 2 starts the API without re-checking every table
     startCommand: DB_SYNC=true node dist/database/seed.js; node dist/main
@@ -67,7 +68,7 @@ services:
     name: zingo-web
     runtime: static
     rootDir: zingo_frontend
-    buildCommand: npm ci && node scripts/set-env.mjs && npm run build
+    buildCommand: npm install --no-audit --no-fund && node scripts/set-env.mjs && npm run build
     staticPublishPath: dist/zingo_frontend/browser
     envVars:
       - key: NODE_VERSION

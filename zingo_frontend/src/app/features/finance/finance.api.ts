@@ -2,7 +2,7 @@ import { Injectable, inject } from '@angular/core';
 import { ApiService } from '../../core/api.service';
 import {
   AccountingDoc, Budget, CashBookRow, CashFlows, CategoryRow, Currency, FinanceEntry, IncomeStatement,
-  JournalLine, OpenItems, Settlement,
+  InvestorAccount, JournalLine, OpenItems, Settlement,
 } from './models';
 
 /** Every call the Investment & Finance and Income & Expenses pages make. */
@@ -12,6 +12,8 @@ export class FinanceApi {
 
   // ── reads ──
   entries = () => this.api.get<FinanceEntry[]>('finance');
+  /** the accounts that can put money in: people, manufacturers and distributors */
+  investorAccounts = () => this.api.get<InvestorAccount[]>('finance/accounts');
   docs = () => this.api.get<AccountingDoc[]>('accounting-documents');
   settlements = () => this.api.get<Settlement[]>('accounting-settlements');
   budgets = () => this.api.get<Budget[]>('reports/budgets');

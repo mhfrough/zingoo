@@ -17,8 +17,13 @@ export interface FinanceEntry {
   category: string;
   amount: number;
   party: string;
+  /** capital only: which kind of account the investor is; empty on older entries */
+  partyType: InvestorType | '';
+  /** capital only: the investor's account (a person, a manufacturer or a distributor) */
+  partyId: string | null;
   note: string | null;
-  funding: 'Equity' | 'Partner Loan' | '';
+  /** capital only: the type of funding, a capital source from Settings (Equity, Shareholder Loan, Partner Advance ...) */
+  funding: string;
   /** seats that have signed, e.g. ['A', 'B'] */
   signatures: string[];
   requiredSignatures: number;
@@ -49,6 +54,18 @@ export interface FinanceEntry {
 }
 
 export type ChequeStatus = '' | 'Pending' | 'Cleared' | 'Bounced';
+
+/** The kinds of account that can put money in. */
+export type InvestorType = 'Person' | 'Manufacturer' | 'Distributor';
+
+/** An account that can put money in: a person (Settings), a contract manufacturer or a distributor. */
+export interface InvestorAccount {
+  type: InvestorType;
+  id: string;
+  name: string;
+  /** the person's role, the manufacturer's contact or the distributor's region */
+  note: string;
+}
 
 /** The part of an investor's amount invested against one stream. */
 export interface StreamShare {

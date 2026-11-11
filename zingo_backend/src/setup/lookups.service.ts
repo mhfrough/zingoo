@@ -5,12 +5,12 @@ import { CAPITAL_SOURCE_DEFAULTS, INCOTERM_DEFAULTS, PAYMENT_METHODS, STREAM_TYP
 import { Lookup } from './setup.entities';
 
 /** The pick-lists the client can edit on Settings & Data. */
-export const LOOKUP_LISTS = ['PAY_METHOD', 'INCOTERM', 'CAPITAL_SOURCE', 'STREAM_TYPE'] as const;
+export const LOOKUP_LISTS = ['PAY_METHOD', 'INCOTERM', 'CAPITAL_SOURCE', 'STREAM_TYPE', 'PERSON'] as const;
 export type LookupList = (typeof LOOKUP_LISTS)[number];
 
 /** what each list calls its entries in messages */
 const LIST_LABEL: Record<LookupList, string> = {
-  PAY_METHOD: 'payment method', INCOTERM: 'Incoterm', CAPITAL_SOURCE: 'capital source', STREAM_TYPE: 'stream type',
+  PAY_METHOD: 'payment method', INCOTERM: 'Incoterm', CAPITAL_SOURCE: 'capital source', STREAM_TYPE: 'stream type', PERSON: 'person',
 };
 
 /** The cost lines an Incoterm can put on the seller. Bank charges and other costs are always the seller's. */
@@ -22,6 +22,7 @@ const LIST_FLAGS: Record<LookupList, readonly string[]> = {
   INCOTERM: INCOTERM_FLAGS,
   CAPITAL_SOURCE: ['liability'],
   STREAM_TYPE: ['depreciable'],
+  PERSON: [],
 };
 
 /**
@@ -74,7 +75,8 @@ export class LookupsService implements OnApplicationBootstrap {
   async update(id: string, patch: { description?: string; flags?: Record<string, boolean>; active?: boolean }) {
     const row = await this.repo.findOne({ where: { id } });
     if (!row) throw new NotFoundException('Entry not found');
-    if (patch.active === false && (await this.repo.count({ where: { list: row.list, active: true } })) <= 1 && row.active) {
+    // a list the business picks from needs one active entry; the people list may be emptied
+    if (row.list !== 'PERSON' && patch.active === false && (await this.repo.count({ where: { list: row.list, active: true } })) <= 1 && row.active) {
       throw new BadRequestException('Keep at least one active entry in this list.');
     }
     if (patch.description !== undefined) row.description = patch.description;
@@ -91,6 +93,13 @@ export class LookupsService implements OnApplicationBootstrap {
     if (!row || !row.active) {
       throw new BadRequestException(`"${code}" is not an active ${LIST_LABEL[list]}. Choose one from Settings & Data.`);
     }
+  }
+
+  /** an active person (shareholder or partner) of the People list, by id */
+  async activePerson(em: EntityManager, id: string): Promise<Lookup> {
+    const row = await em.getRepository(Lookup).findOne({ where: { id, list: 'PERSON' } });
+    if (!row || !row.active) throw new BadRequestException('This person is not an active entry of the People list. Add them in Settings & Data.');
+    return row;
   }
 
   /** true when the capital source is a loan or an advance (money to pay back), false for equity */

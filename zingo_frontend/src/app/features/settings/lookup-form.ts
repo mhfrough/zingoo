@@ -15,11 +15,12 @@ export const SELLER_LINES: [string, string][] = [
 ];
 
 /** how each list names its entries and what it is used for */
-const LIST_TEXT: Record<LookupList, { word: string; use: string; code: string }> = {
-  PAY_METHOD: { word: 'payment method', use: 'Offered in every payment form.', code: 'Name' },
-  INCOTERM: { word: 'Incoterm', use: 'Which cost lines the seller carries drives the export costing.', code: 'Code' },
-  CAPITAL_SOURCE: { word: 'capital source', use: 'Offered on every capital injection. A loan or advance is booked as money to pay back, equity as owner capital.', code: 'Name' },
-  STREAM_TYPE: { word: 'stream type', use: 'The type of an investment stream. A depreciable type carries a depreciation rate.', code: 'Name' },
+const LIST_TEXT: Record<LookupList, { word: string; use: string; code: string; meaning: string }> = {
+  PAY_METHOD: { word: 'payment method', use: 'Offered in every payment form.', code: 'Name', meaning: 'Meaning' },
+  INCOTERM: { word: 'Incoterm', use: 'Which cost lines the seller carries drives the export costing.', code: 'Code', meaning: 'Meaning' },
+  CAPITAL_SOURCE: { word: 'capital source', use: 'Offered on every capital injection as its type of funding. A loan or advance is booked as money to pay back, equity as owner capital.', code: 'Name', meaning: 'Meaning' },
+  STREAM_TYPE: { word: 'stream type', use: 'The type of an investment stream. A depreciable type carries a depreciation rate.', code: 'Name', meaning: 'Meaning' },
+  PERSON: { word: 'person', use: 'A shareholder or partner who can put money in. Each person gets a separate account in the books.', code: 'Name', meaning: 'Role or contact' },
 };
 
 /**
@@ -50,7 +51,7 @@ const LIST_TEXT: Record<LookupList, { word: string; use: string; code: string }>
           </select>
         </app-field>
         @if (list() !== 'PAY_METHOD') {
-          <app-field label="Meaning" [wide]="true"><input type="text" formControlName="description" maxlength="250" /></app-field>
+          <app-field [label]="text().meaning" [wide]="true"><input type="text" formControlName="description" maxlength="250" /></app-field>
         }
         @if (list() === 'CAPITAL_SOURCE') {
           <label class="check field--wide"><input type="checkbox" formControlName="liability" /> A loan or advance (money to pay back), not owner equity</label>

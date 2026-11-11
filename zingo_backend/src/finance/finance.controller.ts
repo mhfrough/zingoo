@@ -19,6 +19,13 @@ export class FinanceController {
     return this.service.list();
   }
 
+  @Get('accounts')
+  @Read('finance')
+  @ApiOperation({ summary: 'Accounts that can put money in: people (Settings), manufacturers and distributors' })
+  accounts() {
+    return this.service.investorAccounts();
+  }
+
   @Get(':id')
   @Read('finance')
   findOne(@Param('id', ParseUUIDPipe) id: string) {

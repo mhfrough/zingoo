@@ -132,11 +132,11 @@ export class ContainerType {
   maxCartons: number;
 }
 
-/** The editable pick-lists (payment methods, Incoterms). The code is stored on documents, so it never changes; the rest can. */
+/** The editable pick-lists (payment methods, Incoterms ...). The code is stored on documents, so it never changes; the rest can. */
 @Entity('lookups')
 @Unique(['list', 'code'])
 export class Lookup extends AppEntity {
-  /** PAY_METHOD, INCOTERM, CAPITAL_SOURCE or STREAM_TYPE */
+  /** PAY_METHOD, INCOTERM, CAPITAL_SOURCE, STREAM_TYPE or PERSON (a shareholder or partner who can invest) */
   @Column({ type: 'varchar', length: 20 })
   list: string;
 

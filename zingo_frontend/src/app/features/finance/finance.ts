@@ -21,6 +21,10 @@ const today = () => new Date().toISOString().slice(0, 10);
 /** one investor on the investor view */
 interface InvestorRow {
   name: string;
+  /** Person, Manufacturer or Distributor (empty on older entries) */
+  kind: string;
+  /** the types of funding, e.g. "Equity · Shareholder Loan" */
+  funding: string;
   injections: number;
   /** in the bank (cleared) */
   invested: number;
@@ -62,6 +66,8 @@ export class Finance {
   private tick = signal(0);
   protected entries = rxResource({ params: () => this.tick(), stream: () => this.fin.entries() });
   protected budgets = rxResource({ params: () => this.tick(), stream: () => this.fin.budgets() });
+  /** the accounts a capital injection can come from: people, manufacturers and distributors */
+  protected accounts = rxResource({ params: () => this.tick(), stream: () => this.fin.investorAccounts() });
   protected flows = rxResource({ params: () => this.tick(), stream: () => this.fin.cashFlows() });
   protected statement = rxResource({ params: () => this.tick(), stream: () => this.fin.incomeStatement('all') });
   protected orders = rxResource({ params: () => this.tick(), stream: () => this.ops.orders() });
@@ -98,11 +104,14 @@ export class Finance {
     const byName = new Map<string, InvestorRow & { streamTotals: Map<string, number> }>();
     for (const e of this.capitalEntries()) {
       if (e.chequeStatus === 'Bounced') continue;
-      const key = e.party.trim().toLowerCase();
+      // an investor is one account; older entries without an account are told apart by name
+      const key = e.partyId ?? e.party.trim().toLowerCase();
       const row = byName.get(key) ?? {
-        name: e.party.trim(), injections: 0, invested: 0, awaiting: 0, share: 0, streams: '', nextReturn: null, streamTotals: new Map<string, number>(),
+        name: e.party.trim(), kind: e.partyType, funding: '', injections: 0, invested: 0, awaiting: 0, share: 0, streams: '', nextReturn: null,
+        streamTotals: new Map<string, number>(),
       };
       row.injections++;
+      if (e.funding && !row.funding.split(' · ').includes(e.funding)) row.funding = row.funding ? `${row.funding} · ${e.funding}` : e.funding;
       if (e.cleared) {
         row.invested += Number(e.amount);
         for (const s of e.streams.length ? e.streams : [{ stream: e.category, amount: e.amount, pct: 100 }]) {
@@ -221,7 +230,11 @@ export class Finance {
   ];
 
   protected investorColumns: TableColumn<InvestorRow>[] = [
-    { id: 'name', label: 'Investor', value: (i) => i.name, sub: (i) => `${i.injections} ${i.injections === 1 ? 'injection' : 'injections'}` },
+    {
+      id: 'name', label: 'Investor', value: (i) => i.name,
+      sub: (i) => `${i.kind ? i.kind + ' · ' : ''}${i.injections} ${i.injections === 1 ? 'injection' : 'injections'}`,
+    },
+    { id: 'funding', label: 'Funding', value: (i) => i.funding || null, priority: 2 },
     { id: 'invested', label: 'In the bank (PKR)', kind: 'money', value: (i) => i.invested },
     { id: 'share', label: 'Share', kind: 'mono', value: (i) => fmtPct(i.share), sortValue: (i) => i.share, align: 'end', priority: 2 },
     { id: 'awaiting', label: 'Cheques waiting (PKR)', kind: 'money', value: (i) => i.awaiting, priority: 2 },

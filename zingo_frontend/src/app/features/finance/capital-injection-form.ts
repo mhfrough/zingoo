@@ -8,6 +8,7 @@ import { isChequeMethod } from '../../shared/payments';
 import { Btn, Field, FileInput, MoneyInput, Offcanvas } from '../../ui';
 import { FormModal } from '../ops/form-modal';
 import { FinanceApi } from './finance.api';
+import { InvestorAccount, InvestorType } from './models';
 
 const today = () => new Date().toISOString().slice(0, 10);
 const round2 = (n: number) => Math.round((Number(n) || 0) * 100) / 100;
@@ -21,14 +22,16 @@ type Basis = 'amount' | 'pct';
 const streamGroup = (fb: NonNullableFormBuilder, stream = '', amount = 0, pct = 100, by: Basis = 'pct') =>
   fb.group({ stream: [stream, Validators.required], amount: [amount], pct: [pct], by: [by] });
 
-/** One investor with everything about their payment. */
-const investorGroup = (fb: NonNullableFormBuilder, stream: string, funding: string) =>
+/** an account is told apart by its kind and id: "Person:<id>" */
+const accountKey = (a: InvestorAccount) => `${a.type}:${a.id}`;
+
+/** One investor (an account: a person, a manufacturer or a distributor) with everything about their payment. */
+const investorGroup = (fb: NonNullableFormBuilder, stream: string) =>
   fb.group({
-    party: ['', Validators.required],
+    account: ['', Validators.required],
     amount: [0, [Validators.required, Validators.min(0.01)]],
     pct: [0],
     by: ['amount' as Basis],
-    funding: [funding],
     date: [today(), Validators.required],
     paymentSource: ['Bank Transfer'],
     paymentReference: [''],
@@ -47,9 +50,11 @@ type InvestorForm = ReturnType<typeof investorGroup>;
 type StreamForm = ReturnType<typeof streamGroup>;
 
 /**
- * Capital injection: one investor, or several investing together. Each investor has their own amount (and share of
- * the total), payment details, cheque and proof, and says which streams the money is invested against, by amount or
- * by percent. The terms and the agreement are shared. One finance entry is created per investor.
+ * Capital injection: one investor, or several investing together. The type of funding (Equity, Shareholder Loan,
+ * Partner Advance ... from Settings) is the first choice and applies to the whole injection. Each investor is an
+ * account (a person, a manufacturer or a distributor) with its own amount (and share of the total), payment details,
+ * cheque and proof, and says which streams the money is invested against, by amount or by percent. The terms and the
+ * agreement are shared. One finance entry is created per investor, each booked to that investor's own account.
  */
 @Component({
   selector: 'app-capital-injection-form',
@@ -58,6 +63,69 @@ type StreamForm = ReturnType<typeof streamGroup>;
   styles: `
     .investors {
       display: contents;
+    }
+
+    /* the type of funding: the first choice, one card per capital source */
+    .types {
+      grid-column: 1 / -1;
+      min-inline-size: 0;
+      margin: 0;
+      padding: 0;
+      border: 0;
+
+      & legend {
+        padding: 0;
+        margin-block-end: var(--space-2);
+        font-size: var(--text-sm);
+        font-weight: var(--weight-semibold);
+        color: var(--text-2);
+      }
+    }
+
+    .types__row {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(min(11rem, 100%), 1fr));
+      gap: var(--space-2);
+    }
+
+    .type {
+      position: relative;
+      display: flex;
+      flex-direction: column;
+      gap: var(--space-1);
+      padding: var(--space-3) var(--space-4);
+      border: 1px solid var(--border-strong);
+      border-radius: var(--radius);
+      background: var(--surface-card);
+      cursor: pointer;
+
+      & input {
+        position: absolute;
+        inset: 0;
+        margin: 0;
+        opacity: 0;
+        cursor: pointer;
+      }
+
+      &:has(input:checked) {
+        border-color: var(--accent);
+        background: var(--accent-soft);
+        box-shadow: inset 0 0 0 1px var(--accent);
+      }
+
+      &:has(input:focus-visible) {
+        box-shadow: var(--focus-ring);
+      }
+
+      & .type__name {
+        font-size: var(--text-md);
+        font-weight: var(--weight-semibold);
+      }
+
+      & .type__hint {
+        font-size: var(--text-xs);
+        color: var(--text-3);
+      }
     }
 
     .sum--line {
@@ -175,6 +243,19 @@ type StreamForm = ReturnType<typeof streamGroup>;
         <div class="notice" data-tone="danger" role="alert">{{ error() }}</div>
       }
       <form [id]="formId" [formGroup]="form" (ngSubmit)="submit()" class="form-grid" novalidate>
+        <fieldset class="types" role="radiogroup">
+          <legend>Type of funding <span aria-hidden="true">*</span></legend>
+          <div class="types__row">
+            @for (s of fundingTypes(); track s.code) {
+              <label class="type">
+                <input type="radio" formControlName="funding" [value]="s.code" />
+                <span class="type__name">{{ s.code }}</span>
+                <span class="type__hint">{{ s.description || (s.flags['liability'] ? 'Money to pay back' : 'Owner capital') }}</span>
+              </label>
+            }
+          </div>
+        </fieldset>
+
         <app-field label="Investment type" [required]="true">
           <select formControlName="mode" (change)="onMode()">
             <option value="solo">Solo investor</option>
@@ -197,8 +278,32 @@ type StreamForm = ReturnType<typeof streamGroup>;
                 }
               </div>
               <div class="form-grid">
-                <app-field label="Investor name" [required]="true" [error]="bad(inv, 'party') ? 'Enter the investor name' : null">
-                  <input type="text" formControlName="party" placeholder="Name" />
+                <app-field label="Investor account" [required]="true" [error]="bad(inv, 'account') ? 'Choose the account' : null"
+                           [hint]="accounts().length ? '' : 'No accounts yet. Add people in Settings & Data'">
+                  <select formControlName="account">
+                    <option value="">Choose an account</option>
+                    @if (people().length) {
+                      <optgroup label="People">
+                        @for (a of people(); track a.id) {
+                          <option [value]="key(a)" [disabled]="taken(inv, key(a))">{{ a.name }}</option>
+                        }
+                      </optgroup>
+                    }
+                    @if (manufacturers().length) {
+                      <optgroup label="Manufacturers">
+                        @for (a of manufacturers(); track a.id) {
+                          <option [value]="key(a)" [disabled]="taken(inv, key(a))">{{ a.name }}</option>
+                        }
+                      </optgroup>
+                    }
+                    @if (distributors().length) {
+                      <optgroup label="Distributors">
+                        @for (a of distributors(); track a.id) {
+                          <option [value]="key(a)" [disabled]="taken(inv, key(a))">{{ a.name }}</option>
+                        }
+                      </optgroup>
+                    }
+                  </select>
                 </app-field>
                 <app-field label="Amount invested" [required]="true" [error]="bad(inv, 'amount') ? 'Enter an amount above zero' : null">
                   <app-money-input formControlName="amount" [max]="investorMax()" (input)="onAmount(inv)" />
@@ -208,13 +313,6 @@ type StreamForm = ReturnType<typeof streamGroup>;
                     <app-money-input formControlName="pct" currency="" [decimals]="2" [max]="100" (input)="onPct(inv)" />
                   </app-field>
                 }
-                <app-field label="Capital source">
-                  <select formControlName="funding">
-                    @for (c of sources(); track c) {
-                      <option [value]="c">{{ c }}</option>
-                    }
-                  </select>
-                </app-field>
                 <app-field label="Investment date" [required]="true"><input type="date" formControlName="date" /></app-field>
                 <app-field label="Payment source">
                   <select formControlName="paymentSource">
@@ -270,7 +368,9 @@ type StreamForm = ReturnType<typeof streamGroup>;
                 <app-field label="Payment issued on"><input type="date" formControlName="issueDate" /></app-field>
                 <app-field label="Paid by"><input type="text" formControlName="paidBy" /></app-field>
                 <app-field label="Received by"><input type="text" formControlName="receivedBy" /></app-field>
-                <app-field label="Expected return date" hint="Optional. A reminder, nothing posts"><input type="date" formControlName="expectedReturnDate" /></app-field>
+                <app-field [label]="isLoan() ? 'Repayment due date' : 'Expected return date'" hint="Optional. A reminder, nothing posts">
+                  <input type="date" formControlName="expectedReturnDate" />
+                </app-field>
                 @if (isCheque(inv)) {
                   <app-field label="Cheque number" [required]="true" [error]="chequeGap(inv, 'chequeNo') ? 'Enter the cheque number' : null">
                     <input type="text" formControlName="chequeNo" />
@@ -310,18 +410,25 @@ type StreamForm = ReturnType<typeof streamGroup>;
 export class CapitalInjectionForm extends FormModal {
   /** the streams offered as "invested against", with their type */
   readonly streams = input<{ name: string; type: string }[]>([]);
+  /** the accounts that can invest: people (Settings), manufacturers and distributors */
+  readonly accounts = input<InvestorAccount[]>([]);
   readonly formId = 'form-capital-injection';
   protected money = fmtMoney;
   private store = inject(SettingsStore);
   protected methods = this.store.paymentMethods;
-  /** capital sources from Settings (Equity, Shareholder Loan, Partner Advance ...) */
-  protected sources = this.store.capitalSources;
+  /** the types of funding from Settings (Equity, Shareholder Loan, Partner Advance ...) */
+  protected fundingTypes = this.store.capitalSourceEntries;
+  protected people = computed(() => this.accounts().filter((a) => a.type === 'Person'));
+  protected manufacturers = computed(() => this.accounts().filter((a) => a.type === 'Manufacturer'));
+  protected distributors = computed(() => this.accounts().filter((a) => a.type === 'Distributor'));
+  protected key = accountKey;
   protected streamOptions = computed(() => this.streams());
   protected streamNames = computed(() => this.streams().map((s) => s.name));
   private fin = inject(FinanceApi);
   private nfb = this.fb.nonNullable;
 
   readonly form = this.nfb.group({
+    funding: ['Equity'],
     mode: ['solo' as 'solo' | 'shared'],
     total: [0],
     note: [''],
@@ -335,6 +442,8 @@ export class CapitalInjectionForm extends FormModal {
 
   private value = toSignal(this.form.valueChanges, { initialValue: this.form.getRawValue() });
   protected shared = computed(() => this.value().mode === 'shared');
+  /** a loan or an advance is money to pay back: its date is a repayment date, not an expected return */
+  protected isLoan = computed(() => !!this.fundingTypes().find((s) => s.code === this.value().funding)?.flags['liability']);
   protected summary = computed(() => {
     const v = this.value();
     const allocated = round2((v.investors ?? []).reduce((n, i) => n + (Number(i?.amount) || 0), 0));
@@ -348,7 +457,8 @@ export class CapitalInjectionForm extends FormModal {
   });
 
   protected reset() {
-    this.form.reset({ mode: 'solo', total: 0, note: '', agreement: null });
+    const codes = this.fundingTypes().map((s) => s.code);
+    this.form.reset({ funding: codes.includes('Equity') ? 'Equity' : codes[0] ?? 'Equity', mode: 'solo', total: 0, note: '', agreement: null });
     this.investors.clear();
     this.addInvestor();
   }
@@ -356,9 +466,13 @@ export class CapitalInjectionForm extends FormModal {
   // ───────────── investors ─────────────
 
   protected addInvestor() {
-    const sources = this.sources();
-    this.investors.push(investorGroup(this.nfb, this.streamNames()[0] ?? '', sources.includes('Equity') ? 'Equity' : sources[0] ?? 'Equity'));
+    this.investors.push(investorGroup(this.nfb, this.streamNames()[0] ?? ''));
     this.form.markAsDirty();
+  }
+
+  /** an account that another investor of this injection already uses cannot be picked twice */
+  protected taken(inv: InvestorForm, key: string) {
+    return this.investors.controls.some((o) => o !== inv && o.controls.account.value === key);
   }
 
   protected removeInvestor(i: number) {
@@ -377,7 +491,7 @@ export class CapitalInjectionForm extends FormModal {
     }
   }
 
-  protected bad(inv: InvestorForm, name: 'party' | 'amount') {
+  protected bad(inv: InvestorForm, name: 'account' | 'amount') {
     const c = inv.controls[name];
     return c.invalid && (c.touched || c.dirty);
   }
@@ -528,11 +642,13 @@ export class CapitalInjectionForm extends FormModal {
   protected request() {
     const v = this.form.getRawValue();
     return this.fin.saveCapital({
+      funding: v.funding,
       note: v.note.trim() || undefined,
       investors: v.investors.map((i) => {
         const cheque = isChequeMethod(i.paymentSource);
+        const at = i.account.indexOf(':');
         return {
-          party: i.party.trim(), amount: i.amount, date: i.date, funding: i.funding, paymentSource: i.paymentSource,
+          partyType: i.account.slice(0, at) as InvestorType, partyId: i.account.slice(at + 1), amount: i.amount, date: i.date, paymentSource: i.paymentSource,
           paymentReference: i.paymentReference, paymentAgainst: i.paymentAgainst, paidBy: i.paidBy, receivedBy: i.receivedBy,
           issueDate: i.issueDate || undefined, expectedReturnDate: i.expectedReturnDate || undefined,
           chequeNo: cheque ? i.chequeNo : undefined, clearanceDate: cheque ? i.clearanceDate : undefined,

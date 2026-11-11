@@ -8,9 +8,9 @@ import { ApiService } from './api.service';
 import { AuthService } from './auth.service';
 
 /** The editable pick-lists on Settings & Data. */
-export type LookupList = 'PAY_METHOD' | 'INCOTERM' | 'CAPITAL_SOURCE' | 'STREAM_TYPE';
+export type LookupList = 'PAY_METHOD' | 'INCOTERM' | 'CAPITAL_SOURCE' | 'STREAM_TYPE' | 'PERSON';
 
-/** One entry of an editable pick-list (payment methods, Incoterms, capital sources, stream types). */
+/** One entry of an editable pick-list (payment methods, Incoterms, capital sources, stream types, people). */
 export interface Lookup {
   id: string;
   list: LookupList;
@@ -54,6 +54,8 @@ export class SettingsStore {
   readonly paymentMethods = computed(() => this.lookups().filter((l) => l.list === 'PAY_METHOD' && l.active).map((l) => l.code));
   /** capital sources a new investment may use (Equity, Shareholder Loan, Partner Advance ...) */
   readonly capitalSources = computed(() => this.lookups().filter((l) => l.list === 'CAPITAL_SOURCE' && l.active).map((l) => l.code));
+  /** the same with their meaning and whether a source is a loan or advance (money to pay back) */
+  readonly capitalSourceEntries = computed(() => this.lookups().filter((l) => l.list === 'CAPITAL_SOURCE' && l.active));
   /** types of investment stream a cost center may have (Fixed Asset, Movable Asset, Operation Cost ...) */
   readonly streamTypes = computed(() => this.lookups().filter((l) => l.list === 'STREAM_TYPE' && l.active));
   /** Incoterms a new quote may use */

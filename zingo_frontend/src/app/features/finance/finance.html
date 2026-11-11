@@ -158,7 +158,7 @@
   </div>
 </div>
 
-<app-capital-injection-form [(open)]="capitalOpen" [streams]="streamOptions()" (saved)="reload()" />
+<app-capital-injection-form [(open)]="capitalOpen" [streams]="streamOptions()" [accounts]="accounts.value() ?? []" (saved)="reload()" />
 <app-finance-entry-form [(open)]="entryOpen" [entry]="editingEntry()" [streams]="streamNames()"
   [threshold]="settings.value()?.approvalThreshold ?? 50000" (saved)="reload()" />
 <app-budget-form [(open)]="budgetOpen" [centers]="budgets.value() ?? []" [only]="editingBudget()" (saved)="reload()" />

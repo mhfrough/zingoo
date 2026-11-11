@@ -7,15 +7,16 @@ import { round2 } from '../common/numeric.transformer';
 import { isChequeMethod } from '../common/payments';
 import { nextRef } from '../common/ref';
 import { PostingService } from '../ledger/posting.service';
+import { Distributor, Manufacturer } from '../catalog/catalog.entities';
 import { LookupsService } from '../setup/lookups.service';
-import { Currency } from '../setup/setup.entities';
+import { Currency, Lookup } from '../setup/setup.entities';
 import { SettingsService } from '../setup/setup.service';
 import {
   CapitalLineDto, ChequeDto, CreateAccountingDto, CreateCapitalDto, CreateFinanceDto, SettleDto, UpdateAccountingDto,
   UpdateFinanceDto,
 } from './finance.dto';
 import {
-  AccountingDocument, AccountingSettlement, Approval, ChequeStatus, FinanceEntry, FinanceEntryStream,
+  AccountingDocument, AccountingSettlement, Approval, ChequeStatus, FinanceEntry, FinanceEntryStream, InvestorType,
 } from './finance.entities';
 
 const today = () => new Date().toISOString().slice(0, 10);
@@ -74,14 +75,35 @@ export class FinanceService {
     return (await this.decorate(em, [f]))[0];
   }
 
+  /** every account that can put money in: contract manufacturers, distributors and the people of Settings, by kind then name */
+  async investorAccounts() {
+    const em = this.db.manager;
+    const [manufacturers, distributors, people] = await Promise.all([
+      em.find(Manufacturer, { order: { name: 'ASC' } }),
+      em.find(Distributor, { order: { name: 'ASC' } }),
+      em.find(Lookup, { where: { list: 'PERSON', active: true }, order: { sortOrder: 'ASC', code: 'ASC' } }),
+    ]);
+    return [
+      ...people.map((p) => ({ type: 'Person' as const, id: p.id, name: p.code, note: p.description })),
+      ...manufacturers.map((m) => ({ type: 'Manufacturer' as const, id: m.id, name: m.name, note: m.contact ?? '' })),
+      ...distributors.map((d) => ({ type: 'Distributor' as const, id: d.id, name: d.name, note: d.region })),
+    ];
+  }
+
+  /** the name of an investor account; throws when it does not exist (or a person is switched off) */
+  private async investorName(em: EntityManager, type: InvestorType, id: string): Promise<string> {
+    if (type === 'Person') return (await this.lookups.activePerson(em, id)).code;
+    const row = type === 'Manufacturer' ? await em.findOne(Manufacturer, { where: { id } }) : await em.findOne(Distributor, { where: { id } });
+    if (!row) throw new BadRequestException(`This ${type.toLowerCase()} does not exist. Choose an account from the list.`);
+    return row.name;
+  }
+
   /** checks one investor line and works out its stream split */
-  private async capitalLine(em: EntityManager, l: CapitalLineDto) {
-    const party = l.party.trim();
-    if (!party) throw new BadRequestException('Enter the investor name.');
+  private async capitalLine(em: EntityManager, l: CapitalLineDto, funding: string) {
+    const party = await this.investorName(em, l.partyType, l.partyId);
     const amount = round2(l.amount);
     const source = (l.paymentSource ?? '').trim();
     if (source) await this.lookups.assertActive('PAY_METHOD', source, em);
-    await this.lookups.assertActive('CAPITAL_SOURCE', l.funding ?? 'Equity', em);
 
     // a cheque is not cash until it clears
     let chequeNo = '';
@@ -121,7 +143,7 @@ export class FinanceService {
     return {
       streams,
       entry: {
-        date: l.date, category, amount, party, funding: l.funding ?? 'Equity',
+        date: l.date, category, amount, party, partyType: l.partyType, partyId: l.partyId, funding,
         paymentSource: source, paymentReference: (l.paymentReference ?? '').trim(), paymentAgainst: (l.paymentAgainst ?? '').trim(),
         paidBy: (l.paidBy ?? '').trim(), receivedBy: (l.receivedBy ?? '').trim(),
         issueDate: l.issueDate ?? null, expectedReturnDate: l.expectedReturnDate ?? null,
@@ -137,10 +159,17 @@ export class FinanceService {
       const prefix = s.docPrefixes['finance'] ?? 'FIN';
       const groupId = dto.investors.length > 1 ? randomUUID() : null;
       const note = dto.note?.trim() || null;
+      // the type of funding is one choice for the whole injection
+      const funding = dto.funding ?? 'Equity';
+      await this.lookups.assertActive('CAPITAL_SOURCE', funding, em);
+      const accounts = new Set<string>();
       const attached = new Set<string>(); // one agreement can serve every investor
       const ids: string[] = [];
       for (const line of dto.investors) {
-        const { entry, streams } = await this.capitalLine(em, line);
+        const key = `${line.partyType}:${line.partyId}`;
+        if (accounts.has(key)) throw new BadRequestException('The same account is listed twice. Combine them into one amount.');
+        accounts.add(key);
+        const { entry, streams } = await this.capitalLine(em, line, funding);
         const refNo = await nextRef(em, FinanceEntry, prefix, 3);
         const f = await em.save(em.create(FinanceEntry, { ...entry, refNo, type: 'Capital Injection', groupId, note }));
         await em.save(streams.map((x) => em.create(FinanceEntryStream, { ...x, entryId: f.id })));

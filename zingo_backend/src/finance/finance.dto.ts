@@ -5,6 +5,7 @@ import {
   Max, MaxLength, Min, ValidateNested,
 } from 'class-validator';
 import { DOC_KINDS, FINANCE_TYPES } from '../common/enums';
+import { INVESTOR_TYPES, InvestorType } from './finance.entities';
 
 export class CreateFinanceDto {
   @IsDateString() date: string;
@@ -25,13 +26,13 @@ export class StreamShareDto {
   @IsOptional() @IsNumber() @IsPositive() @Max(100) pct?: number;
 }
 
-/** One investor in a capital injection. */
+/** One investor in a capital injection: an account (a manufacturer, a distributor or a person) and their money. */
 export class CapitalLineDto {
-  @IsString() @IsNotEmpty() @MaxLength(150) party: string;
+  @IsIn([...INVESTOR_TYPES]) partyType: InvestorType;
+  /** id of the manufacturer, the distributor or the entry of the People list */
+  @IsUUID() partyId: string;
   @IsNumber() @IsPositive() amount: number;
   @IsDateString() date: string;
-  /** a capital source from Settings */
-  @IsOptional() @IsString() @MaxLength(40) funding?: string;
   /** a payment method from Settings; a cheque needs chequeNo and clearanceDate */
   @IsOptional() @IsString() @MaxLength(30) paymentSource?: string;
   @IsOptional() @IsString() @MaxLength(100) paymentReference?: string;
@@ -51,6 +52,8 @@ export class CapitalLineDto {
 
 /** A capital injection: one investor, or several investing together. */
 export class CreateCapitalDto {
+  /** the type of funding for the whole injection: a capital source from Settings (Equity, Shareholder Loan, Partner Advance ...) */
+  @IsOptional() @IsString() @MaxLength(40) funding?: string;
   /** terms of the investment, copied onto every investor line */
   @IsOptional() @IsString() note?: string;
   @IsArray() @ArrayMinSize(1) @ArrayMaxSize(20) @ValidateNested({ each: true }) @Type(() => CapitalLineDto)

@@ -177,11 +177,18 @@ export class PostingService implements OnModuleInit {
 
   // ───────────── finance ─────────────
 
-  /** equity goes to Owner Equity; a loan or advance source to its own liability account ("Partner Loan" keeps the old one) */
-  private async capitalAccount(em: EntityManager, funding: string): Promise<string> {
+  /**
+   * Every investor account is kept apart: equity goes to "Owner Equity · <name>", a loan or advance to
+   * "Capital Source · <type> · <name>" (a liability). Older entries without an account keep the shared accounts
+   * (Owner Equity, Partner Loans, or one account per capital source).
+   */
+  private async capitalAccount(em: EntityManager, funding: string, party: string, hasAccount: boolean): Promise<string> {
+    const liability = !!funding && funding !== 'Equity' && (funding === 'Partner Loan' || (await this.lookups.isLiability(em, funding)));
+    // an account name holds at most 80 characters
+    if (hasAccount && party) return (liability ? `Capital Source · ${funding} · ${party}` : `${ACC.EQUITY} · ${party}`).slice(0, 80).trim();
     if (!funding || funding === 'Equity') return ACC.EQUITY;
     if (funding === 'Partner Loan') return ACC.PARTNER_LOANS;
-    return (await this.lookups.isLiability(em, funding)) ? `Capital Source · ${funding}` : ACC.EQUITY;
+    return liability ? `Capital Source · ${funding}` : ACC.EQUITY;
   }
 
   async syncFinance(em: EntityManager, id: string) {
@@ -198,7 +205,7 @@ export class PostingService implements OnModuleInit {
           rows = this.pair(
             f.chequeStatus === 'Cleared' ? f.clearanceDate ?? f.date : f.date, 'Investment', f.refNo,
             f.chequeStatus === 'Cleared' ? `Funding · ${f.party} · cheque ${f.chequeNo}` : `Funding · ${f.party}`,
-            ACC.CASH, await this.capitalAccount(em, f.funding), n);
+            ACC.CASH, await this.capitalAccount(em, f.funding, f.party, !!f.partyId), n);
           break;
         case 'Operating Expense':
           rows = this.pair(f.date, 'Investment', f.refNo, `Operating expense · ${f.category}`, `Expense · ${f.category}`, ACC.CASH, n);

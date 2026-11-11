@@ -23,6 +23,14 @@ export class FinanceEntry extends DocEntity {
   @Column({ type: 'varchar', length: 150, default: '' })
   party: string;
 
+  /** capital only: which kind of account the investor is (Manufacturer, Distributor or Person); empty on older entries */
+  @Column({ type: 'varchar', length: 12, default: '' })
+  partyType: InvestorType | '';
+
+  /** capital only: the investor's account (a manufacturer, a distributor or a person of the People list) */
+  @Column({ type: 'uuid', nullable: true })
+  partyId: string | null;
+
   @Column({ type: 'text', nullable: true })
   note: string | null;
 
@@ -82,6 +90,10 @@ export class FinanceEntry extends DocEntity {
 }
 
 export type ChequeStatus = '' | 'Pending' | 'Cleared' | 'Bounced';
+
+/** The kinds of account that can put money in: a contract manufacturer, a distributor, or a person (shareholder, partner). */
+export const INVESTOR_TYPES = ['Manufacturer', 'Distributor', 'Person'] as const;
+export type InvestorType = (typeof INVESTOR_TYPES)[number];
 
 /** The part of a capital injection line invested against one stream (cost center). */
 @Entity('finance_entry_streams')

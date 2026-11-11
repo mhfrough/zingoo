@@ -85,6 +85,20 @@ const LINES = ['origin', 'ocean', 'insurance', 'destination', 'duty'];
 
       <div class="card" data-flush>
         <div class="card__head">
+          <div><h2>People</h2><p>Shareholders and partners who can put money in. Each one gets a separate account. Manufacturers and distributors are added under Partners</p></div>
+          @if (canEdit()) {
+            <button appBtn size="sm" icon="plus" (click)="openLookup('PERSON')">Add person</button>
+          }
+        </div>
+        <div class="card__body">
+          <app-data-table [columns]="personColumns" [rows]="people()" [actions]="lookupActions" [searchable]="false"
+            [loading]="store.lookupsRes.isLoading()" emptyTitle="No people yet" emptyText="Add the shareholders and partners who invest."
+            (action)="onLookupAction($event)" />
+        </div>
+      </div>
+
+      <div class="card" data-flush>
+        <div class="card__head">
           <div><h2>Incoterms</h2><p>Which cost lines the seller carries decides the export costing and the posted logistics</p></div>
           @if (canEdit()) {
               <button appBtn size="sm" icon="plus" (click)="openLookup('INCOTERM')">Add Incoterm</button>
@@ -138,6 +152,7 @@ export class SettingsLists {
   protected incoterms = computed(() => this.store.lookups().filter((l) => l.list === 'INCOTERM'));
   protected sources = computed(() => this.store.lookups().filter((l) => l.list === 'CAPITAL_SOURCE'));
   protected streamTypes = computed(() => this.store.lookups().filter((l) => l.list === 'STREAM_TYPE'));
+  protected people = computed(() => this.store.lookups().filter((l) => l.list === 'PERSON'));
 
   private statusTone = (l: Lookup): Tone => (l.active ? 'success' : 'neutral');
 
@@ -155,6 +170,12 @@ export class SettingsLists {
   protected typeColumns: TableColumn<Lookup>[] = [
     { id: 'code', label: 'Type', value: (l) => l.code, sub: (l) => l.description },
     { id: 'dep', label: 'Depreciation', priority: 2, value: (l) => (l.flags['depreciable'] ? 'Has a depreciation rate' : 'None') },
+    { id: 'status', label: 'Status', kind: 'tag', value: (l) => (l.active ? 'Active' : 'Switched off'), tone: this.statusTone },
+  ];
+
+  protected personColumns: TableColumn<Lookup>[] = [
+    { id: 'code', label: 'Person', value: (l) => l.code },
+    { id: 'role', label: 'Role or contact', priority: 2, value: (l) => l.description || null },
     { id: 'status', label: 'Status', kind: 'tag', value: (l) => (l.active ? 'Active' : 'Switched off'), tone: this.statusTone },
   ];
 

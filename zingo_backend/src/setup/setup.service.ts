@@ -80,16 +80,23 @@ export class AccountsService {
     const found = await repo.findOne({ where: { name } });
     if (found) return found.code;
 
-    const m = /^(Expense|Income|Capital Source) · (.+)$/.exec(name);
+    const m = /^(Expense|Income|Capital Source|Owner Equity) · (.+)$/.exec(name);
     if (!m) throw new BadRequestException(`Unknown ledger account "${name}"`);
-    // a loan or advance source (Shareholder Loan ...) gets its own liability account
-    const [kind, base] = m[1] === 'Expense' ? ['Expense', 6000] : m[1] === 'Income' ? ['Revenue', 4500] : ['Liability', 2310];
+    // each investor gets their own account: a loan or advance a liability, equity an equity account
+    const [kind, base] =
+      m[1] === 'Expense' ? ['Expense', 6000]
+      : m[1] === 'Income' ? ['Revenue', 4500]
+      : m[1] === 'Owner Equity' ? ['Equity', 3200]
+      : ['Liability', 2500];
     const last = await repo
       .createQueryBuilder('a')
       .select('MAX(CAST(a.code AS INT))', 'max')
       .where('a.name LIKE :p', { p: `${m[1]} · %` })
       .getRawOne();
-    const code = String(last?.max ? Number(last.max) + 10 : base);
+    let next = last?.max ? Number(last.max) + 10 : base;
+    // never reuse a code a fixed account already has (the next free step)
+    while (await repo.findOne({ where: { code: String(next) } })) next += 10;
+    const code = String(next);
     await repo.save(repo.create({ code, name, type: kind as Account['type'], active: true }));
     return code;
   }

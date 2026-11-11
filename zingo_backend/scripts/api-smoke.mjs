@@ -483,11 +483,25 @@ const ciCash = async () => (await call(T.finance, 'GET', '/reports/cash-flows'))
 const ciRaised = async () => (await call(T.owner, 'GET', '/reports/dashboard')).json.capitalRaised;
 const ciIso = (days) => new Date(Date.now() + days * 86400000).toISOString().slice(0, 10);
 const ciDay = ciIso(0);
-const ciLine = (o = {}) => ({
-  party: 'Ali Khan', amount: 100000, date: ciDay, funding: 'Equity', paymentSource: 'Bank Transfer', paymentReference: 'TRF-9001',
-  paymentAgainst: 'Agreement A-12', paidBy: 'Ali Khan', receivedBy: 'Arittek', issueDate: ciDay, streams: [{ stream: 'Manufacturing', pct: 100 }], ...o,
-});
-const ciPost = (body, token = T.finance) => call(token, 'POST', '/finance/capital-injection', body);
+// an investor is an account: a person of the People list (Settings), a manufacturer or a distributor
+const ciNames = ['Ali Khan', 'Sara Ahmed', 'Bilal Sheikh', 'Cash Cara', 'Chequer', 'Bouncer', 'File One', 'File Two', 'Reuse', 'Ghost', 'Ok One', 'Bad One', 'Loan Lara', 'Equity Eli', 'Dir Dan', 'Mach Mo'];
+const ciPeople = {};
+for (const name of ciNames) ciPeople[name] = (await call(T.owner, 'POST', '/lookups', { list: 'PERSON', code: name, description: 'test investor' })).json?.id;
+ok('an Admin keeps the people who invest in Settings (People list)', ciNames.every((n) => !!ciPeople[n]));
+ok('a Finance user cannot add a person -> 403', (await call(T.finance, 'POST', '/lookups', { list: 'PERSON', code: 'Nobody' })).status === 403);
+const ciLine = (o = {}) => {
+  const { party = 'Ali Khan', ...rest } = o;
+  return {
+    partyType: 'Person', partyId: ciPeople[party], amount: 100000, date: ciDay, paymentSource: 'Bank Transfer', paymentReference: 'TRF-9001',
+    paymentAgainst: 'Agreement A-12', paidBy: 'Ali Khan', receivedBy: 'Arittek', issueDate: ciDay, streams: [{ stream: 'Manufacturing', pct: 100 }], ...rest,
+  };
+};
+// the type of funding is chosen once for the whole injection: a test can still pass it on a line and it is lifted here
+const ciPost = (body, token = T.finance) => {
+  const funding = body.funding ?? body.investors?.map((l) => l.funding).find(Boolean);
+  const investors = body.investors?.map(({ funding: _f, ...l }) => l);
+  return call(token, 'POST', '/finance/capital-injection', { ...body, ...(funding ? { funding } : {}), investors });
+};
 
 const ciCash0 = await ciCash();
 const ciRaised0 = await ciRaised();
@@ -501,14 +515,16 @@ ok('the entry is filed under its biggest stream', ciS?.category === 'Manufacturi
 ok('a transfer posts to cash at once', (await ciCash()) === ciCash0 + 100000 && (await ciRaised()) === ciRaised0 + 100000);
 ok('it is marked cleared (in the bank)', ciS?.cleared === true && ciS?.chequeStatus === '');
 
-const ciShared = await ciPost({ note: 'Joint venture', investors: [
+const ciShared = await ciPost({ note: 'Joint venture', funding: 'Shareholder Loan', investors: [
   ciLine({ party: 'Sara Ahmed', amount: 60000, streams: [{ stream: 'Marketing', amount: 60000 }] }),
-  ciLine({ party: 'Bilal Sheikh', amount: 40000, funding: 'Shareholder Loan', paymentSource: 'Cash', streams: [{ stream: 'Marketing', pct: 25 }, { stream: 'Printing', pct: 75 }] }),
+  ciLine({ party: 'Bilal Sheikh', amount: 40000, paymentSource: 'Cash', streams: [{ stream: 'Marketing', pct: 25 }, { stream: 'Printing', pct: 75 }] }),
 ] });
 const [ciA, ciB] = ciShared.json ?? [];
 ok('a shared investment makes one entry per investor', ciShared.status === 201 && ciShared.json?.length === 2 && ciA?.refNo !== ciB?.refNo);
 ok('they share one group and know each other', !!ciA?.groupId && ciA?.groupId === ciB?.groupId && ciA?.coInvestors?.[0] === 'Bilal Sheikh' && ciB?.coInvestors?.[0] === 'Sara Ahmed');
-ok('each investor has their own funding type and note', ciA?.funding === 'Equity' && ciB?.funding === 'Shareholder Loan' && ciA?.note === 'Joint venture' && ciB?.note === 'Joint venture');
+ok('the whole injection has one funding type and one set of terms', ciA?.funding === 'Shareholder Loan' && ciB?.funding === 'Shareholder Loan' && ciA?.note === 'Joint venture' && ciB?.note === 'Joint venture');
+ok('an entry without a chosen type is Equity', ciS?.funding === 'Equity');
+ok('each investor entry knows its account', ciS?.partyType === 'Person' && ciS?.partyId === ciPeople['Ali Khan'] && ciS?.party === 'Ali Khan');
 ok('both amounts post to cash', (await ciCash()) === ciCash0 + 200000);
 
 // the rules
@@ -521,7 +537,12 @@ ok('no streams -> 400', (await ciPost({ investors: [ciLine({ streams: [] })] }))
 ok('no investors -> 400', (await ciPost({ investors: [] })).status === 400);
 ok('a payment source that is not in Settings -> 400', (await ciPost({ investors: [ciLine({ paymentSource: 'Barter' })] })).status === 400);
 ok('an expected return before the investment date -> 400', (await ciPost({ investors: [ciLine({ expectedReturnDate: ciIso(-3) })] })).status === 400);
-ok('an investor name is required', (await ciPost({ investors: [ciLine({ party: '   ' })] })).status === 400);
+ok('an investor account is required -> 400', (await ciPost({ investors: [ciLine({ partyId: undefined })] })).status === 400);
+ok('a free-typed investor name is no longer accepted -> 400', (await ciPost({ investors: [{ ...ciLine({ partyId: undefined, partyType: undefined }), party: 'Typed Tom' }] })).status === 400);
+ok('an account that does not exist -> 400', (await ciPost({ investors: [ciLine({ partyId: '00000000-0000-4000-8000-000000000000' })] })).status === 400);
+ok('a person id given as a manufacturer -> 400', (await ciPost({ investors: [ciLine({ partyType: 'Manufacturer' })] })).status === 400);
+ok('the same account twice in one injection -> 400', (await ciPost({ investors: [ciLine({ party: 'Sara Ahmed' }), ciLine({ party: 'Sara Ahmed', amount: 5 })] })).status === 400);
+ok('a kind of account that does not exist -> 400', (await ciPost({ investors: [ciLine({ partyType: 'Supplier' })] })).status === 400);
 ok('one failing investor saves nobody (all or nothing)', (await ciPost({ investors: [ciLine({ party: 'Ok One' }), ciLine({ party: 'Bad One', streams: [{ stream: 'Nope', pct: 100 }] })] })).status === 400 && (await ciCash()) === ciCash0 + 200000);
 ok('a Viewer cannot add capital -> 403', (await ciPost({ investors: [ciLine()] }, T.audit)).status === 403);
 ok('Manufacturing cannot add capital -> 403', (await ciPost({ investors: [ciLine()] }, T.factory)).status === 403);
@@ -587,9 +608,9 @@ const slBefore = await ciCash();
 const slLoan = (await ciPost({ investors: [ciLine({ party: 'Loan Lara', amount: 20000, funding: 'Partner Advance' })] })).json?.[0];
 ok('a loan or advance posts cash in', slLoan?.funding === 'Partner Advance' && (await ciCash()) === slBefore + 20000);
 const slJournal = (await call(T.finance, 'GET', '/reports/journal?period=all')).json ?? [];
-ok('it is booked to its own liability account, not equity', slJournal.some((l) => l.reference === slLoan.refNo && l.account === 'Capital Source · Partner Advance' && l.credit === 20000));
+ok('it is booked to the investor\'s own liability account, not equity', slJournal.some((l) => l.reference === slLoan.refNo && l.account === 'Capital Source · Partner Advance · Loan Lara' && l.credit === 20000));
 const slEq = (await ciPost({ investors: [ciLine({ party: 'Equity Eli', amount: 5000 })] })).json?.[0];
-ok('equity is booked to Owner Equity', ((await call(T.finance, 'GET', '/reports/journal?period=all')).json ?? []).some((l) => l.reference === slEq.refNo && l.account === 'Owner Equity' && l.credit === 5000));
+ok('equity is booked to the investor\'s own equity account', ((await call(T.finance, 'GET', '/reports/journal?period=all')).json ?? []).some((l) => l.reference === slEq.refNo && l.account === 'Owner Equity · Equity Eli' && l.credit === 5000));
 ok('a Finance user cannot add a capital source -> 403', (await call(T.finance, 'POST', '/lookups', { list: 'CAPITAL_SOURCE', code: 'Gift', flags: {} })).status === 403);
 const slAdded = await call(T.owner, 'POST', '/lookups', { list: 'CAPITAL_SOURCE', code: 'Director Loan', flags: { liability: true } });
 ok('an Admin adds a capital source in Settings', slAdded.status === 201 && slAdded.json?.flags?.liability === true);
@@ -612,6 +633,37 @@ ok('only an Admin sets the type -> 403', (await call(T.finance, 'PATCH', `/categ
 const slBudgets = (await call(T.finance, 'GET', '/reports/budgets')).json ?? [];
 ok('the budgets list carries each stream type and rate', slBudgets.find((b) => b.name === 'Machinery')?.streamType === 'Fixed Asset' && slBudgets.find((b) => b.name === 'Machinery')?.depreciationRate === 12.5);
 ok('a capital injection can go against the new stream', (await ciPost({ investors: [ciLine({ party: 'Mach Mo', amount: 3000, streams: [{ stream: 'Machinery', pct: 100 }] })] })).status === 201);
+
+// ── investor accounts: a person, a manufacturer or a distributor, each with its own ledger account ──
+const iaAccounts = await call(T.finance, 'GET', '/finance/accounts');
+ok('the investor account list is open to Finance', iaAccounts.status === 200 && Array.isArray(iaAccounts.json));
+ok('it holds people, manufacturers and distributors', ['Person', 'Manufacturer', 'Distributor'].every((t) => iaAccounts.json?.some((a) => a.type === t)));
+ok('every account has a kind, an id and a name', iaAccounts.json?.every((a) => a.type && a.id && a.name));
+ok('Manufacturing cannot read the account list -> 403', (await call(T.factory, 'GET', '/finance/accounts')).status === 403);
+const iaMfr = iaAccounts.json?.find((a) => a.type === 'Manufacturer');
+const iaDist = iaAccounts.json?.find((a) => a.type === 'Distributor');
+const iaMfrEntry = (await ciPost({ investors: [{ ...ciLine({ amount: 7000 }), partyType: 'Manufacturer', partyId: iaMfr.id }] })).json?.[0];
+ok('a manufacturer can invest', iaMfrEntry?.partyType === 'Manufacturer' && iaMfrEntry?.party === iaMfr.name && iaMfrEntry?.partyId === iaMfr.id);
+const iaDistEntry = (await ciPost({ funding: 'Shareholder Loan', investors: [{ ...ciLine({ amount: 9000 }), partyType: 'Distributor', partyId: iaDist.id }] })).json?.[0];
+ok('a distributor can lend', iaDistEntry?.partyType === 'Distributor' && iaDistEntry?.party === iaDist.name && iaDistEntry?.funding === 'Shareholder Loan');
+const iaJournal = (await call(T.finance, 'GET', '/reports/journal?period=all')).json ?? [];
+ok('a manufacturer\'s equity goes to its own account', iaJournal.some((l) => l.reference === iaMfrEntry.refNo && l.account === `Owner Equity · ${iaMfr.name}` && l.credit === 7000));
+ok('a distributor\'s loan goes to its own liability account', iaJournal.some((l) => l.reference === iaDistEntry.refNo && l.account === `Capital Source · Shareholder Loan · ${iaDist.name}` && l.credit === 9000));
+const iaAliLine = iaJournal.find((l) => l.reference === ciS.refNo && l.credit === 100000);
+const iaSaraLine = iaJournal.find((l) => l.reference === ciA.refNo && l.credit === 60000);
+ok('two investors never share an account', iaAliLine?.account === 'Owner Equity · Ali Khan' && iaSaraLine?.account === 'Capital Source · Shareholder Loan · Sara Ahmed' && iaAliLine.account !== iaSaraLine.account);
+const iaChart = (await call(T.owner, 'GET', '/accounts')).json ?? [];
+const iaCodes = iaChart.map((a) => a.code);
+ok('the chart of accounts lists them: equity as Equity, a loan as Liability', iaChart.find((a) => a.name === 'Owner Equity · Ali Khan')?.type === 'Equity' && iaChart.find((a) => a.name === 'Capital Source · Shareholder Loan · Sara Ahmed')?.type === 'Liability');
+ok('every account code is unique', new Set(iaCodes).size === iaCodes.length);
+const iaTrial = (await call(T.finance, 'GET', '/reports/journal?period=all')).json ?? [];
+ok('the journal still balances', Math.abs(iaTrial.reduce((n, l) => n + l.debit - l.credit, 0)) < 0.01);
+
+// a person switched off is no longer offered, and is refused
+const iaOff = await call(T.owner, 'PATCH', `/lookups/${ciPeople['Dir Dan']}`, { active: false });
+ok('a person can be switched off', iaOff.status === 200 && iaOff.json?.active === false);
+ok('a switched-off person is refused -> 400', (await ciPost({ investors: [ciLine({ party: 'Dir Dan' })] })).status === 400);
+ok('and no longer offered', !((await call(T.finance, 'GET', '/finance/accounts')).json ?? []).some((a) => a.id === ciPeople['Dir Dan']));
 
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

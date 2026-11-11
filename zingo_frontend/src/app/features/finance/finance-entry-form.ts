@@ -2,7 +2,7 @@ import { ChangeDetectionStrategy, Component, computed, inject, input } from '@an
 import { toSignal } from '@angular/core/rxjs-interop';
 import { ReactiveFormsModule, Validators } from '@angular/forms';
 import { fmtMoney } from '../../shared/format';
-import { Btn, Field, Offcanvas } from '../../ui';
+import { Btn, Field, Offcanvas, MoneyInput } from '../../ui';
 import { FormModal } from '../ops/form-modal';
 import { FinanceApi } from './finance.api';
 import { FinanceEntry, FinanceType } from './models';
@@ -18,7 +18,7 @@ const TYPES: FinanceType[] = ['Capital Injection', 'Operating Expense', 'Asset P
 @Component({
   selector: 'app-finance-entry-form',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [ReactiveFormsModule, Offcanvas, Field, Btn],
+  imports: [MoneyInput, ReactiveFormsModule, Offcanvas, Field, Btn],
   template: `
     <app-offcanvas #oc [(open)]="open" [title]="entry() ? 'Edit pending request ' + entry()!.refNo : 'New finance transaction'"
                subtitle="Amounts are in PKR." size="lg" [dirty]="form.dirty">
@@ -46,7 +46,7 @@ const TYPES: FinanceType[] = ['Capital Injection', 'Operating Expense', 'Asset P
           </select>
         </app-field>
         <app-field label="Amount" [required]="true" [error]="invalid('amount') ? 'Enter an amount above zero' : null">
-          <span class="money-input"><span class="money-input__cur">PKR</span><input type="number" formControlName="amount" min="0.01" step="0.01" /></span>
+          <app-money-input formControlName="amount" />
         </app-field>
         <app-field label="Date" [required]="true"><input type="date" formControlName="date" /></app-field>
         <app-field label="Investor / vendor / party" [wide]="!isCapital()">
@@ -60,7 +60,9 @@ const TYPES: FinanceType[] = ['Capital Injection', 'Operating Expense', 'Asset P
             </select>
           </app-field>
         }
-        <app-field label="Description" [wide]="true"><textarea formControlName="note" placeholder="Optional"></textarea></app-field>
+        <app-field [label]="isCapital() ? 'Terms' : 'Description'" [wide]="true">
+          <textarea formControlName="note" [placeholder]="isCapital() ? 'Optional. Return, profit share, repayment' : 'Optional'"></textarea>
+        </app-field>
       </form>
       <ng-container offcanvasFooter>
         <button appBtn type="button" (click)="oc.requestClose()">Cancel</button>

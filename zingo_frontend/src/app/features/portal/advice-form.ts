@@ -3,7 +3,7 @@ import { toSignal } from '@angular/core/rxjs-interop';
 import { ReactiveFormsModule, Validators } from '@angular/forms';
 import { fmtMoney } from '../../shared/format';
 import { ProofFile, readProof } from '../../shared/files';
-import { Btn, Field, Offcanvas } from '../../ui';
+import { Btn, Field, Offcanvas, MoneyInput } from '../../ui';
 import { FormModal } from '../ops/form-modal';
 import { PortalApi } from './portal.api';
 import { PortalOrder } from './portal.models';
@@ -21,7 +21,7 @@ export const payableOf = (o: PortalOrder) =>
 @Component({
   selector: 'app-advice-form',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [ReactiveFormsModule, Offcanvas, Field, Btn],
+  imports: [MoneyInput, ReactiveFormsModule, Offcanvas, Field, Btn],
   template: `
     <app-offcanvas #oc [(open)]="open" title="Report a payment" size="lg" [dirty]="form.dirty"
                    subtitle="This is an advice, not confirmed cash. Zingo checks it against the bank record.">
@@ -48,7 +48,7 @@ export const payableOf = (o: PortalOrder) =>
         </app-field>
         <app-field label="Payment date" [required]="true"><input type="date" formControlName="date" /></app-field>
         <app-field label="Amount" [required]="true" [error]="invalid('amount') ? 'Enter an amount above zero' : null">
-          <span class="money-input"><span class="money-input__cur">PKR</span><input type="number" formControlName="amount" min="0.01" step="0.01" /></span>
+          <app-money-input formControlName="amount" />
         </app-field>
         <app-field label="Payment mode">
           <select formControlName="method">

@@ -2,7 +2,7 @@ import { ChangeDetectionStrategy, Component, computed, inject, input } from '@an
 import { takeUntilDestroyed, toSignal } from '@angular/core/rxjs-interop';
 import { ReactiveFormsModule, Validators } from '@angular/forms';
 import { fmtMoney } from '../../shared/format';
-import { Btn, Field, Offcanvas } from '../../ui';
+import { Btn, Field, MoneyInput, Offcanvas } from '../../ui';
 import { FinanceApi } from '../finance/finance.api';
 import { AccountingDoc, Currency } from '../finance/models';
 import { FormModal } from '../ops/form-modal';
@@ -17,7 +17,7 @@ const today = () => new Date().toISOString().slice(0, 10);
 @Component({
   selector: 'app-accounting-doc-form',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [ReactiveFormsModule, Offcanvas, Field, Btn],
+  imports: [ReactiveFormsModule, Offcanvas, Field, MoneyInput, Btn],
   template: `
     <app-offcanvas #oc [(open)]="open" [title]="(doc() ? 'Edit ' : 'Record new ') + kind().toLowerCase()"
                [subtitle]="kind() === 'Income' ? 'An invoice we issue to a customer.' : 'A bill from a supplier. It needs approval before it can be paid.'" size="lg" [dirty]="form.dirty">
@@ -41,7 +41,7 @@ const today = () => new Date().toISOString().slice(0, 10);
           </select>
         </app-field>
         <app-field label="Amount in invoice currency" [required]="true" [error]="invalid('foreignAmount') ? 'Enter an amount above zero' : null">
-          <input type="number" formControlName="foreignAmount" min="0.01" step="0.01" />
+          <app-money-input formControlName="foreignAmount" [currency]="currencyCode()" />
         </app-field>
         <app-field label="Exchange rate" hint="PKR per currency unit, frozen on this document">
           <input type="number" formControlName="fxRate" min="0" step="any" />
@@ -87,6 +87,7 @@ export class AccountingDocForm extends FormModal {
   });
 
   private value = toSignal(this.form.valueChanges, { initialValue: this.form.getRawValue() });
+  protected currencyCode = computed(() => this.value().currency ?? 'PKR');
   /** the PKR amount that will post */
   protected pkr = computed(() => Math.round((Number(this.value().foreignAmount) || 0) * (Number(this.value().fxRate) || 0) * 100) / 100);
 

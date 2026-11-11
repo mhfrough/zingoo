@@ -1,11 +1,14 @@
 import { ValidationPipe } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { NestFactory } from '@nestjs/core';
+import type { NestExpressApplication } from '@nestjs/platform-express';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { AppModule } from './app.module';
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule);
+  const app = await NestFactory.create<NestExpressApplication>(AppModule);
+  // JSON bodies up to 2 MB: a base64 attachment on a portal form is about 600 KB. (Express stops at 100 KB by default.)
+  app.useBodyParser('json', { limit: '2mb' });
   const config = app.get(ConfigService);
 
   app.setGlobalPrefix('api');

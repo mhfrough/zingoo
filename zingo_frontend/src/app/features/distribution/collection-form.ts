@@ -2,7 +2,7 @@ import { ChangeDetectionStrategy, Component, input, inject } from '@angular/core
 import { ReactiveFormsModule, Validators } from '@angular/forms';
 import { SettingsStore } from '../../core/settings.store';
 import { fmtMoney } from '../../shared/format';
-import { Btn, Field, Offcanvas } from '../../ui';
+import { Btn, Field, Offcanvas, MoneyInput } from '../../ui';
 import { FormModal } from '../ops/form-modal';
 import { Order } from '../ops/models';
 
@@ -12,7 +12,7 @@ const today = () => new Date().toISOString().slice(0, 10);
 @Component({
   selector: 'app-collection-form',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [ReactiveFormsModule, Offcanvas, Field, Btn],
+  imports: [MoneyInput, ReactiveFormsModule, Offcanvas, Field, Btn],
   template: `
     <app-offcanvas #oc [(open)]="open" title="Record payment collection"
                [subtitle]="order() ? order()!.refNo + ' · ' + order()!.distributor.name : ''" size="lg" [dirty]="form.dirty">
@@ -28,7 +28,7 @@ const today = () => new Date().toISOString().slice(0, 10);
         <app-field label="Receipt date" [required]="true"><input type="date" formControlName="date" /></app-field>
         <app-field label="Amount received" [required]="true"
                    [error]="invalid('amount') ? 'Enter an amount above zero' : null">
-          <span class="money-input"><span class="money-input__cur">PKR</span><input type="number" formControlName="amount" min="0.01" step="0.01" /></span>
+          <app-money-input formControlName="amount" />
         </app-field>
         <app-field label="Payment method" [wide]="true">
           <select formControlName="method">

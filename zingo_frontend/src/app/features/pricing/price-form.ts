@@ -2,7 +2,7 @@ import { ChangeDetectionStrategy, Component, computed, inject, input } from '@an
 import { toSignal } from '@angular/core/rxjs-interop';
 import { ReactiveFormsModule, Validators } from '@angular/forms';
 import { fmtAmount2, fmtPct } from '../../shared/format';
-import { Btn, Field, Offcanvas } from '../../ui';
+import { Btn, Field, Offcanvas, MoneyInput } from '../../ui';
 import { FormModal } from '../ops/form-modal';
 import { Product } from '../ops/models';
 import { unitEconomics } from './economics';
@@ -15,7 +15,7 @@ import { PricingApi } from './pricing.api';
 @Component({
   selector: 'app-price-form',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [ReactiveFormsModule, Offcanvas, Field, Btn],
+  imports: [MoneyInput, ReactiveFormsModule, Offcanvas, Field, Btn],
   template: `
     <app-offcanvas #oc [(open)]="open" [title]="'Edit rates · ' + (product()?.sku ?? '')"
                subtitle="Every rate is per pack, in PKR. Booked sales keep the rate they were booked at." size="lg" [dirty]="form.dirty">
@@ -23,12 +23,12 @@ import { PricingApi } from './pricing.api';
         <div class="notice" data-tone="danger" role="alert">{{ error() }}</div>
       }
       <form [id]="formId" [formGroup]="form" (ngSubmit)="submit()" class="form-grid" novalidate>
-        <app-field label="Factory purchase rate"><span class="money-input"><span class="money-input__cur">PKR</span><input type="number" formControlName="manufacturerRate" min="0" step="0.01" /></span></app-field>
-        <app-field label="Packaging cost" hint="Only if billed separately"><span class="money-input"><span class="money-input__cur">PKR</span><input type="number" formControlName="packagingRate" min="0" step="0.01" /></span></app-field>
-        <app-field label="Printing cost" hint="Only if billed separately"><span class="money-input"><span class="money-input__cur">PKR</span><input type="number" formControlName="printingRate" min="0" step="0.01" /></span></app-field>
-        <app-field label="Inbound freight"><span class="money-input"><span class="money-input__cur">PKR</span><input type="number" formControlName="inboundRate" min="0" step="0.01" /></span></app-field>
-        <app-field label="Distributor price" [required]="true" [error]="invalid('rate') ? 'Enter the price' : null"><span class="money-input"><span class="money-input__cur">PKR</span><input type="number" formControlName="rate" min="0" step="0.01" /></span></app-field>
-        <app-field label="Retail MRP"><span class="money-input"><span class="money-input__cur">PKR</span><input type="number" formControlName="mrp" min="0" step="0.01" /></span></app-field>
+        <app-field label="Factory purchase rate"><app-money-input formControlName="manufacturerRate" /></app-field>
+        <app-field label="Packaging cost" hint="Only if billed separately"><app-money-input formControlName="packagingRate" /></app-field>
+        <app-field label="Printing cost" hint="Only if billed separately"><app-money-input formControlName="printingRate" /></app-field>
+        <app-field label="Inbound freight"><app-money-input formControlName="inboundRate" /></app-field>
+        <app-field label="Distributor price" [required]="true" [error]="invalid('rate') ? 'Enter the price' : null"><app-money-input formControlName="rate" /></app-field>
+        <app-field label="Retail MRP"><app-money-input formControlName="mrp" /></app-field>
       </form>
       <div class="notice">
         <span>

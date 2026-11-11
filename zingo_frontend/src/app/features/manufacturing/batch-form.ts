@@ -1,6 +1,6 @@
 import { ChangeDetectionStrategy, Component, input } from '@angular/core';
 import { ReactiveFormsModule, Validators } from '@angular/forms';
-import { Btn, Field, Offcanvas } from '../../ui';
+import { Btn, Field, Offcanvas, MoneyInput } from '../../ui';
 import { FormModal } from '../ops/form-modal';
 import { Batch, Manufacturer, Product, QC_OPTIONS } from '../ops/models';
 
@@ -10,7 +10,7 @@ const today = () => new Date().toISOString().slice(0, 10);
 @Component({
   selector: 'app-batch-form',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [ReactiveFormsModule, Offcanvas, Field, Btn],
+  imports: [MoneyInput, ReactiveFormsModule, Offcanvas, Field, Btn],
   template: `
     <app-offcanvas #oc [(open)]="open" [title]="batch() ? 'Edit production batch ' + batch()!.refNo : 'New production batch'"
                subtitle="Enter the actual cartons and cost after the run, then release it once QC passes." size="lg" [dirty]="form.dirty">
@@ -51,7 +51,7 @@ const today = () => new Date().toISOString().slice(0, 10);
           <input type="number" formControlName="producedCartons" min="0" step="1" />
         </app-field>
         <app-field label="Actual / accrued batch cost" hint="What the manufacturer charges for the whole batch" [wide]="true">
-          <span class="money-input"><span class="money-input__cur">PKR</span><input type="number" formControlName="cost" min="0" step="0.01" /></span>
+          <app-money-input formControlName="cost" />
         </app-field>
         <app-field label="Production notes" [wide]="true">
           <textarea formControlName="notes" placeholder="Optional"></textarea>

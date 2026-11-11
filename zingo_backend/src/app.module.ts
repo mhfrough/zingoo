@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
+import { AttachmentsModule } from './attachments/attachments.module';
 import { AuthModule } from './auth/auth.module';
 import { CatalogModule } from './catalog/catalog.module';
 import { DistributionModule } from './distribution/distribution.module';
@@ -57,6 +58,7 @@ import { UsersModule } from './users/users.module';
     // later phases (tables exist, endpoints come with the pages)
     ExportsModule,
     PortalModule,
+    AttachmentsModule,
 
     // reports
     ReportsModule,

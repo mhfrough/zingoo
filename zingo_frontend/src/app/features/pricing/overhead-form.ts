@@ -1,6 +1,6 @@
 import { ChangeDetectionStrategy, Component, inject, input } from '@angular/core';
 import { ReactiveFormsModule, Validators } from '@angular/forms';
-import { Btn, Field, Offcanvas } from '../../ui';
+import { Btn, Field, Offcanvas, MoneyInput } from '../../ui';
 import { FormModal } from '../ops/form-modal';
 import { PricingApi } from './pricing.api';
 
@@ -8,7 +8,7 @@ import { PricingApi } from './pricing.api';
 @Component({
   selector: 'app-overhead-form',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [ReactiveFormsModule, Offcanvas, Field, Btn],
+  imports: [MoneyInput, ReactiveFormsModule, Offcanvas, Field, Btn],
   template: `
     <app-offcanvas #oc [(open)]="open" title="Overhead per pack"
                subtitle="A planning share of central costs charged to every pack. It is not booked as an expense." size="lg" [dirty]="form.dirty">
@@ -17,7 +17,7 @@ import { PricingApi } from './pricing.api';
       }
       <form [id]="formId" [formGroup]="form" (ngSubmit)="submit()" class="form-grid" novalidate>
         <app-field label="Overhead per pack" [wide]="true" [required]="true" [error]="invalid('profitAllocationPerPack') ? 'Enter zero or more' : null">
-          <span class="money-input"><span class="money-input__cur">PKR</span><input type="number" formControlName="profitAllocationPerPack" min="0" step="0.01" /></span>
+          <app-money-input formControlName="profitAllocationPerPack" />
         </app-field>
       </form>
       <ng-container offcanvasFooter>

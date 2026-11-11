@@ -1,6 +1,6 @@
 import { ChangeDetectionStrategy, Component, input } from '@angular/core';
 import { ReactiveFormsModule, Validators } from '@angular/forms';
-import { Btn, Field, Offcanvas } from '../../ui';
+import { Btn, Field, Offcanvas, MoneyInput } from '../../ui';
 import { FormModal } from '../ops/form-modal';
 import { Product } from '../ops/models';
 
@@ -8,7 +8,7 @@ import { Product } from '../ops/models';
 @Component({
   selector: 'app-product-form',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [ReactiveFormsModule, Offcanvas, Field, Btn],
+  imports: [MoneyInput, ReactiveFormsModule, Offcanvas, Field, Btn],
   template: `
     <app-offcanvas #oc [(open)]="open" [title]="product() ? 'Edit product / SKU' : 'Add product / SKU'"
                subtitle="Rates are per pack, in PKR." size="lg" [dirty]="form.dirty">
@@ -29,22 +29,22 @@ import { Product } from '../ops/models';
           <input type="number" formControlName="packsPerCarton" min="1" step="1" />
         </app-field>
         <app-field label="MRP per pack">
-          <span class="money-input"><span class="money-input__cur">PKR</span><input type="number" formControlName="mrp" min="0" step="0.01" /></span>
+          <app-money-input formControlName="mrp" />
         </app-field>
         <app-field label="Distributor price per pack" [required]="true">
-          <span class="money-input"><span class="money-input__cur">PKR</span><input type="number" formControlName="rate" min="0" step="0.01" /></span>
+          <app-money-input formControlName="rate" />
         </app-field>
         <app-field label="Factory purchase rate per pack">
-          <span class="money-input"><span class="money-input__cur">PKR</span><input type="number" formControlName="manufacturerRate" min="0" step="0.01" /></span>
+          <app-money-input formControlName="manufacturerRate" />
         </app-field>
         <app-field label="Packaging cost per pack" hint="Only if bought separately">
-          <span class="money-input"><span class="money-input__cur">PKR</span><input type="number" formControlName="packagingRate" min="0" step="0.01" /></span>
+          <app-money-input formControlName="packagingRate" />
         </app-field>
         <app-field label="Printing cost per pack" hint="Only if bought separately">
-          <span class="money-input"><span class="money-input__cur">PKR</span><input type="number" formControlName="printingRate" min="0" step="0.01" /></span>
+          <app-money-input formControlName="printingRate" />
         </app-field>
         <app-field label="Inbound freight per pack">
-          <span class="money-input"><span class="money-input__cur">PKR</span><input type="number" formControlName="inboundRate" min="0" step="0.01" /></span>
+          <app-money-input formControlName="inboundRate" />
         </app-field>
         <app-field label="Availability">
           <select formControlName="active"><option value="true">Active</option><option value="false">Inactive</option></select>

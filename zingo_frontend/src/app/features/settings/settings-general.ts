@@ -3,7 +3,7 @@ import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { AuthService } from '../../core/auth.service';
 import { SettingsStore } from '../../core/settings.store';
 import { errorText } from '../../shared/errors';
-import { Btn, Field, ToastService } from '../../ui';
+import { Btn, Field, ToastService, MoneyInput } from '../../ui';
 import { SettingsApi } from './settings.api';
 
 const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
@@ -26,7 +26,7 @@ const numbers = (text: string) => text.split(/[,\s]+/).filter(Boolean).map(Numbe
 @Component({
   selector: 'app-settings-general',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [ReactiveFormsModule, Field, Btn],
+  imports: [MoneyInput, ReactiveFormsModule, Field, Btn],
   template: `
     <form [formGroup]="form" (ngSubmit)="save()" novalidate class="stack">
       <div class="card">
@@ -55,15 +55,15 @@ const numbers = (text: string) => text.split(/[,\s]+/).filter(Boolean).map(Numbe
         <div class="card__head"><div><h2>Money and approvals</h2><p>Who signs what, and the planning figures</p></div></div>
         <div class="card__body form-grid">
           <app-field label="Two signatures from" hint="Spending at or above this needs both signatories" [required]="true">
-            <span class="money-input"><span class="money-input__cur">PKR</span><input type="number" formControlName="approvalThreshold" min="0" step="1000" /></span>
+            <app-money-input formControlName="approvalThreshold" />
           </app-field>
           <app-field label="Signatory A"><input type="text" formControlName="signatoryA" /></app-field>
           <app-field label="Signatory B"><input type="text" formControlName="signatoryB" /></app-field>
           <app-field label="Capital target" hint="What the business plans to raise">
-            <span class="money-input"><span class="money-input__cur">PKR</span><input type="number" formControlName="capitalTarget" min="0" step="10000" /></span>
+            <app-money-input formControlName="capitalTarget" />
           </app-field>
           <app-field label="Overhead per pack" hint="Planning share charged to every pack">
-            <span class="money-input"><span class="money-input__cur">PKR</span><input type="number" formControlName="profitAllocationPerPack" min="0" step="0.01" /></span>
+            <app-money-input formControlName="profitAllocationPerPack" />
           </app-field>
           <app-field label="Sales tax rate" hint="Planning only, not posted"><input type="number" formControlName="salesTaxRate" min="0" step="0.01" /></app-field>
         </div>

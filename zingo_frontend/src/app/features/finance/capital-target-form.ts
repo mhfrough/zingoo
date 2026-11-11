@@ -1,6 +1,6 @@
 import { ChangeDetectionStrategy, Component, inject, input } from '@angular/core';
 import { ReactiveFormsModule, Validators } from '@angular/forms';
-import { Btn, Field, Offcanvas } from '../../ui';
+import { Btn, Field, Offcanvas, MoneyInput } from '../../ui';
 import { FormModal } from '../ops/form-modal';
 import { FinanceApi } from './finance.api';
 
@@ -8,7 +8,7 @@ import { FinanceApi } from './finance.api';
 @Component({
   selector: 'app-capital-target-form',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [ReactiveFormsModule, Offcanvas, Field, Btn],
+  imports: [MoneyInput, ReactiveFormsModule, Offcanvas, Field, Btn],
   template: `
     <app-offcanvas #oc [(open)]="open" title="Capital investment target" subtitle="Used for the progress bar on the Overview." size="lg" [dirty]="form.dirty">
       @if (error()) {
@@ -16,7 +16,7 @@ import { FinanceApi } from './finance.api';
       }
       <form [id]="formId" [formGroup]="form" (ngSubmit)="submit()" class="stack" novalidate>
         <app-field label="Target amount" [required]="true" [error]="invalid('target') ? 'Enter a valid amount' : null">
-          <span class="money-input"><span class="money-input__cur">PKR</span><input type="number" formControlName="target" min="0" step="10000" /></span>
+          <app-money-input formControlName="target" />
         </app-field>
       </form>
       <ng-container offcanvasFooter>

@@ -524,6 +524,11 @@
       font-family: var(--font-mono);
       font-variant-numeric: tabular-nums;
     }
+
+    /* no currency chip (shares, percentages): normal left padding */
+    &.money-input--bare > input {
+      padding-inline-start: var(--control-pad);
+    }
   }
 
   /* ───────────── checkbox / radio / switch ───────────── */

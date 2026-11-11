@@ -1,7 +1,7 @@
 import { ChangeDetectionStrategy, Component, inject, input } from '@angular/core';
 import { ReactiveFormsModule, Validators } from '@angular/forms';
 import { fmtMoney } from '../../shared/format';
-import { Btn, Field, Offcanvas } from '../../ui';
+import { Btn, Field, Offcanvas, MoneyInput } from '../../ui';
 import { FormModal } from '../ops/form-modal';
 import { PortalApi } from './portal.api';
 import { DeskRequest } from './portal.models';
@@ -10,7 +10,7 @@ import { DeskRequest } from './portal.models';
 @Component({
   selector: 'app-accept-form',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [ReactiveFormsModule, Offcanvas, Field, Btn],
+  imports: [MoneyInput, ReactiveFormsModule, Offcanvas, Field, Btn],
   template: `
     <app-offcanvas #oc [(open)]="open" title="Accept request" size="lg" [dirty]="form.dirty"
                    [subtitle]="req() ? req()!.distributor.name + ' · ' + req()!.product.sku + ' · ' + req()!.cartons + ' cartons · ' + money(req()!.value) : ''">
@@ -20,7 +20,7 @@ import { DeskRequest } from './portal.models';
       <div class="notice"><span>A draft sales order is created with this price and these terms. The invoice is posted only when it is dispatched.</span></div>
       <form [id]="formId" [formGroup]="form" (ngSubmit)="submit()" class="form-grid" novalidate>
         <app-field label="Price per pack" [required]="true" [error]="invalid('rate') ? 'Enter the price' : null">
-          <span class="money-input"><span class="money-input__cur">PKR</span><input type="number" formControlName="rate" min="0.01" step="0.01" /></span>
+          <app-money-input formControlName="rate" />
         </app-field>
         <app-field label="Credit days">
           <select formControlName="terms">

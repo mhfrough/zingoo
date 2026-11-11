@@ -1,7 +1,7 @@
 import { ChangeDetectionStrategy, Component, computed, inject, input, signal } from '@angular/core';
 import { FormControl, ReactiveFormsModule, Validators } from '@angular/forms';
 import { forkJoin } from 'rxjs';
-import { Btn, Field, Offcanvas } from '../../ui';
+import { Btn, Field, Offcanvas, MoneyInput } from '../../ui';
 import { FormModal } from '../ops/form-modal';
 import { FinanceApi } from './finance.api';
 import { Budget } from './models';
@@ -13,7 +13,7 @@ import { Budget } from './models';
 @Component({
   selector: 'app-budget-form',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [ReactiveFormsModule, Offcanvas, Field, Btn],
+  imports: [MoneyInput, ReactiveFormsModule, Offcanvas, Field, Btn],
   template: `
     <app-offcanvas #oc [(open)]="open" [title]="only() ? 'Edit ' + only()!.name + ' budget' : 'Edit all investment allocations'"
                subtitle="PKR allocated to each cost center." size="lg" [dirty]="form.dirty">
@@ -23,7 +23,7 @@ import { Budget } from './models';
       <form [id]="formId" [formGroup]="form" (ngSubmit)="submit()" class="stack" novalidate>
         @for (c of fields(); track c.id) {
           <app-field [label]="c.name + ' allocation'">
-            <span class="money-input"><span class="money-input__cur">PKR</span><input type="number" [formControlName]="c.id" min="0" step="1000" /></span>
+            <app-money-input [formControlName]="c.id" />
           </app-field>
         }
       </form>

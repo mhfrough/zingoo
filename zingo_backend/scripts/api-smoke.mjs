@@ -444,5 +444,39 @@ const p7desk = (await call(T.finance, 'GET', '/portal/desk')).json;
 ok('the desk shows the audit trail', p7desk.audit.some((a) => a.event === 'Credit note approved'));
 ok('the books still balance after the portal flows', (await call(T.owner, 'GET', '/reports/trial-balance')).json.balanced === true);
 
+
+// ── file uploads and the JSON size limit ──
+const PNG = Buffer.from('89504e470d0a1a0a0000000d49484452000000010000000108060000001f15c4890000000d49444154789c6360000002000001e221bc330000000049454e44ae426082', 'hex');
+const upload = async (token, bytes, name, type) => {
+  const fd = new FormData();
+  fd.append('file', new Blob([bytes], { type }), name);
+  const r = await fetch(BASE + '/attachments', { method: 'POST', headers: token ? { Authorization: `Bearer ${token}` } : {}, body: fd });
+  let json = null; try { json = await r.json(); } catch { /* none */ }
+  return { status: r.status, json };
+};
+const up1 = await upload(T.finance, PNG, 'slip one.png', 'image/png');
+ok('Finance uploads an image', up1.status === 201 && up1.json?.mime === 'image/png' && up1.json?.size === PNG.length && up1.json?.name === 'slip one.png', JSON.stringify(up1.json).slice(0, 120));
+const dl = await fetch(`${BASE}/attachments/${up1.json.id}`, { headers: { Authorization: `Bearer ${T.audit}` } });
+const dlBytes = Buffer.from(await dl.arrayBuffer());
+ok('a Viewer can download it, byte for byte, as an attachment', dl.status === 200 && dlBytes.equals(PNG) && dl.headers.get('content-type') === 'image/png' && /attachment/.test(dl.headers.get('content-disposition') ?? '') && dl.headers.get('x-content-type-options') === 'nosniff');
+ok('a download needs a login -> 401', (await fetch(`${BASE}/attachments/${up1.json.id}`)).status === 401);
+ok('the file details are readable', (await call(T.audit, 'GET', `/attachments/${up1.json.id}/meta`)).json?.name === 'slip one.png');
+ok('a Viewer cannot upload -> 403', (await upload(T.audit, PNG, 'x.png', 'image/png')).status === 403);
+ok('a distributor cannot upload here -> 403', (await upload(T.dist, PNG, 'x.png', 'image/png')).status === 403);
+ok('a program renamed to .png is refused -> 400', (await upload(T.finance, Buffer.from('MZ\x90\x00 not an image'), 'virus.png', 'image/png')).status === 400);
+ok('a type that does not match the extension is refused -> 400', (await upload(T.finance, PNG, 'photo.pdf', 'image/png')).status === 400);
+ok('a text file is refused -> 400', (await upload(T.finance, Buffer.from('hello'), 'notes.txt', 'text/plain')).status === 400);
+ok('an empty file is refused -> 400', (await upload(T.finance, Buffer.alloc(0), 'empty.png', 'image/png')).status === 400);
+const pdf = Buffer.concat([Buffer.from('%PDF-1.4\n'), Buffer.alloc(2000, 0x20)]);
+ok('a PDF is accepted', (await upload(T.finance, pdf, 'agreement.pdf', 'application/pdf')).status === 201);
+const bigPdf = Buffer.concat([Buffer.from('%PDF-1.4\n'), Buffer.alloc(5 * 1024 * 1024 + 10, 0x20)]);
+ok('a file over 5 MB is refused', [400, 413].includes((await upload(T.finance, bigPdf, 'bigPdf.pdf', 'application/pdf')).status));
+ok('a hidden path in the name is cleaned', (await upload(T.finance, PNG, '..\\..\\evil name.png', 'image/png')).json?.name === 'evil name.png');
+const own = await upload(T.finance, PNG, 'own.png', 'image/png');
+ok('an unattached file can be removed by its uploader', (await call(T.finance, 'DELETE', `/attachments/${own.json.id}`)).status === 200);
+ok('a removed file is gone -> 404', (await call(T.finance, 'GET', `/attachments/${own.json.id}/meta`)).status === 404);
+const p7big = await call(T.dist, 'POST', '/portal/advices', { orderId: p7o4.id, date: '2026-11-10', amount: 100, proofName: 'bigPdf-slip.png', proofMime: 'image/png', proofData: 'iVBORw0KGgo='.padEnd(300000, 'A') });
+ok('a 300 KB portal attachment is no longer refused by the size limit', p7big.status === 201, `${p7big.status} ${JSON.stringify(p7big.json).slice(0, 100)}`);
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

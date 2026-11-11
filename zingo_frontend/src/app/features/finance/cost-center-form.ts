@@ -1,6 +1,6 @@
 import { ChangeDetectionStrategy, Component, inject } from '@angular/core';
 import { ReactiveFormsModule, Validators } from '@angular/forms';
-import { Btn, Field, Offcanvas } from '../../ui';
+import { Btn, Field, Offcanvas, MoneyInput } from '../../ui';
 import { FormModal } from '../ops/form-modal';
 import { FinanceApi } from './finance.api';
 
@@ -8,7 +8,7 @@ import { FinanceApi } from './finance.api';
 @Component({
   selector: 'app-cost-center-form',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [ReactiveFormsModule, Offcanvas, Field, Btn],
+  imports: [MoneyInput, ReactiveFormsModule, Offcanvas, Field, Btn],
   template: `
     <app-offcanvas #oc [(open)]="open" title="New investment cost center" subtitle="It appears in the budgets and in every stream list." size="lg" [dirty]="form.dirty">
       @if (error()) {
@@ -19,7 +19,7 @@ import { FinanceApi } from './finance.api';
           <input type="text" formControlName="name" />
         </app-field>
         <app-field label="Budget allocation">
-          <span class="money-input"><span class="money-input__cur">PKR</span><input type="number" formControlName="budget" min="0" step="1000" /></span>
+          <app-money-input formControlName="budget" />
         </app-field>
       </form>
       <ng-container offcanvasFooter>

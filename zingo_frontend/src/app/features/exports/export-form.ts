@@ -3,7 +3,7 @@ import { takeUntilDestroyed, toSignal } from '@angular/core/rxjs-interop';
 import { ReactiveFormsModule, Validators } from '@angular/forms';
 import { SettingsStore } from '../../core/settings.store';
 import { fmtAmount2, fmtMoney, fmtPct } from '../../shared/format';
-import { Btn, Field, Offcanvas } from '../../ui';
+import { Btn, Field, MoneyInput, Offcanvas } from '../../ui';
 import { Currency } from '../finance/models';
 import { FormModal } from '../ops/form-modal';
 import { Product } from '../ops/models';
@@ -28,7 +28,7 @@ const COSTS = [
 @Component({
   selector: 'app-export-form',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [ReactiveFormsModule, Offcanvas, Field, Btn],
+  imports: [ReactiveFormsModule, Offcanvas, Field, MoneyInput, Btn],
   template: `
     <app-offcanvas #oc [(open)]="open" [title]="quote() ? 'Edit container quote' : 'New container quote'"
                subtitle="A quote is a costing scenario. Shipping it posts the invoice, the goods cost and the seller's costs." size="lg" [dirty]="form.dirty">
@@ -76,10 +76,10 @@ const COSTS = [
           <input type="number" formControlName="fxRate" min="0" step="any" />
         </app-field>
         <app-field label="Selling price per pack" [hint]="'In ' + currencyCode()" [required]="true" [error]="invalid('rate') ? 'Enter the price' : null">
-          <input type="number" formControlName="rate" min="0" step="any" />
+          <app-money-input formControlName="rate" [currency]="currencyCode()" [decimals]="4" />
         </app-field>
         @for (c of costs; track c[0]) {
-          <app-field [label]="c[1]" [hint]="'In ' + currencyCode()"><input type="number" [formControlName]="c[0]" min="0" step="0.01" /></app-field>
+          <app-field [label]="c[1]" [hint]="'In ' + currencyCode()"><app-money-input [formControlName]="c[0]" [currency]="currencyCode()" /></app-field>
         }
       </form>
       <div class="notice">

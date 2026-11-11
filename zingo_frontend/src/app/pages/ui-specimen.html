@@ -136,7 +136,7 @@
         <app-field label="Email" icon="mail" hint="With a leading icon"><input type="email" formControlName="email" placeholder="name@company.com" /></app-field>
         <app-field label="Order date" [required]="true" hint="Native date, styled"><input type="date" value="2026-11-09" /></app-field>
         <app-field label="Amount to collect">
-          <span class="money-input"><span class="money-input__cur">PKR</span><input type="number" formControlName="amount" /></span>
+          <app-money-input formControlName="amount" />
         </app-field>
         <app-field label="Reference (error)" error="Enter the cheque or transfer number" [required]="true"><input type="text" value="" /></app-field>
         <app-field label="Reference (success)" [success]="true" hint="Matches an open invoice"><input type="text" value="TRF-20931" /></app-field>
@@ -495,7 +495,7 @@
   <form id="collect-form" class="form-grid" (submit)="$event.preventDefault(); modalOpen.set(false)">
     <app-field label="Receipt date" [required]="true"><input type="date" value="2026-11-10" /></app-field>
     <app-field label="Amount" [required]="true">
-      <span class="money-input"><span class="money-input__cur">PKR</span><input type="number" value="11700" /></span>
+      <app-money-input [ngModel]="11700" />
     </app-field>
     <app-field label="Method">
       <select><option>Bank Transfer</option><option>Cash</option><option>Cheque</option><option>Other</option></select>

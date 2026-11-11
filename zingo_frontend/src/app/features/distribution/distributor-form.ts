@@ -1,6 +1,6 @@
 import { ChangeDetectionStrategy, Component, input } from '@angular/core';
 import { ReactiveFormsModule, Validators } from '@angular/forms';
-import { Btn, Field, Offcanvas } from '../../ui';
+import { Btn, Field, Offcanvas, MoneyInput } from '../../ui';
 import { FormModal } from '../ops/form-modal';
 import { Distributor } from '../ops/models';
 
@@ -8,7 +8,7 @@ import { Distributor } from '../ops/models';
 @Component({
   selector: 'app-distributor-form',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [ReactiveFormsModule, Offcanvas, Field, Btn],
+  imports: [MoneyInput, ReactiveFormsModule, Offcanvas, Field, Btn],
   template: `
     <app-offcanvas #oc [(open)]="open" [title]="distributor() ? 'Edit distributor' : 'Add distributor'"
                subtitle="Company details and trading terms." size="lg" [dirty]="form.dirty">
@@ -33,7 +33,7 @@ import { Distributor } from '../ops/models';
           </select>
         </app-field>
         <app-field label="Credit limit" hint="0 means no limit. Over the limit, dispatch is held for Finance.">
-          <span class="money-input"><span class="money-input__cur">PKR</span><input type="number" formControlName="creditLimit" min="0" step="1000" /></span>
+          <app-money-input formControlName="creditLimit" />
         </app-field>
         <app-field label="Advance guide (%)" hint="Share of an order the distributor is asked to pay up front">
           <input type="number" formControlName="advancePct" min="0" max="100" step="1" />

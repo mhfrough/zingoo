@@ -2,7 +2,7 @@ import { ChangeDetectionStrategy, Component, inject, input } from '@angular/core
 import { ReactiveFormsModule, Validators } from '@angular/forms';
 import { SettingsStore } from '../../core/settings.store';
 import { fmtMoney } from '../../shared/format';
-import { Btn, Field, Offcanvas } from '../../ui';
+import { Btn, Field, Offcanvas, MoneyInput } from '../../ui';
 import { FinanceApi } from '../finance/finance.api';
 import { AccountingDoc } from '../finance/models';
 import { FormModal } from '../ops/form-modal';
@@ -13,7 +13,7 @@ const today = () => new Date().toISOString().slice(0, 10);
 @Component({
   selector: 'app-settle-form',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [ReactiveFormsModule, Offcanvas, Field, Btn],
+  imports: [MoneyInput, ReactiveFormsModule, Offcanvas, Field, Btn],
   template: `
     <app-offcanvas #oc [(open)]="open" [title]="doc()?.kind === 'Income' ? 'Collect income' : 'Pay expense bill'"
                [subtitle]="doc() ? doc()!.refNo + ' · ' + doc()!.party : ''" size="lg" [dirty]="form.dirty">
@@ -30,7 +30,7 @@ const today = () => new Date().toISOString().slice(0, 10);
           <input type="date" formControlName="date" />
         </app-field>
         <app-field label="Amount to settle" [required]="true" [error]="invalid('amount') ? 'Enter an amount above zero' : null">
-          <span class="money-input"><span class="money-input__cur">PKR</span><input type="number" formControlName="amount" min="0.01" step="0.01" /></span>
+          <app-money-input formControlName="amount" />
         </app-field>
         <app-field label="Payment method" [wide]="true">
           <select formControlName="method">

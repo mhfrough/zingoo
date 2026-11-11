@@ -3,7 +3,7 @@ import { toSignal } from '@angular/core/rxjs-interop';
 import { ReactiveFormsModule, Validators } from '@angular/forms';
 import { SettingsStore } from '../../core/settings.store';
 import { fmtAmount2, fmtMoney } from '../../shared/format';
-import { Btn, Field, Offcanvas } from '../../ui';
+import { Btn, Field, MoneyInput, Offcanvas } from '../../ui';
 import { FormModal } from '../ops/form-modal';
 import { ExportsApi } from './exports.api';
 import { ExportRow } from './models';
@@ -17,7 +17,7 @@ const today = () => new Date().toISOString().slice(0, 10);
 @Component({
   selector: 'app-export-collect-form',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [ReactiveFormsModule, Offcanvas, Field, Btn],
+  imports: [ReactiveFormsModule, Offcanvas, Field, MoneyInput, Btn],
   template: `
     <app-offcanvas #oc [(open)]="open" title="Collect from the buyer"
                [subtitle]="shipment() ? shipment()!.refNo + ' · ' + shipment()!.buyer : ''" size="lg" [dirty]="form.dirty">
@@ -33,7 +33,7 @@ const today = () => new Date().toISOString().slice(0, 10);
         <app-field label="Collection date" [required]="true"><input type="date" formControlName="date" /></app-field>
         <app-field [label]="'Amount received (' + (shipment()?.currency ?? '') + ')'" [required]="true"
                    [error]="invalid('foreignAmount') ? 'Enter an amount above zero' : null">
-          <input type="number" formControlName="foreignAmount" min="0.01" step="0.01" />
+          <app-money-input formControlName="foreignAmount" [currency]="shipment()?.currency ?? ''" />
         </app-field>
         <app-field label="Bank exchange rate" hint="PKR per 1 unit, on the day it arrived" [required]="true"
                    [error]="invalid('fxRate') ? 'Enter the rate' : null">

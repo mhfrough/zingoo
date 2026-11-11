@@ -2,7 +2,7 @@ import { ChangeDetectionStrategy, Component, input, inject } from '@angular/core
 import { ReactiveFormsModule, Validators } from '@angular/forms';
 import { SettingsStore } from '../../core/settings.store';
 import { fmtMoney } from '../../shared/format';
-import { Btn, Field, Offcanvas } from '../../ui';
+import { Btn, Field, Offcanvas, MoneyInput } from '../../ui';
 import { FormModal } from '../ops/form-modal';
 import { Batch } from '../ops/models';
 
@@ -12,7 +12,7 @@ const today = () => new Date().toISOString().slice(0, 10);
 @Component({
   selector: 'app-pay-manufacturer-form',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [ReactiveFormsModule, Offcanvas, Field, Btn],
+  imports: [MoneyInput, ReactiveFormsModule, Offcanvas, Field, Btn],
   template: `
     <app-offcanvas #oc [(open)]="open" title="Pay manufacturer" [subtitle]="batch() ? batch()!.refNo + ' · ' + batch()!.manufacturer.name : ''" size="lg" [dirty]="form.dirty">
       @if (batch(); as b) {
@@ -26,7 +26,7 @@ const today = () => new Date().toISOString().slice(0, 10);
       <form [id]="formId" [formGroup]="form" (ngSubmit)="submit()" class="form-grid" novalidate>
         <app-field label="Payment date" [required]="true"><input type="date" formControlName="date" /></app-field>
         <app-field label="Amount" [required]="true" [error]="invalid('amount') ? 'Enter an amount above zero' : null">
-          <span class="money-input"><span class="money-input__cur">PKR</span><input type="number" formControlName="amount" min="0.01" step="0.01" /></span>
+          <app-money-input formControlName="amount" />
         </app-field>
         <app-field label="Method" [wide]="true">
           <select formControlName="method">

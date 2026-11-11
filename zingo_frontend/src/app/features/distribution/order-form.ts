@@ -2,7 +2,7 @@ import { ChangeDetectionStrategy, Component, computed, input } from '@angular/co
 import { takeUntilDestroyed, toSignal } from '@angular/core/rxjs-interop';
 import { ReactiveFormsModule, Validators } from '@angular/forms';
 import { fmtMoney } from '../../shared/format';
-import { Btn, Field, Offcanvas } from '../../ui';
+import { Btn, Field, Offcanvas, MoneyInput } from '../../ui';
 import { FormModal } from '../ops/form-modal';
 import { Distributor, Order, Product } from '../ops/models';
 
@@ -12,7 +12,7 @@ const today = () => new Date().toISOString().slice(0, 10);
 @Component({
   selector: 'app-order-form',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [ReactiveFormsModule, Offcanvas, Field, Btn],
+  imports: [MoneyInput, ReactiveFormsModule, Offcanvas, Field, Btn],
   template: `
     <app-offcanvas #oc [(open)]="open" [title]="order() ? 'Edit draft order ' + order()!.refNo : 'New distributor sales order'"
                subtitle="Dispatch it later to reserve stock and create the invoice." size="lg" [dirty]="form.dirty">
@@ -41,7 +41,7 @@ const today = () => new Date().toISOString().slice(0, 10);
           <input type="number" formControlName="cartons" min="1" step="1" />
         </app-field>
         <app-field label="Rate per pack" hint="Filled from the SKU price; change it for this order if needed" [required]="true">
-          <span class="money-input"><span class="money-input__cur">PKR</span><input type="number" formControlName="rate" min="0" step="0.01" /></span>
+          <app-money-input formControlName="rate" />
         </app-field>
         <app-field label="Distributor PO number">
           <input type="text" formControlName="poRef" placeholder="Optional" />

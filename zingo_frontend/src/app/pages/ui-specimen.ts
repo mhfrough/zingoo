@@ -3,11 +3,11 @@
  * Owned by the design-system session. Review here after changing anything in src/styles or src/app/ui.
  */
 import { ChangeDetectionStrategy, Component, inject, signal } from '@angular/core';
-import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
+import { FormBuilder, FormsModule, ReactiveFormsModule, Validators } from '@angular/forms';
 import { Tone, fmtDate } from '../shared/format';
 import {
   Btn, ConfirmService, ConnectionStatus, DataTable, EmptyState, Field, IconComponent, IconName, Kpi, Modal,
-  NumberInput, Offcanvas, PageHeader, PageSkeleton, PasswordField, RichText, RowAction, RowActionEvent, SearchBox,
+  MoneyInput, NumberInput, Offcanvas, PageHeader, PageSkeleton, PasswordField, RichText, RowAction, RowActionEvent, SearchBox,
   Select, SelectOption, Skeleton, SkeletonForm, SkeletonKpi, SkeletonText, TEXT_LIMITS, TabItem, TabPanel, Tabs, Tag,
   TableColumn, TableFilter, ToastService,
 } from '../ui';
@@ -60,7 +60,7 @@ type BtnVariantName = 'primary' | 'secondary' | 'ghost' | 'success' | 'danger' |
   selector: 'app-ui-specimen',
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [
-    ReactiveFormsModule, Btn, ConnectionStatus, DataTable, Offcanvas, TabPanel, Tabs, EmptyState, Field, IconComponent, Kpi, Modal, NumberInput, PageHeader,
+    FormsModule, MoneyInput, ReactiveFormsModule, Btn, ConnectionStatus, DataTable, Offcanvas, TabPanel, Tabs, EmptyState, Field, IconComponent, Kpi, Modal, NumberInput, PageHeader,
     PageSkeleton, PasswordField, RichText, SearchBox, Select, Skeleton, SkeletonForm, SkeletonKpi,
     SkeletonText, Tag,
   ],

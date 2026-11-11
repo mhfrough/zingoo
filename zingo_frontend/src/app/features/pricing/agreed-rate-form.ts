@@ -2,7 +2,7 @@ import { ChangeDetectionStrategy, Component, computed, inject, input } from '@an
 import { toSignal } from '@angular/core/rxjs-interop';
 import { ReactiveFormsModule, Validators } from '@angular/forms';
 import { fmtAmount2 } from '../../shared/format';
-import { Btn, Field, Offcanvas } from '../../ui';
+import { Btn, Field, Offcanvas, MoneyInput } from '../../ui';
 import { FormModal } from '../ops/form-modal';
 import { Distributor, Product } from '../ops/models';
 import { AgreedRate, PricingApi } from './pricing.api';
@@ -14,7 +14,7 @@ import { AgreedRate, PricingApi } from './pricing.api';
 @Component({
   selector: 'app-agreed-rate-form',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [ReactiveFormsModule, Offcanvas, Field, Btn],
+  imports: [MoneyInput, ReactiveFormsModule, Offcanvas, Field, Btn],
   template: `
     <app-offcanvas #oc [(open)]="open" [title]="rate() ? 'Change agreed rate' : 'Agree a rate'"
                subtitle="The price per pack for one distributor and one SKU." size="lg" [dirty]="form.dirty">
@@ -40,7 +40,7 @@ import { AgreedRate, PricingApi } from './pricing.api';
         </app-field>
         <app-field label="Agreed price per pack" [wide]="true" [required]="true" [error]="invalid('rate') ? 'Enter the price' : null"
                    [hint]="standard() !== null ? 'Standard price is PKR ' + money(standard()!) : ''">
-          <span class="money-input"><span class="money-input__cur">PKR</span><input type="number" formControlName="rate" min="0" step="0.01" /></span>
+          <app-money-input formControlName="rate" />
         </app-field>
       </form>
       <ng-container offcanvasFooter>

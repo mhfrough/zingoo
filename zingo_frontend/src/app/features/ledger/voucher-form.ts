@@ -2,7 +2,7 @@ import { ChangeDetectionStrategy, Component, computed, inject, input, signal } f
 import { takeUntilDestroyed, toSignal } from '@angular/core/rxjs-interop';
 import { AbstractControl, FormArray, FormControl, FormGroup, ReactiveFormsModule, ValidationErrors, Validators } from '@angular/forms';
 import { fmtAmount2 } from '../../shared/format';
-import { Btn, Field, Offcanvas } from '../../ui';
+import { Btn, Field, MoneyInput, Offcanvas } from '../../ui';
 import { Currency } from '../finance/models';
 import { FormModal } from '../ops/form-modal';
 import { LedgerApi } from './ledger.api';
@@ -33,7 +33,7 @@ function balanced(group: AbstractControl): ValidationErrors | null {
 @Component({
   selector: 'app-voucher-form',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [ReactiveFormsModule, Offcanvas, Field, Btn],
+  imports: [ReactiveFormsModule, Offcanvas, Field, MoneyInput, Btn],
   styles: `
     /* the grid of voucher lines: account, debit, credit, remove */
     .voucher-lines {
@@ -108,10 +108,10 @@ function balanced(group: AbstractControl): ValidationErrors | null {
                 </select>
               </div></div>
               <div class="field"><div class="field__control">
-                <input type="number" formControlName="debit" min="0" step="0.01" placeholder="Debit" [attr.aria-label]="'Debit, line ' + (i + 1)" />
+                <app-money-input formControlName="debit" currency="" placeholder="Debit" [ariaLabel]="'Debit, line ' + (i + 1)" />
               </div></div>
               <div class="field"><div class="field__control">
-                <input type="number" formControlName="credit" min="0" step="0.01" placeholder="Credit" [attr.aria-label]="'Credit, line ' + (i + 1)" />
+                <app-money-input formControlName="credit" currency="" placeholder="Credit" [ariaLabel]="'Credit, line ' + (i + 1)" />
               </div></div>
               <button appBtn type="button" size="sm" variant="ghost" icon="x" [disabled]="groups().length <= 2"
                       [attr.aria-label]="'Remove line ' + (i + 1)" (click)="removeLine(i)"></button>

@@ -1,0 +1,82 @@
+# Render Blueprint: the whole app on Render (database, API, web app).
+#
+#   zingo-db   PostgreSQL            (Render SQL)
+#   zingo-api  NestJS API            https://zingo-api.onrender.com/api   (Swagger: /api/docs)
+#   zingo-web  Angular web app       https://zingo-web.onrender.com
+#
+# Secrets are never stored here: the values marked `sync: false` are typed once in the Render dashboard.
+# The first start creates the tables (DB_SYNC) and loads the client's sample data (the seed does nothing once data exists).
+# If Render gives a service a different address (a name was taken), change API_URL on zingo-web and CORS_ORIGIN on zingo-api to match.
+
+databases:
+  - name: zingo-db
+    databaseName: zingo_db
+    user: zingo
+    region: singapore
+    plan: free
+
+services:
+  - type: web
+    name: zingo-api
+    runtime: node
+    region: singapore
+    plan: free
+    rootDir: zingo_backend
+    buildCommand: npm ci --include=dev && npm run build
+    # step 1 creates or updates the tables and loads the sample data on an empty database (it skips when data exists);
+    # step 2 starts the API without re-checking every table
+    startCommand: DB_SYNC=true node dist/database/seed.js; node dist/main
+    healthCheckPath: /api/docs
+    envVars:
+      - key: NODE_VERSION
+        value: 22
+      - key: NODE_ENV
+        value: production
+      - key: DB_HOST
+        fromDatabase: { name: zingo-db, property: host }
+      - key: DB_PORT
+        fromDatabase: { name: zingo-db, property: port }
+      - key: DB_USERNAME
+        fromDatabase: { name: zingo-db, property: user }
+      - key: DB_PASSWORD
+        fromDatabase: { name: zingo-db, property: password }
+      - key: DB_DATABASE
+        fromDatabase: { name: zingo-db, property: database }
+      - key: DB_SSL
+        value: "false"
+      # the tables are created by the start command's first step; move to migrations before real customer data
+      - key: DB_SYNC
+        value: "false"
+      - key: JWT_SECRET
+        generateValue: true
+      - key: JWT_EXPIRES_IN
+        value: 12h
+      - key: CORS_ORIGIN
+        value: https://zingo-web.onrender.com
+      # typed in the dashboard:
+      - key: SEED_PASSWORD   # password of the sample users (*@example.test)
+        sync: false
+      - key: ROOT_EMAIL      # the highest-role account
+        sync: false
+      - key: ROOT_NAME
+        value: Root Admin
+      - key: ROOT_PASSWORD
+        sync: false
+
+  - type: web
+    name: zingo-web
+    runtime: static
+    region: singapore
+    rootDir: zingo_frontend
+    buildCommand: npm ci && node scripts/set-env.mjs && npm run build
+    staticPublishPath: dist/zingo_frontend/browser
+    envVars:
+      - key: NODE_VERSION
+        value: 22
+      - key: API_URL
+        value: https://zingo-api.onrender.com/api
+    routes:
+      # every page address belongs to the Angular app
+      - type: rewrite
+        source: /*
+        destination: /index.html

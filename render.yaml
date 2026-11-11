@@ -66,7 +66,6 @@ services:
   - type: web
     name: zingo-web
     runtime: static
-    region: singapore
     rootDir: zingo_frontend
     buildCommand: npm ci && node scripts/set-env.mjs && npm run build
     staticPublishPath: dist/zingo_frontend/browser

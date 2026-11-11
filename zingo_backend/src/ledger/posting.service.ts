@@ -186,8 +186,12 @@ export class PostingService implements OnModuleInit {
       const n = Number(f.amount);
       switch (f.type) {
         case 'Capital Injection':
-          rows = this.pair(f.date, 'Investment', f.refNo, `Funding · ${f.party}`, ACC.CASH,
-            f.funding === 'Partner Loan' ? ACC.PARTNER_LOANS : ACC.EQUITY, n);
+          // a cheque is not cash until it clears; a bounced one never is
+          if (f.chequeStatus === 'Pending' || f.chequeStatus === 'Bounced') break;
+          rows = this.pair(
+            f.chequeStatus === 'Cleared' ? f.clearanceDate ?? f.date : f.date, 'Investment', f.refNo,
+            f.chequeStatus === 'Cleared' ? `Funding · ${f.party} · cheque ${f.chequeNo}` : `Funding · ${f.party}`,
+            ACC.CASH, f.funding === 'Partner Loan' ? ACC.PARTNER_LOANS : ACC.EQUITY, n);
           break;
         case 'Operating Expense':
           rows = this.pair(f.date, 'Investment', f.refNo, `Operating expense · ${f.category}`, `Expense · ${f.category}`, ACC.CASH, n);

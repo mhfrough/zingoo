@@ -35,7 +35,8 @@ export function downloadText(name: string, mime: string, text: string): void {
   saveBlob(name, new Blob([text], { type: `${mime};charset=utf-8` }));
 }
 
-function saveBlob(name: string, blob: Blob) {
+/** Saves a blob through the browser's download. */
+export function saveBlob(name: string, blob: Blob) {
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;

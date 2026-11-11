@@ -9,11 +9,11 @@ import { FinanceEntry, FinanceType } from './models';
 
 const today = () => new Date().toISOString().slice(0, 10);
 
-const TYPES: FinanceType[] = ['Capital Injection', 'Operating Expense', 'Asset Purchase', 'Other Receipt'];
+const TYPES: FinanceType[] = ['Operating Expense', 'Asset Purchase', 'Other Receipt'];
 
 /**
- * Add or edit a finance entry: capital in, spend, an asset purchase or another receipt.
- * Spend and assets wait for signatures; capital and receipts post at once. A posted entry is locked.
+ * Add or edit a finance entry: spend, an asset purchase or another receipt (capital has its own form).
+ * Spend and assets wait for signatures; receipts post at once. A posted entry is locked.
  */
 @Component({
   selector: 'app-finance-entry-form',
@@ -49,20 +49,10 @@ const TYPES: FinanceType[] = ['Capital Injection', 'Operating Expense', 'Asset P
           <app-money-input formControlName="amount" />
         </app-field>
         <app-field label="Date" [required]="true"><input type="date" formControlName="date" /></app-field>
-        <app-field label="Investor / vendor / party" [wide]="!isCapital()">
+        <app-field label="Vendor / party" [wide]="true">
           <input type="text" formControlName="party" placeholder="Name" />
         </app-field>
-        @if (isCapital()) {
-          <app-field label="Capital source">
-            <select formControlName="funding">
-              <option value="Equity">Equity</option>
-              <option value="Partner Loan">Partner loan</option>
-            </select>
-          </app-field>
-        }
-        <app-field [label]="isCapital() ? 'Terms' : 'Description'" [wide]="true">
-          <textarea formControlName="note" [placeholder]="isCapital() ? 'Optional. Return, profit share, repayment' : 'Optional'"></textarea>
-        </app-field>
+        <app-field label="Description" [wide]="true"><textarea formControlName="note" placeholder="Optional"></textarea></app-field>
       </form>
       <ng-container offcanvasFooter>
         <button appBtn type="button" (click)="oc.requestClose()">Cancel</button>
@@ -95,7 +85,6 @@ export class FinanceEntryForm extends FormModal {
   });
 
   private type = toSignal(this.form.controls.type.valueChanges, { initialValue: this.form.controls.type.value });
-  protected isCapital = computed(() => this.type() === 'Capital Injection');
   protected needsApproval = computed(() => this.type() === 'Operating Expense' || this.type() === 'Asset Purchase');
 
   protected reset() {
@@ -107,7 +96,7 @@ export class FinanceEntryForm extends FormModal {
 
   protected request() {
     const v = this.form.getRawValue();
-    return this.fin.saveEntry(this.entry()?.id ?? null, { ...v, funding: v.type === 'Capital Injection' ? v.funding : '' });
+    return this.fin.saveEntry(this.entry()?.id ?? null, { ...v, funding: '' });
   }
 
   protected successMessage() {

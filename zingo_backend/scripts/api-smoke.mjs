@@ -478,5 +478,101 @@ ok('a removed file is gone -> 404', (await call(T.finance, 'GET', `/attachments/
 const p7big = await call(T.dist, 'POST', '/portal/advices', { orderId: p7o4.id, date: '2026-11-10', amount: 100, proofName: 'bigPdf-slip.png', proofMime: 'image/png', proofData: 'iVBORw0KGgo='.padEnd(300000, 'A') });
 ok('a 300 KB portal attachment is no longer refused by the size limit', p7big.status === 201, `${p7big.status} ${JSON.stringify(p7big.json).slice(0, 100)}`);
 
+// ── capital injection: investors, payment details, cheques, stream split ──
+const ciCash = async () => (await call(T.finance, 'GET', '/reports/cash-flows')).json.net;
+const ciRaised = async () => (await call(T.owner, 'GET', '/reports/dashboard')).json.capitalRaised;
+const ciIso = (days) => new Date(Date.now() + days * 86400000).toISOString().slice(0, 10);
+const ciDay = ciIso(0);
+const ciLine = (o = {}) => ({
+  party: 'Ali Khan', amount: 100000, date: ciDay, funding: 'Equity', paymentSource: 'Bank Transfer', paymentReference: 'TRF-9001',
+  paymentAgainst: 'Agreement A-12', paidBy: 'Ali Khan', receivedBy: 'Arittek', issueDate: ciDay, streams: [{ stream: 'Manufacturing', pct: 100 }], ...o,
+});
+const ciPost = (body, token = T.finance) => call(token, 'POST', '/finance/capital-injection', body);
+
+const ciCash0 = await ciCash();
+const ciRaised0 = await ciRaised();
+const ciSolo = await ciPost({ note: 'Repay in 12 months, 8% profit share', investors: [ciLine({ streams: [{ stream: 'Manufacturing', pct: 60 }, { stream: 'Packaging', amount: 40000 }] })] });
+const ciS = ciSolo.json?.[0];
+ok('solo capital injection is created', ciSolo.status === 201 && ciSolo.json?.length === 1 && ciS?.type === 'Capital Injection', JSON.stringify(ciSolo.json).slice(0, 200));
+ok('it keeps the terms and the payment details', ciS?.note === 'Repay in 12 months, 8% profit share' && ciS?.paymentSource === 'Bank Transfer' && ciS?.paymentReference === 'TRF-9001' && ciS?.paymentAgainst === 'Agreement A-12' && ciS?.paidBy === 'Ali Khan' && ciS?.receivedBy === 'Arittek' && ciS?.issueDate === ciDay);
+ok('a solo investment has no group', ciS?.groupId === null && ciS?.coInvestors?.length === 0);
+ok('the stream split adds up (60% + PKR 40,000 of 100,000)', ciS?.streams?.length === 2 && ciS.streams.reduce((n, x) => n + Number(x.amount), 0) === 100000 && ciS.streams.find((x) => x.stream === 'Manufacturing')?.amount === 60000 && ciS.streams.find((x) => x.stream === 'Packaging')?.pct === 40);
+ok('the entry is filed under its biggest stream', ciS?.category === 'Manufacturing');
+ok('a transfer posts to cash at once', (await ciCash()) === ciCash0 + 100000 && (await ciRaised()) === ciRaised0 + 100000);
+ok('it is marked cleared (in the bank)', ciS?.cleared === true && ciS?.chequeStatus === '');
+
+const ciShared = await ciPost({ note: 'Joint venture', investors: [
+  ciLine({ party: 'Sara Ahmed', amount: 60000, streams: [{ stream: 'Marketing', amount: 60000 }] }),
+  ciLine({ party: 'Bilal Sheikh', amount: 40000, funding: 'Partner Loan', paymentSource: 'Cash', streams: [{ stream: 'Marketing', pct: 25 }, { stream: 'Printing', pct: 75 }] }),
+] });
+const [ciA, ciB] = ciShared.json ?? [];
+ok('a shared investment makes one entry per investor', ciShared.status === 201 && ciShared.json?.length === 2 && ciA?.refNo !== ciB?.refNo);
+ok('they share one group and know each other', !!ciA?.groupId && ciA?.groupId === ciB?.groupId && ciA?.coInvestors?.[0] === 'Bilal Sheikh' && ciB?.coInvestors?.[0] === 'Sara Ahmed');
+ok('each investor has their own funding type and note', ciA?.funding === 'Equity' && ciB?.funding === 'Partner Loan' && ciA?.note === 'Joint venture' && ciB?.note === 'Joint venture');
+ok('both amounts post to cash', (await ciCash()) === ciCash0 + 200000);
+
+// the rules
+ok('streams that do not add up -> 400', (await ciPost({ investors: [ciLine({ streams: [{ stream: 'Manufacturing', amount: 70000 }] })] })).status === 400);
+ok('percentages over 100 -> 400', (await ciPost({ investors: [ciLine({ streams: [{ stream: 'Manufacturing', pct: 60 }, { stream: 'Packaging', pct: 60 }] })] })).status === 400);
+ok('the same stream twice -> 400', (await ciPost({ investors: [ciLine({ streams: [{ stream: 'Manufacturing', pct: 50 }, { stream: 'Manufacturing', pct: 50 }] })] })).status === 400);
+ok('an unknown stream -> 400', (await ciPost({ investors: [ciLine({ streams: [{ stream: 'Nope', pct: 100 }] })] })).status === 400);
+ok('a stream with neither amount nor percent -> 400', (await ciPost({ investors: [ciLine({ streams: [{ stream: 'Manufacturing' }] })] })).status === 400);
+ok('no streams -> 400', (await ciPost({ investors: [ciLine({ streams: [] })] })).status === 400);
+ok('no investors -> 400', (await ciPost({ investors: [] })).status === 400);
+ok('a payment source that is not in Settings -> 400', (await ciPost({ investors: [ciLine({ paymentSource: 'Barter' })] })).status === 400);
+ok('an expected return before the investment date -> 400', (await ciPost({ investors: [ciLine({ expectedReturnDate: ciIso(-3) })] })).status === 400);
+ok('an investor name is required', (await ciPost({ investors: [ciLine({ party: '   ' })] })).status === 400);
+ok('one failing investor saves nobody (all or nothing)', (await ciPost({ investors: [ciLine({ party: 'Ok One' }), ciLine({ party: 'Bad One', streams: [{ stream: 'Nope', pct: 100 }] })] })).status === 400 && (await ciCash()) === ciCash0 + 200000);
+ok('a Viewer cannot add capital -> 403', (await ciPost({ investors: [ciLine()] }, T.audit)).status === 403);
+ok('Manufacturing cannot add capital -> 403', (await ciPost({ investors: [ciLine()] }, T.factory)).status === 403);
+const ciCashNote = (await ciPost({ investors: [ciLine({ party: 'Cash Cara', paymentSource: 'Cash', chequeNo: '777', clearanceDate: ciIso(3) })] })).json?.[0];
+ok('cheque details are ignored for a non-cheque payment', ciCashNote?.chequeNo === '' && ciCashNote?.chequeStatus === '' && ciCashNote?.clearanceDate === null);
+
+// cheques
+const ciChequeBase = { party: 'Chequer', paymentSource: 'Cheque', amount: 50000 };
+ok('a cheque needs its number -> 400', (await ciPost({ investors: [ciLine({ ...ciChequeBase, clearanceDate: ciIso(3) })] })).status === 400);
+ok('a cheque needs its clearance date -> 400', (await ciPost({ investors: [ciLine({ ...ciChequeBase, chequeNo: 'CH-1' })] })).status === 400);
+ok('a cheque cannot clear before the cheque date -> 400', (await ciPost({ investors: [ciLine({ ...ciChequeBase, chequeNo: 'CH-1', clearanceDate: ciIso(-2) })] })).status === 400);
+const ciBefore = await ciCash();
+const ciRaisedBefore = await ciRaised();
+const ciChq = (await ciPost({ investors: [ciLine({ ...ciChequeBase, chequeNo: 'CH-1001', clearanceDate: ciIso(4), expectedReturnDate: ciIso(5) })] })).json?.[0];
+ok('a cheque starts as Pending, not cash', ciChq?.chequeStatus === 'Pending' && ciChq?.cleared === false && ciChq?.chequeNo === 'CH-1001' && ciChq?.clearanceDate === ciIso(4));
+ok('a waiting cheque adds nothing to cash or to capital raised', (await ciCash()) === ciBefore && (await ciRaised()) === ciRaisedBefore);
+const ciAlerts = (await call(T.owner, 'GET', '/reports/alerts')).json ?? [];
+ok('a waiting cheque raises an alert', ciAlerts.some((a) => a.kind === 'cheque' && /Chequer/.test(a.title) && /CH-1001/.test(a.text)));
+ok('no return reminder while the cheque is still waiting', !ciAlerts.some((a) => a.kind === 'return' && /Chequer/.test(a.title)));
+ok('a waiting cheque cannot be deleted (locked)', (await call(T.finance, 'DELETE', `/finance/${ciChq.id}`)).status === 400);
+ok('a Viewer cannot clear a cheque -> 403', (await call(T.audit, 'POST', `/finance/${ciChq.id}/cheque`, { status: 'Cleared' })).status === 403);
+ok('a cheque cannot clear in the future -> 400', (await call(T.finance, 'POST', `/finance/${ciChq.id}/cheque`, { status: 'Cleared', date: ciIso(2) })).status === 400);
+ok('a cheque cannot clear before its date -> 400', (await call(T.finance, 'POST', `/finance/${ciChq.id}/cheque`, { status: 'Cleared', date: ciIso(-9) })).status === 400);
+const ciCleared = await call(T.finance, 'POST', `/finance/${ciChq.id}/cheque`, { status: 'Cleared' });
+ok('clearing posts the cash', ciCleared.status === 201 && ciCleared.json?.chequeStatus === 'Cleared' && ciCleared.json?.cleared === true && (await ciCash()) === ciBefore + 50000 && (await ciRaised()) === ciRaisedBefore + 50000, JSON.stringify(ciCleared.json).slice(0, 160));
+ok('it posts on the clearing date', ciCleared.json?.clearanceDate === ciDay);
+ok('the alert is gone once it clears', !((await call(T.owner, 'GET', '/reports/alerts')).json ?? []).some((a) => a.kind === 'cheque' && /Chequer/.test(a.title)));
+ok('clearing twice -> 400', (await call(T.finance, 'POST', `/finance/${ciChq.id}/cheque`, { status: 'Cleared' })).status === 400);
+ok('the return reminder shows once the money is in', ((await call(T.owner, 'GET', '/reports/alerts')).json ?? []).some((a) => a.kind === 'return' && /Chequer/.test(a.title)));
+const ciBounce = (await ciPost({ investors: [ciLine({ ...ciChequeBase, party: 'Bouncer', chequeNo: 'CH-2002', clearanceDate: ciIso(2) })] })).json?.[0];
+const ciBounced = await call(T.finance, 'POST', `/finance/${ciBounce.id}/cheque`, { status: 'Bounced' });
+ok('a bounced cheque never counts', ciBounced.json?.chequeStatus === 'Bounced' && ciBounced.json?.cleared === false && (await ciCash()) === ciBefore + 50000);
+ok('a bounced cheque cannot be cleared later -> 400', (await call(T.finance, 'POST', `/finance/${ciBounce.id}/cheque`, { status: 'Cleared' })).status === 400);
+ok('only cheques can be cleared -> 400', (await call(T.finance, 'POST', `/finance/${ciS.id}/cheque`, { status: 'Cleared' })).status === 400);
+ok('a cleared cheque is in the journal with its cheque number', ((await call(T.finance, 'GET', '/reports/journal?period=all')).json ?? []).some((l) => l.reference === ciChq.refNo && /cheque CH-1001/.test(l.description)));
+
+// proof and agreement
+const ciProof = await upload(T.finance, PNG, 'proof.png', 'image/png');
+const ciAgree = await upload(T.finance, pdf, 'agreement.pdf', 'application/pdf');
+const ciFiles = await ciPost({ investors: [
+  ciLine({ party: 'File One', amount: 1000, proofId: ciProof.json.id, agreementId: ciAgree.json.id }),
+  ciLine({ party: 'File Two', amount: 2000, agreementId: ciAgree.json.id }),
+] });
+ok('proof and agreement attach to the entry', ciFiles.status === 201 && ciFiles.json?.[0]?.proof?.name === 'proof.png' && ciFiles.json?.[0]?.agreement?.name === 'agreement.pdf', JSON.stringify(ciFiles.json).slice(0, 160));
+ok('one agreement can serve every investor', ciFiles.json?.[1]?.agreement?.id === ciAgree.json.id && ciFiles.json?.[1]?.proof === null);
+ok('the file is now tied to the entry (removing it needs an Admin)', (await call(T.finance, 'DELETE', `/attachments/${ciProof.json.id}`)).status === 400);
+ok('a proof already used on another entry -> 400', (await ciPost({ investors: [ciLine({ party: 'Reuse', proofId: ciProof.json.id })] })).status === 400);
+ok('a missing file id -> 400', (await ciPost({ investors: [ciLine({ party: 'Ghost', proofId: '00000000-0000-4000-8000-000000000000' })] })).status === 400);
+const ciList = await list('/finance');
+ok('the listing carries the files', ciList.find((e) => e.id === ciFiles.json[0].id)?.proof?.name === 'proof.png');
+ok('every entry in the listing has streams and a cleared flag', ciList.every((e) => Array.isArray(e.streams) && typeof e.cleared === 'boolean'));
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

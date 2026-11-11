@@ -2,7 +2,8 @@ import { Body, Controller, Delete, Get, Param, ParseUUIDPipe, Patch, Post, Reque
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
 import { Read, Write } from '../auth/roles.decorator';
 import {
-  CreateAccountingDto, CreateFinanceDto, SettleDto, SignDto, UpdateAccountingDto, UpdateFinanceDto,
+  ChequeDto, CreateAccountingDto, CreateCapitalDto, CreateFinanceDto, SettleDto, SignDto, UpdateAccountingDto,
+  UpdateFinanceDto,
 } from './finance.dto';
 import { AccountingService, FinanceService } from './finance.service';
 
@@ -28,6 +29,20 @@ export class FinanceController {
   @Write('finance')
   create(@Body() dto: CreateFinanceDto) {
     return this.service.create(dto);
+  }
+
+  @Post('capital-injection')
+  @Write('finance')
+  @ApiOperation({ summary: 'Capital injection by one investor or several, with payment details, cheque and stream split' })
+  createCapital(@Body() dto: CreateCapitalDto) {
+    return this.service.createCapital(dto);
+  }
+
+  @Post(':id/cheque')
+  @Write('finance')
+  @ApiOperation({ summary: 'Mark a capital cheque cleared (cash is posted on the clearing date) or bounced' })
+  cheque(@Param('id', ParseUUIDPipe) id: string, @Body() dto: ChequeDto) {
+    return this.service.markCheque(id, dto);
   }
 
   @Patch(':id')

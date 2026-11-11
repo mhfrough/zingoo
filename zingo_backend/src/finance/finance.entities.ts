@@ -1,4 +1,4 @@
-import { Column, Entity, JoinColumn, ManyToOne, Unique } from 'typeorm';
+import { Column, Entity, Index, JoinColumn, ManyToOne, Unique } from 'typeorm';
 import { AppEntity } from '../common/app.entity';
 import { DocEntity } from '../common/doc.entity';
 import { numeric } from '../common/numeric.transformer';
@@ -29,6 +29,80 @@ export class FinanceEntry extends DocEntity {
   /** only for capital: Equity or Partner Loan */
   @Column({ type: 'varchar', length: 15, default: '' })
   funding: 'Equity' | 'Partner Loan' | '';
+
+  // ── capital injection details (empty for other types) ──
+
+  /** set when several investors put money in together: every investor line shares it */
+  @Column({ type: 'uuid', nullable: true })
+  groupId: string | null;
+
+  /** how the money was paid: a payment method from Settings (Bank Transfer, Cash, Cheque ...) */
+  @Column({ type: 'varchar', length: 30, default: '' })
+  paymentSource: string;
+
+  /** transfer id, receipt number, slip number */
+  @Column({ type: 'varchar', length: 100, default: '' })
+  paymentReference: string;
+
+  /** what the payment is for: an agreement or invoice number */
+  @Column({ type: 'varchar', length: 150, default: '' })
+  paymentAgainst: string;
+
+  @Column({ type: 'varchar', length: 100, default: '' })
+  paidBy: string;
+
+  @Column({ type: 'varchar', length: 100, default: '' })
+  receivedBy: string;
+
+  /** the day the payment was issued */
+  @Column({ type: 'date', nullable: true })
+  issueDate: string | null;
+
+  /** when the investor expects the money back (a reminder only, nothing posts) */
+  @Column({ type: 'date', nullable: true })
+  expectedReturnDate: string | null;
+
+  @Column({ type: 'varchar', length: 40, default: '' })
+  chequeNo: string;
+
+  /** the day the cheque clears; once cleared, the day it really cleared */
+  @Column({ type: 'date', nullable: true })
+  clearanceDate: string | null;
+
+  /** '' for non-cheque payments. A cheque is not cash until it is Cleared. */
+  @Column({ type: 'varchar', length: 10, default: '' })
+  chequeStatus: ChequeStatus;
+
+  /** uploaded payment proof and agreement (attachments) */
+  @Column({ type: 'uuid', nullable: true })
+  proofId: string | null;
+
+  @Column({ type: 'uuid', nullable: true })
+  agreementId: string | null;
+}
+
+export type ChequeStatus = '' | 'Pending' | 'Cleared' | 'Bounced';
+
+/** The part of a capital injection line invested against one stream (cost center). */
+@Entity('finance_entry_streams')
+@Index(['entryId'])
+export class FinanceEntryStream extends AppEntity {
+  @ManyToOne(() => FinanceEntry, { nullable: false, onDelete: 'CASCADE' })
+  @JoinColumn({ name: 'entryId' })
+  entry: FinanceEntry;
+
+  @Column({ type: 'uuid' })
+  entryId: string;
+
+  @Column({ type: 'varchar', length: 80 })
+  stream: string;
+
+  @Column({ type: 'decimal', precision: 14, scale: 2, transformer: numeric })
+  amount: number;
+
+  /** share of the investor's amount, 0 to 100 */
+  @Column({ type: 'decimal', precision: 7, scale: 3, transformer: numeric })
+  pct: number;
 }
 
 /** An income invoice or an expense bill outside the factory/distributor flow. */

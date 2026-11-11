@@ -104,7 +104,7 @@ export interface StockRow {
 }
 
 export interface Alert {
-  kind: 'approval' | 'stock' | 'order' | 'batch';
+  kind: 'approval' | 'stock' | 'order' | 'batch' | 'cheque' | 'return';
   page: string;
   title: string;
   text: string;

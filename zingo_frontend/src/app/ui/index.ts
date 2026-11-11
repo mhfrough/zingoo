@@ -12,6 +12,7 @@ export { IconComponent } from './icon';
 export type { IconName } from './icon';
 export { Modal } from './modal';
 export { Offcanvas } from './offcanvas';
+export { FileInput } from './file-input';
 export { MoneyInput } from './money-input';
 export { NumberInput } from './number-input';
 export { PasswordField } from './password-field';

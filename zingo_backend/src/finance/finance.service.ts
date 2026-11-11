@@ -1,16 +1,25 @@
 import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectDataSource } from '@nestjs/typeorm';
-import { DataSource, EntityManager } from 'typeorm';
+import { randomUUID } from 'crypto';
+import { DataSource, EntityManager, In } from 'typeorm';
+import { AttachmentsService } from '../attachments/attachments.service';
 import { round2 } from '../common/numeric.transformer';
+import { isChequeMethod } from '../common/payments';
 import { nextRef } from '../common/ref';
 import { PostingService } from '../ledger/posting.service';
 import { LookupsService } from '../setup/lookups.service';
 import { Currency } from '../setup/setup.entities';
 import { SettingsService } from '../setup/setup.service';
 import {
-  CreateAccountingDto, CreateFinanceDto, SettleDto, UpdateAccountingDto, UpdateFinanceDto,
+  CapitalLineDto, ChequeDto, CreateAccountingDto, CreateCapitalDto, CreateFinanceDto, SettleDto, UpdateAccountingDto,
+  UpdateFinanceDto,
 } from './finance.dto';
-import { AccountingDocument, AccountingSettlement, Approval, FinanceEntry } from './finance.entities';
+import {
+  AccountingDocument, AccountingSettlement, Approval, ChequeStatus, FinanceEntry, FinanceEntryStream,
+} from './finance.entities';
+
+const today = () => new Date().toISOString().slice(0, 10);
+const round3 = (n: number) => Math.round(n * 1000) / 1000;
 
 export interface Signer {
   id?: string | null;
@@ -28,23 +37,144 @@ export class FinanceService {
     @InjectDataSource() private readonly db: DataSource,
     private readonly posting: PostingService,
     private readonly settings: SettingsService,
+    private readonly lookups: LookupsService,
+    private readonly files: AttachmentsService,
   ) {}
 
-  private async view(em: EntityManager, f: FinanceEntry) {
-    const st = await this.posting.financeState(em, f);
-    return { ...f, signatures: st.signed, requiredSignatures: st.required, needsApproval: st.needs, approved: st.approved };
+  /** entries with their signature state, stream split, files and (for a shared injection) the other investors */
+  private async decorate(em: EntityManager, rows: FinanceEntry[]) {
+    if (!rows.length) return [];
+    const shares = await em.find(FinanceEntryStream, { where: { entryId: In(rows.map((r) => r.id)) }, order: { amount: 'DESC' } });
+    const files = await this.files.metasOf(rows.flatMap((r) => [r.proofId, r.agreementId]).filter((x): x is string => !!x));
+    const groups = [...new Set(rows.map((r) => r.groupId).filter((x): x is string => !!x))];
+    const mates = groups.length ? await em.find(FinanceEntry, { where: { groupId: In(groups) }, order: { refNo: 'ASC' } }) : [];
+    return Promise.all(rows.map(async (f) => {
+      const st = await this.posting.financeState(em, f);
+      return {
+        ...f,
+        signatures: st.signed, requiredSignatures: st.required, needsApproval: st.needs, approved: st.approved,
+        /** capital only: the money is in the bank (not a cheque that is still waiting, or bounced) */
+        cleared: f.type !== 'Capital Injection' || f.chequeStatus === '' || f.chequeStatus === 'Cleared',
+        streams: shares.filter((x) => x.entryId === f.id).map((x) => ({ stream: x.stream, amount: x.amount, pct: x.pct })),
+        proof: (f.proofId && files.get(f.proofId)) || null,
+        agreement: (f.agreementId && files.get(f.agreementId)) || null,
+        coInvestors: f.groupId ? mates.filter((m) => m.groupId === f.groupId && m.id !== f.id).map((m) => m.party) : [],
+      };
+    }));
   }
 
   async list() {
     const em = this.db.manager;
-    const rows = await em.find(FinanceEntry, { order: { date: 'DESC', refNo: 'DESC' } });
-    return Promise.all(rows.map((f) => this.view(em, f)));
+    return this.decorate(em, await em.find(FinanceEntry, { order: { date: 'DESC', refNo: 'DESC' } }));
   }
 
   async findOne(id: string, em: EntityManager = this.db.manager) {
     const f = await em.findOne(FinanceEntry, { where: { id } });
     if (!f) throw new NotFoundException('Entry not found');
-    return this.view(em, f);
+    return (await this.decorate(em, [f]))[0];
+  }
+
+  /** checks one investor line and works out its stream split */
+  private async capitalLine(em: EntityManager, l: CapitalLineDto) {
+    const party = l.party.trim();
+    if (!party) throw new BadRequestException('Enter the investor name.');
+    const amount = round2(l.amount);
+    const source = (l.paymentSource ?? '').trim();
+    if (source) await this.lookups.assertActive('PAY_METHOD', source, em);
+
+    // a cheque is not cash until it clears
+    let chequeNo = '';
+    let clearanceDate: string | null = null;
+    let chequeStatus: ChequeStatus = '';
+    if (isChequeMethod(source)) {
+      chequeNo = (l.chequeNo ?? '').trim();
+      if (!chequeNo) throw new BadRequestException(`Enter the cheque number for ${party}.`);
+      if (!l.clearanceDate) throw new BadRequestException(`Enter the clearance date of ${party}'s cheque.`);
+      if (l.clearanceDate < l.date) throw new BadRequestException(`${party}'s cheque cannot clear before the investment date.`);
+      clearanceDate = l.clearanceDate;
+      chequeStatus = 'Pending';
+    }
+    if (l.expectedReturnDate && l.expectedReturnDate < l.date) {
+      throw new BadRequestException(`The expected return date for ${party} cannot be before the investment date.`);
+    }
+
+    // invested against: each part by amount or by percent of this investor's amount; together they equal the amount
+    const seen = new Set<string>();
+    const parts: { stream: string; amount: number }[] = [];
+    for (const sh of l.streams) {
+      if (seen.has(sh.stream)) throw new BadRequestException(`Stream "${sh.stream}" is listed twice for ${party}.`);
+      seen.add(sh.stream);
+      await this.checkCategory(em, sh.stream);
+      if (sh.amount === undefined && sh.pct === undefined) throw new BadRequestException(`Enter an amount or a percent for ${sh.stream}.`);
+      parts.push({ stream: sh.stream, amount: sh.amount !== undefined ? round2(sh.amount) : round2((amount * sh.pct!) / 100) });
+    }
+    const sum = round2(parts.reduce((n, p) => n + p.amount, 0));
+    const diff = round2(amount - sum);
+    if (Math.abs(diff) > 0.05) {
+      throw new BadRequestException(`${party}'s streams add up to PKR ${sum}, but the investment is PKR ${amount}. Make them equal.`);
+    }
+    parts[parts.length - 1].amount = round2(parts[parts.length - 1].amount + diff); // absorb rounding
+    const streams = parts.map((p) => ({ stream: p.stream, amount: p.amount, pct: round3((p.amount / amount) * 100) }));
+    const category = parts.reduce((best, p) => (p.amount > best.amount ? p : best)).stream;
+
+    return {
+      streams,
+      entry: {
+        date: l.date, category, amount, party, funding: l.funding ?? 'Equity',
+        paymentSource: source, paymentReference: (l.paymentReference ?? '').trim(), paymentAgainst: (l.paymentAgainst ?? '').trim(),
+        paidBy: (l.paidBy ?? '').trim(), receivedBy: (l.receivedBy ?? '').trim(),
+        issueDate: l.issueDate ?? null, expectedReturnDate: l.expectedReturnDate ?? null,
+        chequeNo, clearanceDate, chequeStatus, proofId: l.proofId ?? null, agreementId: l.agreementId ?? null,
+      },
+    };
+  }
+
+  /** a capital injection: one investor, or several (a shared investment) sharing one group; one entry per investor */
+  createCapital(dto: CreateCapitalDto) {
+    return this.db.transaction(async (em) => {
+      const s = await this.settings.get(em);
+      const prefix = s.docPrefixes['finance'] ?? 'FIN';
+      const groupId = dto.investors.length > 1 ? randomUUID() : null;
+      const note = dto.note?.trim() || null;
+      const attached = new Set<string>(); // one agreement can serve every investor
+      const ids: string[] = [];
+      for (const line of dto.investors) {
+        const { entry, streams } = await this.capitalLine(em, line);
+        const refNo = await nextRef(em, FinanceEntry, prefix, 3);
+        const f = await em.save(em.create(FinanceEntry, { ...entry, refNo, type: 'Capital Injection', groupId, note }));
+        await em.save(streams.map((x) => em.create(FinanceEntryStream, { ...x, entryId: f.id })));
+        for (const fileId of [entry.proofId, entry.agreementId]) {
+          if (!fileId || attached.has(fileId)) continue;
+          attached.add(fileId);
+          await this.files.attach(fileId, 'FINANCE', f.id, em);
+        }
+        await this.posting.syncFinance(em, f.id); // posts at once, unless it is a cheque that has not cleared
+        ids.push(f.id);
+      }
+      return this.decorate(em, await em.find(FinanceEntry, { where: { id: In(ids) }, order: { refNo: 'ASC' } }));
+    });
+  }
+
+  /** a cheque cleared (the money is now in the bank, on the clearing date) or bounced (it never counts) */
+  markCheque(id: string, dto: ChequeDto) {
+    return this.db.transaction(async (em) => {
+      const f = await em.findOne(FinanceEntry, { where: { id } });
+      if (!f) throw new NotFoundException('Entry not found');
+      if (f.type !== 'Capital Injection' || f.chequeStatus !== 'Pending') {
+        throw new BadRequestException('Only a cheque that is waiting to clear can be updated.');
+      }
+      if (dto.status === 'Cleared') {
+        const now = today();
+        const date = dto.date ?? (f.clearanceDate && f.clearanceDate < now ? f.clearanceDate : now);
+        if (date > now) throw new BadRequestException('A cheque cannot clear in the future.');
+        if (date < f.date) throw new BadRequestException('The clearance date cannot be before the cheque date.');
+        f.clearanceDate = date;
+      }
+      f.chequeStatus = dto.status;
+      await em.save(f);
+      await this.posting.syncFinance(em, id);
+      return this.findOne(id, em);
+    });
   }
 
   create(dto: CreateFinanceDto, opts: { refNo?: string } = {}) {

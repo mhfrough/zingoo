@@ -16,6 +16,18 @@ type Period = string;
  * Read-only reports. Money figures come from the ledger (so they always agree with each other);
  * stock and approvals come from the documents.
  */
+/** An investor's expected return shows as an alert from this many days before the date ... */
+const RETURN_ALERT_BEFORE_DAYS = 14;
+/** ... until this many days after it. */
+const RETURN_ALERT_AFTER_DAYS = 30;
+
+/** true when `date` (yyyy-mm-dd) is within the alert window around today */
+function returnDue(date: string): boolean {
+  const day = 86_400_000;
+  const diff = (Date.parse(date) - Date.parse(new Date().toISOString().slice(0, 10))) / day;
+  return diff <= RETURN_ALERT_BEFORE_DAYS && diff >= -RETURN_ALERT_AFTER_DAYS;
+}
+
 @Injectable()
 export class ReportsService {
   constructor(
@@ -303,6 +315,14 @@ export class ReportsService {
         kind: 'approval', page: 'finance', title: `Approval required · ${f.category}`,
         text: `PKR ${f.amount} for ${f.party} · ${f.signatures.length}/${f.requiredSignatures} approvals`,
       })),
+      ...entries.filter((f) => f.type === 'Capital Injection' && f.chequeStatus === 'Pending').map((f) => ({
+        kind: 'cheque', page: 'finance', title: `Cheque awaiting clearance · ${f.party}`,
+        text: `PKR ${f.amount} · cheque ${f.chequeNo} · clears ${f.clearanceDate}`,
+      })),
+      ...entries.filter((f) => f.type === 'Capital Injection' && f.cleared && f.expectedReturnDate && returnDue(f.expectedReturnDate)).map((f) => ({
+        kind: 'return', page: 'finance', title: `Investor return due · ${f.party}`,
+        text: `PKR ${f.amount} invested ${f.date} · expected back ${f.expectedReturnDate}`,
+      })),
       ...stock.filter((p: any) => p.active && p.low).map((p: any) => ({
         kind: 'stock', page: 'manufacturing', title: `Low stock · ${p.sku}`,
         text: `${p.cartons} cartons available · replenish below ${s.lowStockCartons}`,
@@ -330,7 +350,7 @@ export class ReportsService {
       this.alerts(),
       this.orders.list(),
       this.settings.get(),
-      this.db.query(`SELECT COALESCE(SUM(amount), 0)::float8 AS total FROM finance_entries WHERE type = 'Capital Injection'`),
+      this.db.query(`SELECT COALESCE(SUM(amount), 0)::float8 AS total FROM finance_entries WHERE type = 'Capital Injection' AND "chequeStatus" IN ('', 'Cleared')`),
     ]);
     return {
       cash,

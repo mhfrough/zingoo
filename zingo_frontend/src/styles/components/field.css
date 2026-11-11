@@ -531,6 +531,93 @@
     }
   }
 
+  /* ───────────── file input: choose, then name + size + remove ───────────── */
+  .file-input {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    min-block-size: var(--control-h);
+    padding-inline: var(--control-pad);
+    border: 1px dashed var(--control-line);
+    border-radius: var(--radius-md);
+    background-color: var(--surface-field);
+    color: var(--text-2);
+    font-size: var(--text-sm);
+
+    &[data-invalid] {
+      border-color: var(--control-line-error);
+    }
+
+    &[data-disabled] {
+      background-color: var(--surface-sunken);
+      color: var(--text-3);
+    }
+
+    & > :is(.file-input__pick, .file-input__name, .file-input__clear) {
+      display: inline-flex;
+      align-items: center;
+      gap: var(--space-2);
+      padding: 0;
+      border: 0;
+      background: none;
+      color: inherit;
+      font: inherit;
+      cursor: pointer;
+
+      &:disabled {
+        cursor: not-allowed;
+      }
+
+      &:focus-visible {
+        outline: 2px solid var(--control-line-focus);
+        outline-offset: 2px;
+        border-radius: var(--radius-sm);
+      }
+    }
+
+    & > .file-input__pick {
+      color: var(--text);
+      font-weight: var(--weight-medium);
+    }
+
+    & > .file-input__name {
+      min-inline-size: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      color: var(--text);
+      text-decoration: underline;
+      text-underline-offset: 2px;
+    }
+
+    & > .file-input__size {
+      flex: none;
+      color: var(--text-3);
+      font-family: var(--font-mono);
+      font-size: var(--text-xs);
+    }
+
+    & > .file-input__clear {
+      margin-inline-start: auto;
+      color: var(--text-3);
+
+      &:hover:not(:disabled) {
+        color: var(--control-line-error);
+      }
+    }
+
+    & > .file-input__hint {
+      flex: 1;
+      min-inline-size: 0;
+      color: var(--text-3);
+      font-size: var(--text-xs);
+    }
+
+    &[data-invalid] > .file-input__hint {
+      color: var(--control-line-error);
+    }
+  }
+
   /* ───────────── checkbox / radio / switch ───────────── */
   .check {
     display: flex;

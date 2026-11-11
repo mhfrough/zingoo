@@ -9,7 +9,7 @@ import { OpsApi } from '../ops/ops.api';
 
 type LatestOrder = Dashboard['latestOrders'][number];
 
-const ALERT_ICON = { approval: 'lock', stock: 'boxes', order: 'truck', batch: 'factory' } as const;
+const ALERT_ICON = { approval: 'lock', stock: 'boxes', order: 'truck', batch: 'factory', cheque: 'banknote', return: 'clock' } as const;
 
 @Component({
   selector: 'app-overview',

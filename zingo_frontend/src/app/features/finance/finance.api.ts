@@ -29,6 +29,11 @@ export class FinanceApi {
   saveEntry = (id: string | null, body: unknown) =>
     id ? this.api.patch<FinanceEntry>(`finance/${id}`, body) : this.api.post<FinanceEntry>('finance', body);
   deleteEntry = (id: string) => this.api.delete(`finance/${id}`);
+  /** a capital injection by one investor or several: one entry comes back per investor */
+  saveCapital = (body: unknown) => this.api.post<FinanceEntry[]>('finance/capital-injection', body);
+  /** a cheque cleared (cash posts on the clearing date) or bounced */
+  markCheque = (id: string, status: 'Cleared' | 'Bounced', date?: string) =>
+    this.api.post<FinanceEntry>(`finance/${id}/cheque`, { status, date });
   signEntry = (id: string, seat: 'A' | 'B') => this.api.post<FinanceEntry>(`finance/${id}/sign`, { seat });
 
   // ── accounting documents ──

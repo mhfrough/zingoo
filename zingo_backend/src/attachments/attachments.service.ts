@@ -1,6 +1,6 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { EntityManager, In, Repository } from 'typeorm';
 import { Attachment } from './attachment.entity';
 
 /** The biggest file accepted, in bytes. */
@@ -66,6 +66,14 @@ export class AttachmentsService {
     return { id: a.id, name: a.name, mime: a.mime, size: a.size, ownerType: a.ownerType, ownerId: a.ownerId, uploadedBy: a.uploadedBy, createdAt: a.createdAt };
   }
 
+  /** details for several files at once, by id */
+  async metasOf(ids: string[]) {
+    const map = new Map<string, ReturnType<AttachmentsService['meta']>>();
+    if (!ids.length) return map;
+    for (const a of await this.repo.find({ where: { id: In(ids) } })) map.set(a.id, this.meta(a));
+    return map;
+  }
+
   async metaOf(id: string) {
     const a = await this.repo.findOne({ where: { id } });
     if (!a) throw new NotFoundException('File not found.');
@@ -80,13 +88,14 @@ export class AttachmentsService {
   }
 
   /** link a file to the record it belongs to (called by the form's service when the record is saved) */
-  async attach(id: string, ownerType: string, ownerId: string) {
-    const a = await this.repo.findOne({ where: { id } });
+  async attach(id: string, ownerType: string, ownerId: string, em?: EntityManager) {
+    const repo = em ? em.getRepository(Attachment) : this.repo;
+    const a = await repo.findOne({ where: { id } });
     if (!a) throw new BadRequestException('The attached file is missing. Attach it again.');
     if (a.ownerId && a.ownerId !== ownerId) throw new BadRequestException('This file is already attached to another record.');
     a.ownerType = ownerType;
     a.ownerId = ownerId;
-    await this.repo.save(a);
+    await repo.save(a);
   }
 
   async remove(id: string, by: { name: string; role: string }) {

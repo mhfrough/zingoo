@@ -2,7 +2,8 @@
   description="Capital, spend and the approval desk across every investment stream.">
   @if (canWrite()) {
     <ng-container pageActions>
-      <button appBtn variant="primary" icon="plus" (click)="openEntry()">Add finance entry</button>
+      <button appBtn variant="primary" icon="plus" (click)="capitalOpen.set(true)">Add capital injection</button>
+      <button appBtn icon="plus" (click)="openEntry()">Add spend or receipt</button>
       @if (isAdmin()) {
         <button appBtn icon="edit" (click)="targetOpen.set(true)">Edit capital target</button>
       }
@@ -13,7 +14,7 @@
 <div class="stack">
   <div class="grid-auto">
     <app-kpi label="Capital invested" [value]="money(capital())" icon="piggy-bank" tone="accent"
-      [foot]="'of ' + money(settings.value()?.capitalTarget ?? 0) + ' target'" />
+      [foot]="'of ' + money(settings.value()?.capitalTarget ?? 0) + ' target' + (chequeAmount() ? ' · ' + money(chequeAmount()) + ' in cheques not cleared' : '')" />
     <app-kpi label="Cash & bank balance" [value]="money(flows.value()?.net ?? 0)" icon="wallet" tone="success"
       foot="Receipts minus approved spending" />
     <app-kpi label="Paid spend" [value]="money(paidSpend())" icon="coins" tone="info"
@@ -101,6 +102,32 @@
     </div>
   </div>
 
+  @if (cheques().length) {
+    <div class="card" data-flush>
+      <div class="card__head">
+        <div>
+          <h2>Cheques awaiting clearance <app-tag tone="warning">{{ cheques().length }}</app-tag></h2>
+          <p>{{ money(chequeAmount()) }} is not cash until the bank clears it. Mark each cheque when you know.</p>
+        </div>
+      </div>
+      <div class="card__body">
+        <app-data-table [columns]="chequeColumns" [rows]="cheques()" [actions]="entryActions" [loading]="entries.isLoading()"
+          [searchable]="false" (action)="onEntryAction($event)" />
+      </div>
+    </div>
+  }
+
+  @if (investors().length) {
+    <div class="card" data-flush>
+      <div class="card__head">
+        <div><h2>Capital by investor</h2><p>What each investor has put in, and where it is invested</p></div>
+      </div>
+      <div class="card__body">
+        <app-data-table [columns]="investorColumns" [rows]="investors()" [searchable]="false" />
+      </div>
+    </div>
+  }
+
   <div class="card" data-flush>
     <div class="card__head">
       <div>
@@ -128,6 +155,7 @@
   </div>
 </div>
 
+<app-capital-injection-form [(open)]="capitalOpen" [streams]="streamNames()" (saved)="reload()" />
 <app-finance-entry-form [(open)]="entryOpen" [entry]="editingEntry()" [streams]="streamNames()"
   [threshold]="settings.value()?.approvalThreshold ?? 50000" (saved)="reload()" />
 <app-budget-form [(open)]="budgetOpen" [centers]="budgets.value() ?? []" [only]="editingBudget()" (saved)="reload()" />

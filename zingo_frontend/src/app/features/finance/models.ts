@@ -3,6 +3,8 @@
  * Only the fields the Investment & Finance and Income & Expenses pages use.
  */
 
+import type { AttachmentMeta } from '../../core/attachments.api';
+
 export type FinanceType = 'Capital Injection' | 'Operating Expense' | 'Asset Purchase' | 'Other Receipt';
 
 /** A capital, spend or receipt entry, with its signature state. */
@@ -22,6 +24,38 @@ export interface FinanceEntry {
   requiredSignatures: number;
   needsApproval: boolean;
   approved: boolean;
+
+  // ── capital injection details (empty for other types) ──
+  /** shared by every investor of one shared investment */
+  groupId: string | null;
+  /** the other investors in the same shared investment */
+  coInvestors: string[];
+  paymentSource: string;
+  paymentReference: string;
+  paymentAgainst: string;
+  paidBy: string;
+  receivedBy: string;
+  issueDate: string | null;
+  expectedReturnDate: string | null;
+  chequeNo: string;
+  clearanceDate: string | null;
+  chequeStatus: ChequeStatus;
+  /** true when the money is in the bank: not a cheque that is still waiting, or bounced */
+  cleared: boolean;
+  /** what the investment is invested against, biggest first */
+  streams: StreamShare[];
+  proof: AttachmentMeta | null;
+  agreement: AttachmentMeta | null;
+}
+
+export type ChequeStatus = '' | 'Pending' | 'Cleared' | 'Bounced';
+
+/** The part of an investor's amount invested against one stream. */
+export interface StreamShare {
+  stream: string;
+  amount: number;
+  /** share of that investor's amount, 0 to 100 */
+  pct: number;
 }
 
 /** An income invoice or an expense bill, with what has been settled so far. */

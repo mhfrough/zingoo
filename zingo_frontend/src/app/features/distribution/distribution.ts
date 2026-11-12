@@ -2,6 +2,8 @@ import { ChangeDetectionStrategy, Component, computed, effect, inject, input, si
 import { rxResource } from '@angular/core/rxjs-interop';
 import { Router, RouterLink } from '@angular/router';
 import { AuthService } from '../../core/auth.service';
+import { FactoryApi } from '../factory/factory.api';
+import { ShipmentsPanel } from '../factory/shipments-panel';
 import { errorText } from '../../shared/errors';
 import { Tone, fmtAmount, fmtDate, fmtMoney, fmtNumber } from '../../shared/format';
 import {
@@ -24,7 +26,7 @@ interface DistributorRow {
 @Component({
   selector: 'app-distribution',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [RouterLink, Btn, DataTable, Kpi, PageHeader, OrderForm, CollectionForm, DistributorForm, CreditOverrideForm],
+  imports: [RouterLink, Btn, DataTable, Kpi, PageHeader, OrderForm, CollectionForm, DistributorForm, CreditOverrideForm, ShipmentsPanel],
   templateUrl: './distribution.html',
 })
 export class Distribution {
@@ -43,6 +45,10 @@ export class Distribution {
   protected collections = rxResource({ params: () => this.tick(), stream: () => this.api.collections() });
   protected products = rxResource({ params: () => this.tick(), stream: () => this.api.products() });
   protected settings = rxResource({ stream: () => this.api.settings() });
+  private factory = inject(FactoryApi);
+  /** manufacturer deliveries to distributors and the stock they hold (consignment) */
+  protected shipments = rxResource({ params: () => this.tick(), stream: () => this.factory.shipments() });
+  protected distStock = rxResource({ params: () => this.tick(), stream: () => this.factory.stock() });
 
   protected canWrite = computed(() => this.auth.can('distribution'));
   protected canOverride = computed(() => this.auth.can('finance'));

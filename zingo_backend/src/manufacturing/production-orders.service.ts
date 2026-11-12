@@ -45,14 +45,15 @@ export class ProductionOrdersService {
       .orderBy('o.date', 'DESC').addOrderBy('o.refNo', 'DESC').addOrderBy('e.createdAt', 'ASC');
     if (scope) qb.andWhere('o.manufacturerId = :scope', { scope });
     if (this.isManufacturer(user)) qb.andWhere(`o.status <> 'Draft'`);
-    return (await qb.getMany()).map((o) => this.shape(o));
+    const moved = await this.movedMap(this.db.manager);
+    return (await qb.getMany()).map((o) => this.shape(o, moved[o.id]));
   }
 
   async findOne(user: OrderUser, id: string) {
     const o = await this.load(this.db.manager, id);
     this.checkOwner(user, o);
     if (this.isManufacturer(user) && o.status === 'Draft') throw new NotFoundException('Production order not found');
-    return this.shape(o);
+    return this.shape(o, (await this.movedMap(this.db.manager))[o.id]);
   }
 
   /** the manufacturer a portal page shows: a manufacturer login sees its own, staff pick one (or the first) */
@@ -85,7 +86,7 @@ export class ProductionOrdersService {
       const o = await em.save(em.create(ProductionOrder, { ...fields, refNo, status: 'Draft' }));
       await this.event(em, o.id, user, 'Created', null);
       if (dto.send) await this.markSent(em, o, user);
-      return this.shape(await this.load(em, o.id));
+      return this.shape(await this.load(em, o.id), (await this.movedMap(em))[o.id]);
     });
   }
 
@@ -96,7 +97,7 @@ export class ProductionOrdersService {
       Object.assign(o, await this.resolve(em, dto, o));
       await em.save(o);
       if (dto.send) await this.markSent(em, o, user);
-      return this.shape(await this.load(em, id));
+      return this.shape(await this.load(em, id), (await this.movedMap(em))[id]);
     });
   }
 
@@ -112,7 +113,7 @@ export class ProductionOrdersService {
       const o = await this.load(em, id);
       if (o.status !== 'Draft') throw new BadRequestException(`${o.refNo} was already sent.`);
       await this.markSent(em, o, user);
-      return this.shape(await this.load(em, id));
+      return this.shape(await this.load(em, id), (await this.movedMap(em))[id]);
     });
   }
 
@@ -122,11 +123,13 @@ export class ProductionOrdersService {
       if (o.status !== 'Sent' && o.status !== 'Accepted') {
         throw new BadRequestException(o.status === 'Draft' ? 'Delete a draft instead of cancelling it.' : `${o.refNo} is already ${o.status.toLowerCase()}.`);
       }
+      const [{ n }] = await em.query(`SELECT COUNT(*)::int AS n FROM production_shipments WHERE "orderId" = $1`, [o.id]);
+      if (n > 0) throw new BadRequestException(`${o.refNo} has shipments already and can no longer be cancelled.`);
       o.status = 'Cancelled';
       o.reason = dto.reason.trim();
       await em.save(o);
       await this.event(em, o.id, user, 'Cancelled', o.reason);
-      return this.shape(await this.load(em, id));
+      return this.shape(await this.load(em, id), (await this.movedMap(em))[id]);
     });
   }
 
@@ -142,7 +145,7 @@ export class ProductionOrdersService {
       o.readyDate = dto.readyDate ?? null;
       await em.save(o);
       await this.event(em, o.id, user, 'Accepted', [dto.readyDate && `Ready by ${dto.readyDate}`, dto.note?.trim()].filter(Boolean).join(' · ') || null);
-      return this.shape(await this.load(em, id));
+      return this.shape(await this.load(em, id), (await this.movedMap(em))[id]);
     });
   }
 
@@ -155,7 +158,7 @@ export class ProductionOrdersService {
       o.reason = dto.reason.trim();
       await em.save(o);
       await this.event(em, o.id, user, 'Rejected', o.reason);
-      return this.shape(await this.load(em, id));
+      return this.shape(await this.load(em, id), (await this.movedMap(em))[id]);
     });
   }
 
@@ -173,7 +176,7 @@ export class ProductionOrdersService {
       o.stage = dto.stage;
       await em.save(o);
       await this.event(em, o.id, user, dto.stage, dto.note?.trim() || null);
-      return this.shape(await this.load(em, id));
+      return this.shape(await this.load(em, id), (await this.movedMap(em))[id]);
     });
   }
 
@@ -260,8 +263,16 @@ export class ProductionOrdersService {
     };
   }
 
+  /** containers shipped and received per order */
+  private async movedMap(em: EntityManager): Promise<Record<string, { shipped: number; received: number }>> {
+    const rows: { orderId: string; shipped: number; received: number }[] = await em.query(
+      `SELECT "orderId", SUM(containers)::int AS shipped, COALESCE(SUM("receivedContainers"), 0)::int AS received
+         FROM production_shipments GROUP BY "orderId"`);
+    return Object.fromEntries(rows.map((r) => [r.orderId, { shipped: Number(r.shipped), received: Number(r.received) }]));
+  }
+
   /** the order with its worked-out quantities and money */
-  private shape(o: ProductionOrder) {
+  private shape(o: ProductionOrder, moved?: { shipped: number; received: number }) {
     const bundles = o.containers * o.bundlesPerContainer;
     const packets = bundles * o.packetsPerBundle;
     const value = round2(packets * Number(o.rate));
@@ -271,7 +282,10 @@ export class ProductionOrdersService {
       packets,
       value,
       advanceAmount: round2((value * Number(o.advancePct)) / 100),
-      overdue: !!o.dueDate && o.status === 'Accepted' && o.dueDate < new Date().toISOString().slice(0, 10),
+      shippedContainers: moved?.shipped ?? 0,
+      receivedContainers: moved?.received ?? 0,
+      // late: past its date and not everything arrived yet
+      overdue: !!o.dueDate && o.status === 'Accepted' && (moved?.received ?? 0) < o.containers && o.dueDate < new Date().toISOString().slice(0, 10),
     };
   }
 }

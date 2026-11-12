@@ -186,6 +186,7 @@ export class PaymentRequestsService {
         fromAccount: dto.fromAccount ?? null, reference: dto.reference?.trim() || null, note: dto.note?.trim() || null,
       }));
       await this.posting.syncMfrRequestPayment(em, p.id);
+      await this.posting.syncOrderAdvance(em, r.orderId);
       return this.one(em, id);
     });
   }

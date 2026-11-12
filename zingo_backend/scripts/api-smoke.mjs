@@ -1070,5 +1070,65 @@ ok('the second signature approves it', (await call(T.partner, 'POST', `/mfr-paym
 ok('a Distributor login cannot see payment requests -> 403', (await call(T.dist, 'GET', '/mfr-payment-requests')).status === 403);
 ok('the ledger still balances', (await call(T.owner, 'GET', '/reports/trial-balance')).json?.balanced === true);
 
+// ── P5 shipments: manufacturer -> distributor, receipt, consignment stock, payable and advance ──
+const p5Day = new Date().toISOString().slice(0, 10);
+const p5Mo = ((await call(T.owner, 'GET', '/production-orders')).json ?? []).find((o) => o.id === p4Mo.id);
+ok('the sample order goes to Sindh Central (the demo distributor)', p5Mo?.distributor?.name === 'Sindh Central Distributors', p5Mo?.distributor?.name);
+ok('more containers than ordered -> 400', (await call(p3Maker, 'POST', '/production-shipments', { orderId: p5Mo.id, date: p5Day, containers: 3 })).status === 400);
+ok('a future ship date -> 400', (await call(p3Maker, 'POST', '/production-shipments', { orderId: p5Mo.id, date: '2999-01-01', containers: 1 })).status === 400);
+ok('a distributor cannot ship -> 403', (await call(T.dist, 'POST', '/production-shipments', { orderId: p5Mo.id, date: p5Day, containers: 1 })).status === 403);
+ok('another manufacturer cannot ship this order -> 403', (await call(p3OtherT, 'POST', '/production-shipments', { orderId: p5Mo.id, date: p5Day, containers: 1 })).status === 403);
+const p5S1 = await call(p3Maker, 'POST', '/production-shipments', { orderId: p5Mo.id, date: p5Day, containers: 1, vehicle: 'TLR-123', waybill: 'BLT-9' });
+ok('the manufacturer ships one container straight to the distributor',
+  p5S1.status === 201 && p5S1.json?.status === 'In transit' && p5S1.json?.distributorId === p5Mo.distributorId && /^SH-\d{3}$/.test(p5S1.json?.refNo) && p5S1.json?.packets === 4320, JSON.stringify(p5S1.json));
+const p5Mo2 = ((await call(T.owner, 'GET', '/production-orders')).json ?? []).find((o) => o.id === p5Mo.id);
+ok('the order counts it as shipped and shows it on the timeline', p5Mo2?.shippedContainers === 1 && p5Mo2?.events?.some((e) => e.event.startsWith('Shipped 1 container')));
+ok('an order with shipments can no longer be cancelled -> 400', (await call(T.factory, 'POST', `/production-orders/${p5Mo.id}/cancel`, { reason: 'x' })).status === 400);
+ok('the company is alerted that a shipment is on the road', ((await call(T.owner, 'GET', '/reports/alerts')).json ?? []).some((a) => a.kind === 'delivery' && a.title.includes(p5S1.json.refNo)));
+ok('the distributor sees the delivery', ((await call(T.dist, 'GET', '/production-shipments')).json ?? []).some((s) => s.id === p5S1.json.id));
+ok('a distributor only ever sees its own deliveries', ((await call(T.dist, 'GET', '/production-shipments')).json ?? []).every((s) => s.distributorId === p5Mo.distributorId));
+ok('the manufacturer cannot receive -> 403', (await call(p3Maker, 'POST', `/production-shipments/${p5S1.json.id}/receive`, { date: p5Day, receivedContainers: 1 })).status === 403);
+ok('Finance cannot receive -> 403', (await call(T.finance, 'POST', `/production-shipments/${p5S1.json.id}/receive`, { date: p5Day, receivedContainers: 1 })).status === 403);
+ok('receiving more than was sent -> 400', (await call(T.dist, 'POST', `/production-shipments/${p5S1.json.id}/receive`, { date: p5Day, receivedContainers: 2 })).status === 400);
+ok('a receipt before the ship date -> 400', (await call(T.dist, 'POST', `/production-shipments/${p5S1.json.id}/receive`, { date: '2000-01-01', receivedContainers: 1 })).status === 400);
+const p5R1 = await call(T.dist, 'POST', `/production-shipments/${p5S1.json.id}/receive`, { date: p5Day, receivedContainers: 1 });
+const p5Sell = new Date(Date.parse(`${p5Day}T00:00:00Z`) + 30 * 86_400_000).toISOString().slice(0, 10);
+ok('the distributor confirms it; the sell-out clock starts (Sindh Central: 30 days)',
+  p5R1.json?.status === 'Received' && p5R1.json?.selloutDays === 30 && p5R1.json?.sellBy === p5Sell && p5R1.json?.receivedValue === 18360, JSON.stringify(p5R1.json));
+ok('receiving twice -> 400', (await call(T.dist, 'POST', `/production-shipments/${p5S1.json.id}/receive`, { date: p5Day, receivedContainers: 1 })).status === 400);
+const p5J = ((await call(T.finance, 'GET', '/reports/journal?period=all')).json ?? []);
+ok('it posts Inventory at Distributor / Manufacturer Payable at the order rate',
+  p5J.some((l) => l.reference === p5S1.json.refNo && l.account === 'Inventory at Distributor' && l.debit === 18360)
+  && p5J.some((l) => l.reference === p5S1.json.refNo && l.account === 'Manufacturer Payable' && l.credit === 18360));
+ok('the paid advance (11,016) is set against the payable',
+  p5J.some((l) => l.reference === p5Mo.refNo && l.account === 'Advance to Manufacturer' && l.credit === 11016)
+  && p5J.some((l) => l.reference === p5Mo.refNo && l.account === 'Manufacturer Payable' && l.debit === 11016), JSON.stringify(p5J.filter((l) => l.reference === p5Mo.refNo)));
+const p5St = (await call(T.dist, 'GET', '/production-shipments/stock')).json;
+const p5Row = p5St?.byProduct?.find((r) => r.sku === 'Z10-MAS');
+ok('the distributor holds 1 container = 10 bundles = 4,320 packets worth 18,360', p5Row?.containers === 1 && p5Row?.bundles === 10 && p5Row?.packets === 4320 && p5Row?.value === 18360 && p5Row?.nextSellBy === p5Sell, JSON.stringify(p5Row));
+ok('warehouse stock is not touched by a distributor delivery', ((await call(T.owner, 'GET', '/products')).json ?? []).find((p) => p.sku === 'Z10-MAS')?.stockCartons === p3Prods.find((p) => p.sku === 'Z10-MAS')?.stockCartons);
+// a short delivery
+const p5S2 = await call(T.factory, 'POST', '/production-shipments', { orderId: p5Mo.id, date: p5Day, containers: 1 });
+ok('staff may ship for the manufacturer; the last container goes', p5S2.status === 201);
+ok('nothing left to ship -> 400', (await call(p3Maker, 'POST', '/production-shipments', { orderId: p5Mo.id, date: p5Day, containers: 1 })).status === 400);
+ok('receiving fewer without saying why -> 400', (await call(T.dist, 'POST', `/production-shipments/${p5S2.json.id}/receive`, { date: p5Day, receivedContainers: 0 })).status === 400);
+const p5R2 = await call(T.sales, 'POST', `/production-shipments/${p5S2.json.id}/receive`, { date: p5Day, receivedContainers: 0, note: 'Truck turned back, container damaged' });
+ok('Distribution staff record a lost container for the distributor', p5R2.json?.status === 'Received' && p5R2.json?.receivedValue === 0);
+ok('nothing is owed for what did not arrive', !((await call(T.finance, 'GET', '/reports/journal?period=all')).json ?? []).some((l) => l.reference === p5S2.json.refNo));
+const p5Mo3 = ((await call(T.owner, 'GET', '/production-orders')).json ?? []).find((o) => o.id === p5Mo.id);
+ok('the order: 2 shipped, 1 received', p5Mo3?.shippedContainers === 2 && p5Mo3?.receivedContainers === 1);
+// into the warehouse
+const p5W = (await call(T.factory, 'POST', '/production-orders', { date: p5Day, productId: p5Mo.productId, containers: 1, destination: 'Warehouse', send: true })).json;
+await call(p3Maker, 'POST', `/production-orders/${p5W.id}/accept`, {});
+const p5WS = (await call(p3Maker, 'POST', '/production-shipments', { orderId: p5W.id, date: p5Day, containers: 1 })).json;
+ok('a distributor cannot receive a warehouse delivery -> 403', (await call(T.dist, 'POST', `/production-shipments/${p5WS.id}/receive`, { date: p5Day, receivedContainers: 1 })).status === 403);
+ok('Distribution staff cannot either -> 403', (await call(T.sales, 'POST', `/production-shipments/${p5WS.id}/receive`, { date: p5Day, receivedContainers: 1 })).status === 403);
+const p5Before = ((await call(T.owner, 'GET', '/products')).json ?? []).find((p) => p.id === p5Mo.productId)?.stockCartons;
+ok('Manufacturing receives it into the warehouse', (await call(T.factory, 'POST', `/production-shipments/${p5WS.id}/receive`, { date: p5Day, receivedContainers: 1 })).json?.sellBy === null);
+ok('warehouse stock goes up by 10 bundles', ((await call(T.owner, 'GET', '/products')).json ?? []).find((p) => p.id === p5Mo.productId)?.stockCartons === p5Before + 10);
+ok('it posts warehouse Inventory / Manufacturer Payable', ((await call(T.finance, 'GET', '/reports/journal?period=all')).json ?? []).some((l) => l.reference === p5WS.refNo && l.account === 'Inventory · Estimated' && l.debit === 18360));
+ok('a Manufacturer login cannot read distributor stock -> 403', (await call(p3Maker, 'GET', '/production-shipments/stock')).status === 403);
+ok('the ledger still balances after shipments', (await call(T.owner, 'GET', '/reports/trial-balance')).json?.balanced === true);
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

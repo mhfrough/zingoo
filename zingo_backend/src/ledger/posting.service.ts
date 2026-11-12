@@ -10,7 +10,8 @@ import { LookupsService } from '../setup/lookups.service';
 import { ExportCostPayment, ExportReceipt, ExportShipment } from '../exports/exports.entities';
 import { AccountingDocument, AccountingSettlement, Approval, FinanceEntry, FundingRepayment } from '../finance/finance.entities';
 import { ManufacturerPayment, ProductionBatch } from '../manufacturing/manufacturing.entities';
-import { MfrRequestPayment } from '../manufacturing/payment-requests.entities';
+import { MfrPaymentRequest, MfrRequestPayment } from '../manufacturing/payment-requests.entities';
+import { ProductionShipment } from '../manufacturing/shipments.entities';
 import { Setting } from '../setup/setup.entities';
 import { SettingsService } from '../setup/setup.service';
 import { JournalVoucher } from './ledger.entities';
@@ -25,6 +26,7 @@ export const ACC = {
   AP: 'Accounts Payable',
   MFR_PAYABLE: 'Manufacturer Payable',
   MFR_ADVANCE: 'Advance to Manufacturer',
+  INVENTORY_DISTRIBUTOR: 'Inventory at Distributor',
   PARTNER_LOANS: 'Partner Loans',
   EQUITY: 'Owner Equity',
   SALES: 'Sales Revenue',
@@ -138,6 +140,42 @@ export class PostingService implements OnModuleInit {
     const r = p.request;
     await this.ledger.replace(em, 'MFR_REQ_PAY', id,
       this.pair(p.date, 'Manufacturing', p.refNo, `${r.kind} paid · ${r.order.refNo} · ${r.manufacturer.name} (${r.refNo})`, ACC.MFR_ADVANCE, ACC.CASH, p.amount));
+  }
+
+  /**
+   * Containers that arrived: owed to the manufacturer at the order rate, and Zen Foods stock at the distributor
+   * (consignment) or in the warehouse. Only what arrived counts.
+   */
+  async syncProductionShipment(em: EntityManager, id: string) {
+    const s = await em.findOne(ProductionShipment, { where: { id }, relations: ['product', 'manufacturer', 'distributor', 'order'] });
+    if (!s) return;
+    const value = (s.receivedContainers ?? 0) * s.bundlesPerContainer * s.packetsPerBundle * Number(s.rate);
+    const rows = s.status === 'Received'
+      ? this.pair(s.receivedDate!, 'Manufacturing', s.refNo,
+        `Goods received · ${s.product.sku} · ${s.destination === 'Warehouse' ? 'warehouse' : s.distributor?.name} (${s.order.refNo}, ${s.manufacturer.name})`,
+        s.destination === 'Warehouse' ? ACC.INVENTORY : ACC.INVENTORY_DISTRIBUTOR, ACC.MFR_PAYABLE, value)
+      : [];
+    await this.ledger.replace(em, 'SHIPMENT', id, rows);
+  }
+
+  /**
+   * Advances paid on an order are set against what the company owes for goods received on it:
+   * Manufacturer Payable / Advance to Manufacturer, never more than either. Rewritten after every payment and receipt.
+   */
+  async syncOrderAdvance(em: EntityManager, orderId: string) {
+    const reqs = await em.find(MfrPaymentRequest, { where: { orderId }, relations: ['order'] });
+    const pays = reqs.length ? await em.query(
+      `SELECT COALESCE(SUM(amount), 0)::float8 AS paid, MAX(date)::text AS last FROM mfr_request_payments WHERE "requestId" = ANY($1)`, [reqs.map((r) => r.id)],
+    ) : [{ paid: 0, last: null }];
+    const [got] = await em.query(
+      `SELECT COALESCE(SUM("receivedContainers" * "bundlesPerContainer" * "packetsPerBundle" * rate), 0)::float8 AS value, MAX("receivedDate")::text AS last
+         FROM production_shipments WHERE "orderId" = $1 AND status = 'Received'`, [orderId],
+    );
+    const applied = round2(Math.min(Number(pays[0].paid), Number(got.value)));
+    const date = [pays[0].last, got.last].filter(Boolean).sort().pop() as string | undefined;
+    const ref = reqs[0]?.order?.refNo ?? '';
+    await this.ledger.replace(em, 'MFR_ADV_APPLY', orderId,
+      date ? this.pair(date, 'Manufacturing', ref, `Advance set against goods received · ${ref}`, ACC.MFR_PAYABLE, ACC.MFR_ADVANCE, applied) : []);
   }
 
   // ───────────── distribution ─────────────

@@ -238,7 +238,7 @@ export class OrderStageForm extends FormModal {
           @for (e of o.events; track e.id) {
             <li>
               <strong>{{ e.event }}</strong>
-              <small>{{ when(e.createdAt) }} · {{ e.by }} ({{ e.side === 'Manufacturer' ? 'manufacturer' : 'company' }})</small>
+              <small>{{ when(e.createdAt) }} · {{ e.by }} ({{ e.side.toLowerCase() }})</small>
               @if (e.note) {
                 <p>{{ e.note }}</p>
               }

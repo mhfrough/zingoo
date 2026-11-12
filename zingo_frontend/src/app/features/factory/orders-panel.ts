@@ -105,7 +105,7 @@ export class OrdersPanel {
       list.push({ id: 'accept', label: company ? 'Accept for manufacturer' : 'Accept order', tone: 'success' }, { id: 'reject', label: company ? 'Reject for manufacturer' : 'Reject order', tone: 'danger' });
     }
     if (this.canAnswer() && o.status === 'Accepted') list.push({ id: 'stage', label: 'Report progress' });
-    if (company && this.canPlace() && (o.status === 'Sent' || o.status === 'Accepted')) list.push({ id: 'cancel', label: 'Cancel order', tone: 'danger' });
+    if (company && this.canPlace() && (o.status === 'Sent' || (o.status === 'Accepted' && !o.shippedContainers))) list.push({ id: 'cancel', label: 'Cancel order', tone: 'danger' });
     list.push({ id: 'view', label: 'View order and timeline' });
     return list;
   };

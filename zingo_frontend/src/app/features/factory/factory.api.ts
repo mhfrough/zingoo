@@ -12,7 +12,7 @@ export interface ProductionOrderEvent {
   event: string;
   note: string | null;
   by: string;
-  side: 'Company' | 'Manufacturer';
+  side: 'Company' | 'Manufacturer' | 'Distributor';
 }
 
 /** A production order as the API returns it, with its worked-out quantities and money. */
@@ -44,7 +44,67 @@ export interface ProductionOrder {
   packets: number;
   value: number;
   advanceAmount: number;
+  /** containers sent so far, and how many arrived */
+  shippedContainers: number;
+  receivedContainers: number;
   overdue: boolean;
+}
+
+/** Containers sent against an order, and what arrived. */
+export interface Shipment {
+  id: string;
+  refNo: string;
+  orderId: string;
+  order: ProductionOrder;
+  productId: string;
+  product: Product;
+  manufacturerId: string;
+  manufacturer: Manufacturer;
+  destination: 'Distributor' | 'Warehouse';
+  distributorId: string | null;
+  distributor: Distributor | null;
+  shipDate: string;
+  containers: number;
+  bundlesPerContainer: number;
+  packetsPerBundle: number;
+  rate: number;
+  vehicle: string | null;
+  waybill: string | null;
+  note: string | null;
+  shippedBy: string;
+  status: 'In transit' | 'Received';
+  receivedDate: string | null;
+  receivedContainers: number | null;
+  receivedBy: string | null;
+  receiptNote: string | null;
+  selloutDays: number | null;
+  sellBy: string | null;
+  packets: number;
+  value: number;
+  receivedValue: number;
+  onHandContainers: number;
+  onHandValue: number;
+  daysLeft: number | null;
+  overdue: boolean;
+}
+
+/** Zen Foods stock held by a distributor for one product */
+export interface DistributorStockRow {
+  productId: string;
+  sku: string;
+  name: string;
+  distributor: string;
+  containers: number;
+  bundles: number;
+  packets: number;
+  value: number;
+  nextSellBy: string | null;
+  overdue: boolean;
+}
+
+export interface DistributorStock {
+  lots: Shipment[];
+  byProduct: DistributorStockRow[];
 }
 
 /** What the factory portal shows at the top: the manufacturer, its order counts and the production steps. */
@@ -150,6 +210,11 @@ export class FactoryApi {
   signRequest = (id: string, seat: 'A' | 'B') => this.api.post<PaymentRequest>(`mfr-payment-requests/${id}/sign`, { seat });
   rejectRequest = (id: string, reason: string) => this.api.post<PaymentRequest>(`mfr-payment-requests/${id}/reject`, { reason });
   payRequest = (id: string, body: unknown) => this.api.post<PaymentRequest>(`mfr-payment-requests/${id}/pay`, body);
+
+  shipments = (filter: { distributorId?: string; manufacturerId?: string } = {}) => this.api.get<Shipment[]>('production-shipments', filter);
+  stock = (distributorId?: string) => this.api.get<DistributorStock>('production-shipments/stock', { distributorId });
+  ship = (body: unknown) => this.api.post<Shipment>('production-shipments', body);
+  receive = (id: string, body: unknown) => this.api.post<Shipment>(`production-shipments/${id}/receive`, body);
 }
 
 /** the tone of a status tag */
@@ -158,4 +223,8 @@ export const ORDER_TONE: Record<ProductionOrderStatus, 'neutral' | 'info' | 'suc
 };
 
 /** "Accepted · In production" */
-export const orderState = (o: ProductionOrder) => (o.status === 'Accepted' && o.stage ? o.stage : o.status === 'Sent' ? 'Waiting for answer' : o.status);
+export const orderState = (o: ProductionOrder) => {
+  if (o.status === 'Accepted' && o.receivedContainers >= o.containers) return 'Delivered';
+  if (o.status === 'Accepted' && o.shippedContainers > 0) return `Shipped ${o.shippedContainers}/${o.containers}`;
+  return o.status === 'Accepted' && o.stage ? o.stage : o.status === 'Sent' ? 'Waiting for answer' : o.status;
+};

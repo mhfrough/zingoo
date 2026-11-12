@@ -9,6 +9,7 @@ import { OpsApi } from '../ops/ops.api';
 import { FactoryApi } from './factory.api';
 import { OrdersPanel } from './orders-panel';
 import { RequestsPanel } from './requests-panel';
+import { ShipmentsPanel } from './shipments-panel';
 
 /**
  * Manufacturer portal. A Manufacturer login sees only its own orders: it accepts or rejects each one and reports
@@ -18,7 +19,7 @@ import { RequestsPanel } from './requests-panel';
 @Component({
   selector: 'app-factory',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [FormsModule, Field, Kpi, PageHeader, Select, OrdersPanel, RequestsPanel],
+  imports: [FormsModule, Field, Kpi, PageHeader, Select, OrdersPanel, RequestsPanel, ShipmentsPanel],
   styles: `
     .terms {
       display: grid;
@@ -85,6 +86,10 @@ import { RequestsPanel } from './requests-panel';
         [error]="orders.error() ? 'The server did not answer.' : null" [stages]="profile.value()?.stages ?? []"
         [canAnswer]="canAnswer()" (changed)="reload()" />
 
+      <app-shipments-panel mode="factory" [shipments]="shipments.value() ?? []" [orders]="orders.value() ?? []"
+        [loading]="shipments.isLoading()" [error]="shipments.error() ? 'The server did not answer.' : null"
+        [canShip]="canAnswer()" (changed)="reload()" />
+
       <app-requests-panel mode="factory" [requests]="requests.value() ?? []" [position]="position.value() ?? null"
         [loading]="requests.isLoading()" [error]="requests.error() ? 'The server did not answer.' : null"
         [manufacturer]="profile.value()?.manufacturer ?? null" [canRequest]="canAnswer()" (changed)="reload()" />
@@ -111,6 +116,10 @@ export class Factory {
   protected orders = rxResource({
     params: () => ({ t: this.tick(), m: this.profile.value()?.manufacturer?.id }),
     stream: ({ params }) => (params.m ? this.api.orders(params.m) : of([])),
+  });
+  protected shipments = rxResource({
+    params: () => ({ t: this.tick(), m: this.profile.value()?.manufacturer?.id }),
+    stream: ({ params }) => (params.m ? this.api.shipments({ manufacturerId: params.m }) : of([])),
   });
   protected requests = rxResource({
     params: () => ({ t: this.tick(), m: this.profile.value()?.manufacturer?.id }),

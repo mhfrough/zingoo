@@ -1,4 +1,6 @@
 import { ChangeDetectionStrategy, Component, computed, effect, inject, signal } from '@angular/core';
+import { FactoryApi } from '../factory/factory.api';
+import { ShipmentsPanel } from '../factory/shipments-panel';
 import { rxResource } from '@angular/core/rxjs-interop';
 import { Observable } from 'rxjs';
 import { AuthService } from '../../core/auth.service';
@@ -35,7 +37,7 @@ const tone = (s: string): Tone => STATUS_TONE[s] ?? 'neutral';
   selector: 'app-portal',
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [
-    Btn, DataTable, Kpi, PageHeader, Tag, Tabs, TabPanel, RequestForm, ReceiptForm, AdviceForm, AcceptForm, ReasonForm,
+    Btn, DataTable, Kpi, PageHeader, Tag, Tabs, TabPanel, RequestForm, ReceiptForm, AdviceForm, AcceptForm, ReasonForm, ShipmentsPanel,
   ],
   templateUrl: './portal.html',
   styleUrl: './portal.css',
@@ -66,6 +68,13 @@ export class Portal {
   protected advices = rxResource({ params: () => this.params(), stream: ({ params }) => this.api.advices(params.d) });
   protected rates = rxResource({ params: () => this.params(), stream: ({ params }) => this.api.rates(params.d) });
   protected statement = rxResource({ params: () => this.params(), stream: ({ params }) => this.api.statement(params.d) });
+  private factory = inject(FactoryApi);
+  /** manufacturer deliveries to this distributor and the Zen Foods stock it holds */
+  protected deliveries = rxResource({ params: () => this.params(), stream: ({ params }) => this.factory.shipments({ distributorId: params.d }) });
+  protected consignment = rxResource({ params: () => this.params(), stream: ({ params }) => this.factory.stock(params.d) });
+  protected toConfirm = computed(() => (this.deliveries.value() ?? []).filter((s) => s.status === 'In transit').length);
+  /** the distributor itself, or Admin / Distribution for it */
+  protected canReceiveDelivery = computed(() => this.isDistributor() || ['Admin', 'Distribution'].includes(this.auth.user()?.role ?? ''));
   protected desk = rxResource({ params: () => (this.canManage() ? this.tick() : undefined), stream: () => this.api.desk() });
 
   protected tab = signal('dashboard');
@@ -86,6 +95,7 @@ export class Portal {
   protected tabs = computed<TabItem[]>(() => [
     { id: 'dashboard', label: 'Dashboard', icon: 'dashboard' },
     { id: 'orders', label: 'My orders', icon: 'package', count: this.orders.value()?.length ?? 0 },
+    { id: 'stock', label: 'Deliveries & stock', icon: 'boxes', count: this.toConfirm() || null },
     { id: 'cargo', label: 'Cargo & damage', icon: 'truck', count: this.toReceive().length || null },
     { id: 'payments', label: 'Payments & credit', icon: 'banknote' },
     { id: 'rates', label: 'Agreed SKU rates', icon: 'scale' },

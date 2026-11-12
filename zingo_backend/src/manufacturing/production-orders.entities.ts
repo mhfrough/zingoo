@@ -114,10 +114,10 @@ export class ProductionOrderEvent extends AppEntity {
   @Column({ type: 'varchar', length: 500, nullable: true })
   note: string | null;
 
-  /** name of the person, and whether they are company staff or the manufacturer */
+  /** name of the person, and whether they are company staff, the manufacturer or the receiving distributor */
   @Column({ type: 'varchar', length: 120 })
   by: string;
 
   @Column({ type: 'varchar', length: 20 })
-  side: 'Company' | 'Manufacturer';
+  side: 'Company' | 'Manufacturer' | 'Distributor';
 }

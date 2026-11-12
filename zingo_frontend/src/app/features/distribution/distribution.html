@@ -47,6 +47,10 @@
     </div>
   </div>
 
+  <app-shipments-panel mode="company" [shipments]="shipments.value() ?? []" [stock]="distStock.value() ?? null"
+    [loading]="shipments.isLoading()" [error]="shipments.error() ? 'The server did not answer.' : null"
+    [canReceive]="canWrite()" (changed)="reload()" />
+
   <div class="card" data-flush>
     <div class="card__head">
       <div><h2>Collections journal</h2><p>Receipts recorded against dispatched orders</p></div>

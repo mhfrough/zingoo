@@ -9,6 +9,7 @@ import { AccountingService, FinanceService } from '../finance/finance.service';
 import { BatchesService } from '../manufacturing/manufacturing.service';
 import { ProductionOrdersService } from '../manufacturing/production-orders.service';
 import { PaymentRequestsService } from '../manufacturing/payment-requests.service';
+import { ShipmentsService } from '../manufacturing/shipments.service';
 import { SettingsService } from '../setup/setup.service';
 
 /** Period filter: 'all' or 'YYYY-MM'. */
@@ -43,6 +44,7 @@ export class ReportsService {
     private readonly exportsSvc: ExportsService,
     private readonly productionOrders: ProductionOrdersService,
     private readonly paymentRequests: PaymentRequestsService,
+    private readonly shipments: ShipmentsService,
   ) {}
 
   /** net balance (debit - credit) of one ledger account */
@@ -307,10 +309,11 @@ export class ReportsService {
   }
 
   async alerts() {
-    const [docs, entries, stock, orders, batches, mos, prs] = await Promise.all([
+    const [docs, entries, stock, orders, batches, mos, prs, shs] = await Promise.all([
       this.accounting.list(), this.finance.list(), this.stock(), this.orders.list(), this.batches.list(),
       this.productionOrders.list({ id: '', name: 'system', role: 'Admin' }),
       this.paymentRequests.list({ id: '', name: 'system', role: 'Admin' }),
+      this.shipments.list({ id: '', name: 'system', role: 'Admin' }),
     ]);
     const s = await this.settings.get();
     return [
@@ -349,6 +352,15 @@ export class ReportsService {
       ...orders.filter((o) => o.status === 'Draft').map((o) => ({
         kind: 'order', page: 'distribution', title: `Undispatched order · ${o.refNo}`,
         text: `${o.cartons} bundles for ${o.distributor.name}`,
+      })),
+      // shipments on the road, and distributor stock past its sell-by date
+      ...shs.filter((s) => s.status === 'In transit').map((s) => ({
+        kind: 'delivery', page: 'distribution', title: `Shipment to receive · ${s.refNo}`,
+        text: `${s.containers} container${s.containers > 1 ? 's' : ''} of ${s.product.sku} for ${s.destination === 'Warehouse' ? 'the warehouse' : s.distributor?.name} · sent ${s.shipDate}`,
+      })),
+      ...shs.filter((s) => s.overdue).map((s) => ({
+        kind: 'sellout', page: 'distribution', title: `Sell-out date passed · ${s.refNo}`,
+        text: `${s.distributor?.name}: ${s.onHandContainers} container${s.onHandContainers > 1 ? 's' : ''} of ${s.product.sku} were due to be sold by ${s.sellBy}`,
       })),
       // production orders: waiting for the manufacturer, refused by it, or late
       ...mos.filter((o) => o.status === 'Sent').map((o) => ({

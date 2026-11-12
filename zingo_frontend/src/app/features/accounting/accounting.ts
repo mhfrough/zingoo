@@ -11,6 +11,7 @@ import {
 import { FinanceApi } from '../finance/finance.api';
 import { AccountingDoc, CashBookRow, JournalLine, OpenItem, Settlement } from '../finance/models';
 import { AccountingDocForm } from './accounting-doc-form';
+import { IncomeInvoiceForm } from './income-invoice-form';
 import { SettleForm } from './settle-form';
 
 /** `YYYY-MM` -> "Nov 2026" for the period selector */
@@ -38,7 +39,7 @@ interface OpenRow extends OpenItem {
   selector: 'app-accounting',
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [
-    Btn, DataTable, Kpi, PageHeader, Tag, Tabs, TabPanel, AccountingDocForm, SettleForm,
+    Btn, DataTable, Kpi, PageHeader, Tag, Tabs, TabPanel, AccountingDocForm, IncomeInvoiceForm, SettleForm,
   ],
   templateUrl: './accounting.html',
   styleUrl: './accounting.css',
@@ -232,10 +233,14 @@ export class Accounting {
     this.tick.update((n) => n + 1);
   }
 
+  /** an income invoice opens the step-by-step invoice; an expense bill the short form */
+  protected incomeOpen = signal(false);
+
   protected openDoc(kind: 'Income' | 'Expense', doc: AccountingDoc | null = null) {
     this.docKind.set(kind);
     this.editingDoc.set(doc);
-    this.docOpen.set(true);
+    if (kind === 'Income') this.incomeOpen.set(true);
+    else this.docOpen.set(true);
   }
 
   protected openSettle(doc: AccountingDoc) {

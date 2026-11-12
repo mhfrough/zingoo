@@ -187,6 +187,7 @@ export class SettingsLists {
     { list: 'ADVANCE_PURPOSE', title: 'Advance purpose', sub: 'Why a partner advances money', add: 'Add purpose' },
     { list: 'SETTLEMENT_METHOD', title: 'Settlement method', sub: 'How an advance is expected to be settled', add: 'Add method' },
     { list: 'BANK_ACCOUNT', title: 'Bank and cash accounts', sub: 'Which account took or paid the money. A label on each entry', add: 'Add account' },
+    { list: 'DELIVERY_STATUS', title: 'Delivery statuses', sub: 'Dispatch and acceptance of an income invoice', add: 'Add status' },
   ];
   protected simpleRows = computed(() => {
     const out: Partial<Record<LookupList, Lookup[]>> = {};

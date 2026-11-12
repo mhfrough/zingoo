@@ -161,11 +161,42 @@ export interface AccountingDoc {
   note: string | null;
   paid: number;
   due: number;
+  /** Draft, Awaiting approval, Receivable, Collected ... (the document itself is Draft or Issued) */
   status: string;
+  // income invoice details
+  invoiceNo?: string;
+  customerTaxId?: string;
+  region?: string;
+  paymentDays?: number | null;
+  receivingAccount?: string;
+  orderRef?: string;
+  deliveryStatus?: string;
+  deliveryProof?: string;
+  salesOwner?: string;
+  lines?: InvoiceLine[];
+  discount?: number;
+  salesTaxPct?: number;
+  whtPct?: number;
+  taxAmount?: number;
+  sellerCosts?: Record<string, number>;
+  costOfGoods?: number;
   signatures: string[];
   requiredSignatures: number;
   needsApproval: boolean;
   approved: boolean;
+}
+
+/** One SKU line of an income invoice. */
+export interface InvoiceLine {
+  productId: string;
+  sku: string;
+  name: string;
+  qty: number;
+  uom: 'Packs' | 'Dozens' | 'Cartons';
+  packs: number;
+  sellPrice: number;
+  unitCost: number;
+  lineSales: number;
 }
 
 /** A (part) collection or payment against an accounting document. */

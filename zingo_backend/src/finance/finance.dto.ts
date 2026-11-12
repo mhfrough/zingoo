@@ -2,7 +2,7 @@ import { PartialType } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
 import {
   ArrayMaxSize, ArrayMinSize, IsArray, IsDateString, IsIn, IsNotEmpty, IsNumber, IsOptional, IsPositive, IsString, IsUUID,
-  Max, MaxLength, Min, ValidateNested,
+  IsObject, Max, MaxLength, Min, ValidateNested,
 } from 'class-validator';
 import { DOC_KINDS, FINANCE_TYPES } from '../common/enums';
 import { INVESTOR_TYPES, InvestorType } from './finance.entities';
@@ -101,12 +101,39 @@ export class SignDto {
   @IsIn(['A', 'B']) seat: 'A' | 'B';
 }
 
+/** One SKU line of an income invoice. */
+export class InvoiceLineDto {
+  @IsUUID() productId: string;
+  @IsNumber() @IsPositive() @Max(10_000_000) qty: number;
+  @IsIn(['Packs', 'Dozens', 'Cartons']) uom: 'Packs' | 'Dozens' | 'Cartons';
+  /** per pack, invoice currency */
+  @IsNumber() @Min(0) sellPrice: number;
+  /** per pack, PKR */
+  @IsOptional() @IsNumber() @Min(0) unitCost?: number;
+}
+
 export class CreateAccountingDto {
   @IsDateString() date: string;
   @IsIn([...DOC_KINDS]) kind: (typeof DOC_KINDS)[number];
   @IsString() @IsNotEmpty() category: string;
-  /** amount in the invoice currency */
-  @IsNumber() @IsPositive() foreignAmount: number;
+  /** amount in the invoice currency; worked out from the lines when an income invoice has them */
+  @IsOptional() @IsNumber() @Min(0) foreignAmount?: number;
+  /** Draft is saved but not posted; Issued (the default) posts */
+  @IsOptional() @IsIn(['Draft', 'Issued']) status?: 'Draft' | 'Issued';
+  @IsOptional() @IsString() @MaxLength(60) invoiceNo?: string;
+  @IsOptional() @IsString() @MaxLength(60) customerTaxId?: string;
+  @IsOptional() @IsString() @MaxLength(80) region?: string;
+  @IsOptional() @IsNumber() @Min(0) @Max(365) paymentDays?: number;
+  @IsOptional() @IsString() @MaxLength(60) receivingAccount?: string;
+  @IsOptional() @IsString() @MaxLength(80) orderRef?: string;
+  @IsOptional() @IsString() @MaxLength(60) deliveryStatus?: string;
+  @IsOptional() @IsString() @MaxLength(120) deliveryProof?: string;
+  @IsOptional() @IsString() @MaxLength(120) salesOwner?: string;
+  @IsOptional() @IsArray() @ArrayMaxSize(50) @ValidateNested({ each: true }) @Type(() => InvoiceLineDto) lines?: InvoiceLineDto[];
+  @IsOptional() @IsNumber() @Min(0) discount?: number;
+  @IsOptional() @IsNumber() @Min(0) @Max(100) salesTaxPct?: number;
+  @IsOptional() @IsNumber() @Min(0) @Max(100) whtPct?: number;
+  @IsOptional() @IsObject() sellerCosts?: Record<string, number>;
   @IsOptional() @IsString() currency?: string;
   /** PKR per 1 unit of the currency; must be 1 for PKR */
   @IsOptional() @IsNumber() @Min(0.000001) fxRate?: number;

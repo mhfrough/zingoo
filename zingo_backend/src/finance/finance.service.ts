@@ -7,16 +7,16 @@ import { round2 } from '../common/numeric.transformer';
 import { isChequeMethod } from '../common/payments';
 import { nextRef } from '../common/ref';
 import { PostingService } from '../ledger/posting.service';
-import { Distributor, Manufacturer } from '../catalog/catalog.entities';
+import { Distributor, Manufacturer, Product } from '../catalog/catalog.entities';
 import { LookupsService } from '../setup/lookups.service';
 import { Currency, Lookup } from '../setup/setup.entities';
 import { SettingsService } from '../setup/setup.service';
 import {
   CapitalLineDto, ChequeDto, CreateAccountingDto, CreateCapitalDto, CreateFinanceDto, RepaymentDto, SettleDto,
-  UpdateAccountingDto, UpdateFinanceDto,
+  UpdateAccountingDto, UpdateFinanceDto, InvoiceLineDto,
 } from './finance.dto';
 import {
-  AccountingDocument, AccountingSettlement, Approval, ChequeStatus, FinanceEntry, FinanceEntryStream, FundingRepayment,
+  AccountingDocument, InvoiceLine, AccountingSettlement, Approval, ChequeStatus, FinanceEntry, FinanceEntryStream, FundingRepayment,
   InvestorType,
 } from './finance.entities';
 
@@ -419,7 +419,7 @@ export class AccountingService {
     const [st, paid] = await Promise.all([this.posting.accountingState(em, a), this.paidOf(em, a.id)]);
     const due = Math.max(0, round2(Number(a.amount) - paid));
     const noun = a.kind === 'Income' ? ['Collected', 'Receivable'] : ['Paid', 'Payable'];
-    const status = !st.approved ? 'Awaiting approval' : due < 0.01 ? noun[0] : due < Number(a.amount) ? 'Partially settled' : noun[1];
+    const status = a.status === 'Draft' ? 'Draft' : !st.approved ? 'Awaiting approval' : due < 0.01 ? noun[0] : due < Number(a.amount) ? 'Partially settled' : noun[1];
     return { ...a, paid, due, status, signatures: st.signed, requiredSignatures: st.required, needsApproval: st.needs, approved: st.approved };
   }
 
@@ -439,24 +439,72 @@ export class AccountingService {
     return this.db.manager.find(AccountingSettlement, { relations: ['document'], order: { date: 'DESC', refNo: 'DESC' } });
   }
 
-  /** foreign amount x rate = PKR amount; PKR documents must use rate 1 */
-  private async money(em: EntityManager, d: { foreignAmount: number; currency?: string; fxRate?: number }) {
+  /** foreign amount x rate = PKR amount; PKR documents must use rate 1. A draft may still be empty. */
+  private async money(em: EntityManager, d: { foreignAmount: number; currency?: string; fxRate?: number }, draft = false) {
     const currency = d.currency ?? 'PKR';
     const cur = await em.findOne(Currency, { where: { code: currency } });
     if (!cur) throw new BadRequestException(`Currency ${currency} is not set up.`);
     const fxRate = d.fxRate ?? Number(cur.rate);
     if (currency === 'PKR' && Math.abs(fxRate - 1) > 0.0001) throw new BadRequestException('A PKR document must use exchange rate 1.');
+    if (!(fxRate > 0)) throw new BadRequestException('The exchange rate must be positive.');
     const amount = round2(d.foreignAmount * fxRate);
-    if (!(amount > 0)) throw new BadRequestException('Amount and exchange rate must be positive.');
+    if (!(amount > 0) && !draft) throw new BadRequestException('Amount and exchange rate must be positive.');
     return { currency, fxRate, foreignAmount: round2(d.foreignAmount), amount };
+  }
+
+  private static readonly COST_KEYS = ['freight', 'insurance', 'customs', 'packaging', 'other'] as const;
+
+  /**
+   * The money of a document. An income invoice with SKU lines works its amount out: lines minus discount plus sales
+   * tax, in the invoice currency; the sales tax and the cost of the goods are kept in PKR. Without lines the typed
+   * amount is used, as before.
+   */
+  private async amounts(em: EntityManager, v: {
+    kind: string; foreignAmount?: number; currency?: string; fxRate?: number; lines?: InvoiceLineDto[]; discount?: number;
+    salesTaxPct?: number; sellerCosts?: Record<string, number>; status?: string;
+  }) {
+    const draft = v.status === 'Draft';
+    const costs = Object.fromEntries(AccountingService.COST_KEYS.map((k) => [k, round2(Math.max(0, Number(v.sellerCosts?.[k]) || 0))]));
+    if (v.kind !== 'Income' || !v.lines?.length) {
+      if (v.foreignAmount === undefined) throw new BadRequestException('Enter the amount, or add the SKU lines.');
+      return { ...(await this.money(em, { foreignAmount: v.foreignAmount, currency: v.currency, fxRate: v.fxRate }, draft)), lines: [], discount: 0, taxAmount: 0, costOfGoods: 0, sellerCosts: costs };
+    }
+    const s = await this.settings.get(em);
+    const products = await em.find(Product, { where: { id: In(v.lines.map((l) => l.productId)) } });
+    const lines: InvoiceLine[] = v.lines.map((l) => {
+      const p = products.find((x) => x.id === l.productId);
+      if (!p) throw new BadRequestException('A SKU on the invoice does not exist. Choose it again.');
+      const per = l.uom === 'Cartons' ? p.packsPerCarton || s.packsPerCarton : l.uom === 'Dozens' ? 12 : 1;
+      const packs = round2(l.qty * per);
+      return { productId: p.id, sku: p.sku, name: p.name, qty: l.qty, uom: l.uom, packs, sellPrice: l.sellPrice, unitCost: round2(l.unitCost ?? 0), lineSales: round2(packs * l.sellPrice) };
+    });
+    const subtotal = round2(lines.reduce((n, l) => n + l.lineSales, 0));
+    const discount = round2(v.discount ?? 0);
+    if (discount > subtotal) throw new BadRequestException('The discount cannot be more than the invoice lines.');
+    const net = round2(subtotal - discount);
+    const tax = round2((net * (v.salesTaxPct ?? 0)) / 100);
+    const m = await this.money(em, { foreignAmount: round2(net + tax), currency: v.currency, fxRate: v.fxRate }, draft);
+    return {
+      ...m, lines, discount, taxAmount: round2(tax * m.fxRate),
+      costOfGoods: round2(lines.reduce((n, l) => n + l.packs * l.unitCost, 0)), sellerCosts: costs,
+    };
+  }
+
+  /** the Settings lists an invoice picks from */
+  private async checkLists(em: EntityManager, d: { receivingAccount?: string; deliveryStatus?: string }) {
+    if (d.receivingAccount) await this.lookups.assertActive('BANK_ACCOUNT', d.receivingAccount, em);
+    if (d.deliveryStatus) await this.lookups.assertActive('DELIVERY_STATUS', d.deliveryStatus, em);
   }
 
   create(dto: CreateAccountingDto, opts: { refNo?: string } = {}) {
     return this.db.transaction(async (em) => {
       const s = await this.settings.get(em);
+      await this.checkLists(em, dto);
       const refNo = opts.refNo ?? (await nextRef(em, AccountingDocument, s.docPrefixes['accounting'] ?? 'ACC', 3));
-      const { foreignAmount: _f, currency: _c, fxRate: _x, ...rest } = dto;
-      const a = await em.save(em.create(AccountingDocument, { ...rest, ...(await this.money(em, dto)), refNo, dueDate: dto.dueDate ?? dto.date }));
+      const { foreignAmount: _f, currency: _c, fxRate: _x, lines: _l, discount: _d, sellerCosts: _s, ...rest } = dto;
+      const a = await em.save(em.create(AccountingDocument, {
+        ...rest, ...(await this.amounts(em, dto)), refNo, invoiceNo: dto.invoiceNo?.trim() || refNo, dueDate: dto.dueDate ?? dto.date,
+      }));
       await this.posting.syncAccountingDoc(em, a.id);
       return this.findOne(a.id, em);
     });
@@ -469,11 +517,18 @@ export class AccountingService {
       if ((await this.paidOf(em, id)) > 0) throw new BadRequestException('A document with payments is locked to keep the audit trail.');
       const st = await this.posting.accountingState(em, a);
       if (a.kind === 'Expense' && st.approved) throw new BadRequestException('Approved expense bills are locked.');
-      const { foreignAmount, currency, fxRate, ...rest } = dto;
+      if (a.status === 'Issued' && dto.status === 'Draft') throw new BadRequestException('An issued invoice cannot go back to draft.');
+      await this.checkLists(em, dto);
+      const { foreignAmount, currency, fxRate, lines, discount, sellerCosts, ...rest } = dto;
       const patch: Partial<AccountingDocument> = { ...rest };
-      if (foreignAmount !== undefined || currency !== undefined || fxRate !== undefined) {
-        Object.assign(patch, await this.money(em, {
-          foreignAmount: foreignAmount ?? Number(a.foreignAmount ?? a.amount), currency: currency ?? a.currency, fxRate,
+      if (dto.invoiceNo !== undefined) patch.invoiceNo = dto.invoiceNo.trim() || a.refNo;
+      const money = [foreignAmount, currency, fxRate, lines, discount, dto.salesTaxPct, sellerCosts, dto.status].some((x) => x !== undefined);
+      if (money) {
+        Object.assign(patch, await this.amounts(em, {
+          kind: a.kind, status: dto.status ?? a.status,
+          foreignAmount: foreignAmount ?? Number(a.foreignAmount ?? a.amount), currency: currency ?? a.currency, fxRate: fxRate ?? (currency ? undefined : Number(a.fxRate)),
+          lines: lines ?? (a.lines as InvoiceLineDto[]), discount: discount ?? Number(a.discount), salesTaxPct: dto.salesTaxPct ?? Number(a.salesTaxPct),
+          sellerCosts: sellerCosts ?? a.sellerCosts,
         }));
       }
       await em.save(em.merge(AccountingDocument, a, patch));
@@ -516,6 +571,7 @@ export class AccountingService {
       const a = await em.findOne(AccountingDocument, { where: { id } });
       if (!a) throw new NotFoundException('Document not found');
       await this.lookups.assertActive('PAY_METHOD', dto.method, em);
+      if (a.status === 'Draft') throw new BadRequestException('Issue the invoice before collecting it.');
       const st = await this.posting.accountingState(em, a);
       if (!st.approved) throw new BadRequestException('Approve the expense bill before posting a payment.');
       const due = round2(Number(a.amount) - (await this.paidOf(em, id)));

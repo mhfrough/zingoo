@@ -820,5 +820,34 @@ const vaNew = await call(T.owner, 'POST', '/auth/switch-role/Investor');
 ok('a role with no active login gets one made', vaNew.status === 201 && vaNew.json?.user?.role === 'Investor' && vaNew.json?.user?.id !== vaInv.json.user.id && vaNew.json?.user?.email?.endsWith('@zingoo.local'));
 ok('an unknown role -> 400', (await call(T.owner, 'POST', '/auth/switch-role/Pirate')).status === 400);
 
+// ── income invoice with SKU lines, tax, seller costs, draft ──
+const ivProducts = (await call(T.owner, 'GET', '/products')).json ?? [];
+const ivP = ivProducts[0];
+const ivCat = ((await call(T.owner, 'GET', '/categories?kind=INCOME')).json ?? [])[0]?.name ?? 'Other Income';
+const ivBody = (o = {}) => ({
+  kind: 'Income', date: ciDay, category: ivCat, party: 'Invoice Ina', paymentDays: 30, dueDate: ciIso(30), receivingAccount: 'Cash in Hand',
+  deliveryStatus: 'Dispatched', deliveryProof: 'GRN-7', salesOwner: 'Route A', orderRef: 'ORD-1025', region: 'Hyderabad', customerTaxId: 'NTN-1',
+  lines: [{ productId: ivP.id, qty: 10, uom: 'Dozens', sellPrice: 6.25, unitCost: 4 }], discount: 50, salesTaxPct: 18, whtPct: 4,
+  sellerCosts: { freight: 100, insurance: 0, customs: 0, packaging: 20, other: 0, junk: 99 }, ...o,
+});
+const ivJ0 = ((await call(T.finance, 'GET', '/reports/journal?period=all')).json ?? []).length;
+const ivDraft = await call(T.finance, 'POST', '/accounting-documents', ivBody({ status: 'Draft', invoiceNo: 'ZF-INV-0001' }));
+// 10 dozen = 120 packs x 6.25 = 750; less 50 = 700; tax 18% = 126; total 826
+ok('an invoice works its amount out from the SKU lines', ivDraft.status === 201 && ivDraft.json?.amount === 826 && ivDraft.json?.lines?.[0]?.packs === 120 && ivDraft.json?.taxAmount === 126);
+ok('it keeps the cost of goods and only the known seller costs', ivDraft.json?.costOfGoods === 480 && ivDraft.json?.sellerCosts?.freight === 100 && ivDraft.json?.sellerCosts?.junk === undefined);
+ok('it keeps the invoice details', ivDraft.json?.invoiceNo === 'ZF-INV-0001' && ivDraft.json?.deliveryStatus === 'Dispatched' && ivDraft.json?.receivingAccount === 'Cash in Hand');
+ok('a draft is marked Draft and posts nothing', ivDraft.json?.status === 'Draft' && ((await call(T.finance, 'GET', '/reports/journal?period=all')).json ?? []).length === ivJ0);
+ok('a draft is not a receivable', !((await call(T.finance, 'GET', '/reports/receivables')).json?.rows ?? []).some((r) => r.reference === ivDraft.json.refNo));
+ok('a draft cannot be collected -> 400', (await call(T.finance, 'POST', `/accounting-documents/${ivDraft.json.id}/settle`, { date: ciDay, amount: 10, method: 'Cash' })).status === 400);
+const ivIssued = await call(T.finance, 'PATCH', `/accounting-documents/${ivDraft.json.id}`, { status: 'Issued' });
+ok('issuing it posts', ivIssued.status === 200 && ivIssued.json?.status === 'Receivable');
+const ivJ = ((await call(T.finance, 'GET', '/reports/journal?period=all')).json ?? []).filter((l) => l.reference === ivDraft.json.refNo);
+ok('income and sales tax post separately', ivJ.some((l) => l.account === 'Sales Tax Payable' && l.credit === 126) && ivJ.some((l) => l.account === `Income · ${ivCat}` && l.credit === 700) && ivJ.filter((l) => l.account === 'Accounts Receivable').reduce((n, l) => n + l.debit, 0) === 826);
+ok('an issued invoice cannot go back to draft -> 400', (await call(T.finance, 'PATCH', `/accounting-documents/${ivDraft.json.id}`, { status: 'Draft' })).status === 400);
+ok('a discount over the lines -> 400', (await call(T.finance, 'POST', '/accounting-documents', ivBody({ discount: 5000 }))).status === 400);
+ok('a delivery status not in Settings -> 400', (await call(T.finance, 'POST', '/accounting-documents', ivBody({ deliveryStatus: 'Lost at sea' }))).status === 400);
+ok('cartons use the SKU packs per carton', (await call(T.finance, 'POST', '/accounting-documents', ivBody({ lines: [{ productId: ivP.id, qty: 1, uom: 'Cartons', sellPrice: 1 }], discount: 0, salesTaxPct: 0 }))).json?.lines?.[0]?.packs === (ivP.packsPerCarton || 24));
+ok('an old-style income document without lines still works', (await call(T.finance, 'POST', '/accounting-documents', { kind: 'Income', date: ciDay, category: ivCat, party: 'Plain Pat', foreignAmount: 500 })).json?.amount === 500);
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

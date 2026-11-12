@@ -228,6 +228,87 @@ export class AccountingDocument extends DocEntity {
 
   @Column({ type: 'text', nullable: true })
   note: string | null;
+
+  /** Draft: saved, not posted, not owed yet. Issued: posted to the ledger. */
+  @Column({ type: 'varchar', length: 10, default: 'Issued' })
+  status: 'Draft' | 'Issued';
+
+  // ───── income invoice details (the 4-step income form) ─────
+  /** the number printed on the invoice (the refNo is the internal one) */
+  @Column({ type: 'varchar', length: 60, default: '' })
+  invoiceNo: string;
+
+  @Column({ type: 'varchar', length: 60, default: '' })
+  customerTaxId: string;
+
+  @Column({ type: 'varchar', length: 80, default: '' })
+  region: string;
+
+  /** payment terms in days (Settings payment cycles); the due date follows from it */
+  @Column({ type: 'int', nullable: true })
+  paymentDays: number | null;
+
+  /** the bank or cash account the money comes into (Settings) */
+  @Column({ type: 'varchar', length: 60, default: '' })
+  receivingAccount: string;
+
+  @Column({ type: 'varchar', length: 80, default: '' })
+  orderRef: string;
+
+  /** dispatch / acceptance status (Settings list) */
+  @Column({ type: 'varchar', length: 60, default: '' })
+  deliveryStatus: string;
+
+  /** GRN, delivery challan or proof of delivery number */
+  @Column({ type: 'varchar', length: 120, default: '' })
+  deliveryProof: string;
+
+  @Column({ type: 'varchar', length: 120, default: '' })
+  salesOwner: string;
+
+  /** SKU lines: quantity in packs, dozens or cartons; sell price per pack in the invoice currency; cost per pack in PKR */
+  @Column({ type: 'jsonb', default: () => "'[]'" })
+  lines: InvoiceLine[];
+
+  /** invoice discount, in the invoice currency */
+  @Column({ type: 'decimal', precision: 14, scale: 2, default: 0, transformer: numeric })
+  discount: number;
+
+  @Column({ type: 'decimal', precision: 5, scale: 2, default: 0, transformer: numeric })
+  salesTaxPct: number;
+
+  /** expected withholding tax %: information only */
+  @Column({ type: 'decimal', precision: 5, scale: 2, default: 0, transformer: numeric })
+  whtPct: number;
+
+  /** sales tax in PKR (part of amount, posted to Sales Tax Payable) */
+  @Column({ type: 'decimal', precision: 14, scale: 2, default: 0, transformer: numeric })
+  taxAmount: number;
+
+  /** costs the seller carries, in PKR: freight, insurance, customs, packaging, other (profit estimate only) */
+  @Column({ type: 'jsonb', default: () => "'{}'" })
+  sellerCosts: Record<string, number>;
+
+  /** cost of the goods on the lines, PKR (profit estimate only) */
+  @Column({ type: 'decimal', precision: 14, scale: 2, default: 0, transformer: numeric })
+  costOfGoods: number;
+}
+
+/** One SKU line of an income invoice. */
+export interface InvoiceLine {
+  productId: string;
+  sku: string;
+  name: string;
+  qty: number;
+  uom: 'Packs' | 'Dozens' | 'Cartons';
+  /** quantity in packs */
+  packs: number;
+  /** per pack, invoice currency */
+  sellPrice: number;
+  /** per pack, PKR */
+  unitCost: number;
+  /** packs x sell price, invoice currency */
+  lineSales: number;
 }
 
 /** A (part) payment or receipt against an accounting document. */

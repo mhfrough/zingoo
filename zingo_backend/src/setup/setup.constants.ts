@@ -87,13 +87,14 @@ export const CAPITAL_SOURCE_DEFAULTS: { code: string; description: string; liabi
  * Starting entries of the simple pick-lists behind the loan and advance forms (the client prototype's choices),
  * plus the company's bank and cash accounts. Every one is editable on Settings & Data.
  */
-export const SIMPLE_LIST_DEFAULTS: Record<'LOAN_TENURE' | 'REPAY_PLAN' | 'REPAY_FREQUENCY' | 'ADVANCE_PURPOSE' | 'SETTLEMENT_METHOD' | 'BANK_ACCOUNT', string[]> = {
+export const SIMPLE_LIST_DEFAULTS: Record<'LOAN_TENURE' | 'REPAY_PLAN' | 'REPAY_FREQUENCY' | 'ADVANCE_PURPOSE' | 'SETTLEMENT_METHOD' | 'BANK_ACCOUNT' | 'DELIVERY_STATUS', string[]> = {
   LOAN_TENURE: ['Short-term (up to 12 months)', 'Long-term (over 12 months)', 'On demand'],
   REPAY_PLAN: ['Lump sum', 'Installments', 'On demand'],
   REPAY_FREQUENCY: ['Monthly', 'Quarterly', 'Half-yearly', 'Custom'],
   ADVANCE_PURPOSE: ['Operational funding', 'Procurement', 'Expense float', 'Marketing / promotion', 'Distribution', 'Other'],
   SETTLEMENT_METHOD: ['Cash repayment', 'Expense adjustment', 'Invoice settlement', 'Mixed / partial'],
   BANK_ACCOUNT: ['Zen Foods Bank Account', 'Cash in Hand', 'Manufacturing Account', 'Distribution Account'],
+  DELIVERY_STATUS: ['Not dispatched', 'Dispatched', 'Delivered', 'Accepted by customer', 'Partly returned', 'Returned'],
 };
 
 /** Starting types of investment stream. A depreciable type carries a depreciation rate. Editable on Settings & Data. */

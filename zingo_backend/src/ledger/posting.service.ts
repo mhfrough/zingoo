@@ -100,6 +100,7 @@ export class PostingService implements OnModuleInit {
   }
 
   async accountingState(em: EntityManager, a: AccountingDocument): Promise<ApprovalState> {
+    if (a.status === 'Draft') return { needs: false, signed: [], required: 0, approved: false };
     const needs = a.kind === 'Expense';
     if (!needs) return { needs, signed: [], required: 0, approved: true };
     const [s, signed] = await Promise.all([this.settings.get(em), this.signatures(em, 'ACCOUNTING', a.id)]);
@@ -261,8 +262,12 @@ export class PostingService implements OnModuleInit {
     let rows: LedgerRow[] = [];
     if (st.approved) {
       const extra = { currency: a.currency, fxRate: a.fxRate };
+      const tax = Math.min(Number(a.taxAmount) || 0, Number(a.amount));
       rows = a.kind === 'Income'
-        ? this.pair(a.date, 'Accounting', a.refNo, `Income invoice · ${a.party}`, ACC.AR, `Income · ${a.category}`, a.amount, extra)
+        ? [
+            ...this.pair(a.date, 'Accounting', a.refNo, `Income invoice · ${a.party}`, ACC.AR, `Income · ${a.category}`, round2(Number(a.amount) - tax), extra),
+            ...(tax > 0 ? this.pair(a.date, 'Accounting', a.refNo, `Sales tax on invoice · ${a.party}`, ACC.AR, 'Sales Tax Payable', tax, extra) : []),
+          ]
         : this.pair(a.date, 'Accounting', a.refNo, `Supplier bill · ${a.party}`, `Expense · ${a.category}`, ACC.AP, a.amount, extra);
     }
     await this.ledger.replace(em, 'ACC_DOC', id, rows);

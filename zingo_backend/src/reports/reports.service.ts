@@ -261,7 +261,7 @@ export class ReportsService {
         reference: o.refNo, type: 'Distributor invoice', party: o.distributor.name,
         date: o.dispatchDate ?? o.date, dueDate: o.dueDate, outstanding: o.outstanding,
       })),
-      ...docs.filter((d) => d.kind === 'Income' && d.due > 0.01).map((d) => ({
+      ...docs.filter((d) => d.kind === 'Income' && d.approved && d.due > 0.01).map((d) => ({
         reference: d.refNo, type: 'Other income', party: d.party, date: d.date, dueDate: d.dueDate ?? d.date, outstanding: d.due,
       })),
     ].sort((a, b) => String(a.dueDate).localeCompare(String(b.dueDate)));

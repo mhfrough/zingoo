@@ -10,6 +10,7 @@ import { LookupsService } from '../setup/lookups.service';
 import { ExportCostPayment, ExportReceipt, ExportShipment } from '../exports/exports.entities';
 import { AccountingDocument, AccountingSettlement, Approval, FinanceEntry, FundingRepayment } from '../finance/finance.entities';
 import { ManufacturerPayment, ProductionBatch } from '../manufacturing/manufacturing.entities';
+import { MfrRequestPayment } from '../manufacturing/payment-requests.entities';
 import { Setting } from '../setup/setup.entities';
 import { SettingsService } from '../setup/setup.service';
 import { JournalVoucher } from './ledger.entities';
@@ -23,6 +24,7 @@ export const ACC = {
   FIXED_ASSETS: 'Fixed Assets',
   AP: 'Accounts Payable',
   MFR_PAYABLE: 'Manufacturer Payable',
+  MFR_ADVANCE: 'Advance to Manufacturer',
   PARTNER_LOANS: 'Partner Loans',
   EQUITY: 'Owner Equity',
   SALES: 'Sales Revenue',
@@ -86,7 +88,7 @@ export class PostingService implements OnModuleInit {
     return Number(amount) >= Number(s.approvalThreshold) ? 2 : 1;
   }
 
-  async signatures(em: EntityManager, docType: 'FINANCE' | 'ACCOUNTING', docId: string): Promise<string[]> {
+  async signatures(em: EntityManager, docType: 'FINANCE' | 'ACCOUNTING' | 'MFR_REQUEST', docId: string): Promise<string[]> {
     const rows = await em.find(Approval, { where: { docType, docId }, order: { seat: 'ASC' } });
     return rows.map((r) => r.seat);
   }
@@ -124,6 +126,18 @@ export class PostingService implements OnModuleInit {
     if (!p) return;
     await this.ledger.replace(em, 'MFR_PAYMENT', id,
       this.pair(p.date, 'Manufacturing', p.refNo, `Factory payable settled · ${p.batch.refNo}`, ACC.MFR_PAYABLE, ACC.CASH, p.amount));
+  }
+
+  /**
+   * A payment against a manufacturer's payment request. Until the goods are delivered the money is a prepayment
+   * (an asset), not a cost: Advance to Manufacturer / Cash & Bank. Delivery later turns it against the payable.
+   */
+  async syncMfrRequestPayment(em: EntityManager, id: string) {
+    const p = await em.findOne(MfrRequestPayment, { where: { id }, relations: ['request', 'request.order', 'request.manufacturer'] });
+    if (!p) return;
+    const r = p.request;
+    await this.ledger.replace(em, 'MFR_REQ_PAY', id,
+      this.pair(p.date, 'Manufacturing', p.refNo, `${r.kind} paid · ${r.order.refNo} · ${r.manufacturer.name} (${r.refNo})`, ACC.MFR_ADVANCE, ACC.CASH, p.amount));
   }
 
   // ───────────── distribution ─────────────

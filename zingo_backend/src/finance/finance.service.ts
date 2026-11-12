@@ -29,7 +29,7 @@ export interface Signer {
 }
 
 /** A user may sign as seat A, seat B, or either when their seat is "Both". */
-function canSign(user: Signer, seat: 'A' | 'B') {
+export function canSign(user: Signer, seat: 'A' | 'B') {
   return user.seat === 'Both' || user.seat === seat;
 }
 

@@ -168,6 +168,9 @@
     </div>
   </div>
 
+  <app-requests-panel mode="company" [requests]="mfrRequests.value() ?? []" [position]="mfrPosition.value() ?? null"
+    [loading]="mfrRequests.isLoading()" [error]="mfrRequests.error() ? 'The server did not answer.' : null" (changed)="reload()" />
+
   <div class="card" data-flush>
     <div class="card__head">
       <div><h2>Investment & paid spending</h2><p>Every finance entry; posted entries are locked</p></div>

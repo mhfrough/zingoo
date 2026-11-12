@@ -8,6 +8,7 @@ import { ExportsService } from '../exports/exports.service';
 import { AccountingService, FinanceService } from '../finance/finance.service';
 import { BatchesService } from '../manufacturing/manufacturing.service';
 import { ProductionOrdersService } from '../manufacturing/production-orders.service';
+import { PaymentRequestsService } from '../manufacturing/payment-requests.service';
 import { SettingsService } from '../setup/setup.service';
 
 /** Period filter: 'all' or 'YYYY-MM'. */
@@ -41,6 +42,7 @@ export class ReportsService {
     private readonly accounting: AccountingService,
     private readonly exportsSvc: ExportsService,
     private readonly productionOrders: ProductionOrdersService,
+    private readonly paymentRequests: PaymentRequestsService,
   ) {}
 
   /** net balance (debit - credit) of one ledger account */
@@ -305,9 +307,10 @@ export class ReportsService {
   }
 
   async alerts() {
-    const [docs, entries, stock, orders, batches, mos] = await Promise.all([
+    const [docs, entries, stock, orders, batches, mos, prs] = await Promise.all([
       this.accounting.list(), this.finance.list(), this.stock(), this.orders.list(), this.batches.list(),
       this.productionOrders.list({ id: '', name: 'system', role: 'Admin' }),
+      this.paymentRequests.list({ id: '', name: 'system', role: 'Admin' }),
     ]);
     const s = await this.settings.get();
     return [
@@ -318,6 +321,15 @@ export class ReportsService {
       ...entries.filter((f) => f.needsApproval && !f.approved).map((f) => ({
         kind: 'approval', page: 'finance', title: `Approval required · ${f.category}`,
         text: `PKR ${f.amount} for ${f.party} · ${f.signatures.length}/${f.requiredSignatures} approvals`,
+      })),
+      // manufacturer payment requests: waiting for signatures, or approved and not yet paid
+      ...prs.filter((r) => r.status === 'Submitted' && !r.approved).map((r) => ({
+        kind: 'approval', page: 'manufacturing', title: `Manufacturer payment request · ${r.refNo}`,
+        text: `PKR ${r.amount} ${r.kind.toLowerCase()} for ${r.manufacturer.name} (${r.order.refNo}) · ${r.signatures.length}/${r.requiredSignatures} approvals`,
+      })),
+      ...prs.filter((r) => r.approved && r.due > 0).map((r) => ({
+        kind: 'payment', page: 'manufacturing', title: `Approved, not paid · ${r.refNo}`,
+        text: `PKR ${r.due} to ${r.manufacturer.name} · ${r.bank.bank} ${r.bank.account}`,
       })),
       ...entries.filter((f) => f.type === 'Capital Injection' && f.chequeStatus === 'Pending').map((f) => ({
         kind: 'cheque', page: 'finance', title: `Cheque awaiting clearance · ${f.party}`,

@@ -20,7 +20,7 @@ export const DEFAULT_SETTINGS = {
   profitAllocationPerPack: 0,
   paymentCycles: [15, 30, 45, 60],
   defaultPaymentCycle: 30,
-  docPrefixes: { sales: 'SO', batch: 'B', finance: 'FIN', accounting: 'ACC', export: 'EXP', production: 'MO' },
+  docPrefixes: { sales: 'SO', batch: 'B', finance: 'FIN', accounting: 'ACC', export: 'EXP', production: 'MO', mfrRequest: 'PR', mfrPayment: 'MPY' },
   agingBuckets: [30, 60, 90],
 };
 
@@ -61,7 +61,7 @@ type AccountType = 'Asset' | 'Liability' | 'Equity' | 'Revenue' | 'COGS' | 'Expe
 /** [code, name, type] - the chart of accounts the prototype starts with. */
 export const STARTER_ACCOUNTS: [string, string, AccountType][] = [
   ['1000', 'Cash & Bank', 'Asset'], ['1100', 'Accounts Receivable', 'Asset'], ['1200', 'Inventory · Estimated', 'Asset'],
-  ['1300', 'Fixed Assets', 'Asset'], ['1400', 'Prepaid Expenses', 'Asset'], ['1500', 'FX Clearing', 'Asset'],
+  ['1300', 'Fixed Assets', 'Asset'], ['1400', 'Prepaid Expenses', 'Asset'], ['1450', 'Advance to Manufacturer', 'Asset'], ['1500', 'FX Clearing', 'Asset'],
   ['2000', 'Accounts Payable', 'Liability'], ['2050', 'Production Cost Clearing', 'Liability'],
   ['2100', 'Manufacturer Payable', 'Liability'], ['2150', 'Customer Advances', 'Liability'],
   ['2160', 'Distributor Credit Payable', 'Liability'], ['2200', 'Export Costs Payable', 'Liability'],

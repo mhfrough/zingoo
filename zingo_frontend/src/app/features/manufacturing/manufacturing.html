@@ -22,6 +22,9 @@
     [manufacturers]="manufacturers.value() ?? []" [distributors]="distributors.value() ?? []" [stages]="stages()"
     [canPlace]="canWrite()" [canAnswer]="canWrite()" (changed)="reload()" />
 
+  <app-requests-panel mode="company" [requests]="mfrRequests.value() ?? []" [position]="mfrPosition.value() ?? null"
+    [loading]="mfrRequests.isLoading()" [error]="mfrRequests.error() ? 'The server did not answer.' : null" (changed)="reload()" />
+
   <div class="notice">
     <span>
       <strong>Production to inventory.</strong> Create a batch, enter the actual bundles and QC result, then release it:

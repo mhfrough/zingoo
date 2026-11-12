@@ -8,6 +8,7 @@ import { Field, Kpi, PageHeader, Select, SelectOption } from '../../ui';
 import { OpsApi } from '../ops/ops.api';
 import { FactoryApi } from './factory.api';
 import { OrdersPanel } from './orders-panel';
+import { RequestsPanel } from './requests-panel';
 
 /**
  * Manufacturer portal. A Manufacturer login sees only its own orders: it accepts or rejects each one and reports
@@ -17,7 +18,7 @@ import { OrdersPanel } from './orders-panel';
 @Component({
   selector: 'app-factory',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [FormsModule, Field, Kpi, PageHeader, Select, OrdersPanel],
+  imports: [FormsModule, Field, Kpi, PageHeader, Select, OrdersPanel, RequestsPanel],
   styles: `
     .terms {
       display: grid;
@@ -58,6 +59,8 @@ import { OrdersPanel } from './orders-panel';
         <app-kpi label="In production" [value]="num(profile.value()?.inProduction ?? 0)" icon="factory" tone="info"
           [foot]="num(profile.value()?.containersInProduction ?? 0) + ' containers'" />
         <app-kpi label="Value in production" [value]="money(profile.value()?.valueInProduction ?? 0)" icon="coins" tone="accent" foot="Accepted orders" />
+        <app-kpi label="Paid to you" [value]="money(position.value()?.totals?.paid ?? 0)" icon="coins" tone="success"
+          [foot]="'Still to pay ' + money(position.value()?.totals?.toPay ?? 0)" />
         <app-kpi label="Advance on order" [value]="(profile.value()?.manufacturer?.advancePct ?? 0) + '%'" icon="landmark" tone="success"
           [foot]="'Balance in ' + (profile.value()?.manufacturer?.paymentDays ?? 0) + ' days'" />
       </div>
@@ -81,6 +84,10 @@ import { OrdersPanel } from './orders-panel';
       <app-orders-panel mode="factory" [orders]="orders.value() ?? []" [loading]="orders.isLoading()"
         [error]="orders.error() ? 'The server did not answer.' : null" [stages]="profile.value()?.stages ?? []"
         [canAnswer]="canAnswer()" (changed)="reload()" />
+
+      <app-requests-panel mode="factory" [requests]="requests.value() ?? []" [position]="position.value() ?? null"
+        [loading]="requests.isLoading()" [error]="requests.error() ? 'The server did not answer.' : null"
+        [manufacturer]="profile.value()?.manufacturer ?? null" [canRequest]="canAnswer()" (changed)="reload()" />
     </div>
   `,
 })
@@ -104,6 +111,14 @@ export class Factory {
   protected orders = rxResource({
     params: () => ({ t: this.tick(), m: this.profile.value()?.manufacturer?.id }),
     stream: ({ params }) => (params.m ? this.api.orders(params.m) : of([])),
+  });
+  protected requests = rxResource({
+    params: () => ({ t: this.tick(), m: this.profile.value()?.manufacturer?.id }),
+    stream: ({ params }) => (params.m ? this.api.requests(params.m) : of([])),
+  });
+  protected position = rxResource({
+    params: () => ({ t: this.tick(), m: this.profile.value()?.manufacturer?.id }),
+    stream: ({ params }) => (params.m ? this.api.position(params.m) : of(null)),
   });
   private manufacturers = rxResource({
     params: () => (this.isManufacturer() ? undefined : true),

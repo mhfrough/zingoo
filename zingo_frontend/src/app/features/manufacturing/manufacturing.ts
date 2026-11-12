@@ -14,6 +14,7 @@ import { PayManufacturerForm } from './pay-manufacturer-form';
 import { ProductForm } from './product-form';
 import { FactoryApi } from '../factory/factory.api';
 import { OrdersPanel } from '../factory/orders-panel';
+import { RequestsPanel } from '../factory/requests-panel';
 import { SettingsStore } from '../../core/settings.store';
 
 const QC_TONE: Record<string, Tone> = { Passed: 'success', Pending: 'warning', Failed: 'danger' };
@@ -22,7 +23,7 @@ const STATUS_TONE: Record<string, Tone> = { Released: 'success', Planned: 'warni
 @Component({
   selector: 'app-manufacturing',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [Btn, DataTable, Kpi, PageHeader, BatchForm, ProductForm, PayManufacturerForm, OrdersPanel],
+  imports: [Btn, DataTable, Kpi, PageHeader, BatchForm, ProductForm, PayManufacturerForm, OrdersPanel, RequestsPanel],
   templateUrl: './manufacturing.html',
 })
 export class Manufacturing {
@@ -44,6 +45,8 @@ export class Manufacturing {
   private factory = inject(FactoryApi);
   private store = inject(SettingsStore);
   protected productionOrders = rxResource({ params: () => this.tick(), stream: () => this.factory.orders() });
+  protected mfrRequests = rxResource({ params: () => this.tick(), stream: () => this.factory.requests() });
+  protected mfrPosition = rxResource({ params: () => this.tick(), stream: () => this.factory.position() });
   /** the production steps a manufacturer reports (Settings list) */
   protected stages = computed(() => this.store.options('ORDER_STAGE'));
   /** containers ordered and not yet cancelled or rejected, still being made */

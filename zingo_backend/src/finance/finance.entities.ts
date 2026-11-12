@@ -389,12 +389,12 @@ export class AccountingSettlement extends DocEntity {
   note: string | null;
 }
 
-/** One signature (seat A or B) on a finance entry or accounting document. */
+/** One signature (seat A or B) on a finance entry, an accounting document or a manufacturer payment request. */
 @Entity('approvals')
 @Unique(['docType', 'docId', 'seat'])
 export class Approval extends AppEntity {
   @Column({ type: 'varchar', length: 12 })
-  docType: 'FINANCE' | 'ACCOUNTING';
+  docType: 'FINANCE' | 'ACCOUNTING' | 'MFR_REQUEST';
 
   @Column({ type: 'uuid' })
   docId: string;

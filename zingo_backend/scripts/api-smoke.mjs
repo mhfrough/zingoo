@@ -1009,5 +1009,66 @@ ok('Admin can switch to a Manufacturer login', (await call(T.owner, 'POST', '/au
 const p3Draft = p3Seeded.find((o) => o.status === 'Draft');
 ok('a draft can be deleted', (await call(T.factory, 'DELETE', `/production-orders/${p3Draft.id}`)).status === 200);
 
+// ── P4 manufacturer payment requests: advance / balance, approval, payment, position ──
+const p4Orders = (await call(T.owner, 'GET', '/production-orders')).json ?? [];
+const p4Mo = p4Orders.find((o) => o.status === 'Accepted' && o.notes === 'Illustrative order');
+ok('the sample accepted order is worth 36,720 with a 30% advance of 11,016', p4Mo?.value === 36720 && p4Mo?.advanceAmount === 11016, JSON.stringify([p4Mo?.value, p4Mo?.advanceAmount]));
+const p4Day = new Date().toISOString().slice(0, 10);
+const p4Cash0 = (await call(T.owner, 'GET', '/reports/dashboard')).json?.cash;
+const p4Adv = await call(p3Maker, 'POST', '/mfr-payment-requests', { orderId: p4Mo.id, kind: 'Advance', invoiceNo: 'BCP-77' });
+ok('the manufacturer asks for the advance: the whole advance, into its default bank',
+  p4Adv.status === 201 && p4Adv.json?.amount === 11016 && p4Adv.json?.bank?.bank === 'Meezan Bank' && /^PR-\d{3}$/.test(p4Adv.json?.refNo) && p4Adv.json?.state === 'Waiting approval (0/1)', JSON.stringify(p4Adv.json));
+ok('the advance cannot be asked for twice -> 400', (await call(p3Maker, 'POST', '/mfr-payment-requests', { orderId: p4Mo.id, kind: 'Advance' })).status === 400);
+ok('a balance over what is left -> 400', (await call(p3Maker, 'POST', '/mfr-payment-requests', { orderId: p4Mo.id, kind: 'Balance', amount: 36720 })).status === 400);
+ok('a bank account not on file -> 400', (await call(p3Maker, 'POST', '/mfr-payment-requests', { orderId: p4Mo.id, kind: 'Balance', amount: 10, bankAccount: 'NOPE' })).status === 400);
+ok('another manufacturer cannot ask on this order -> 403', (await call(p3OtherT, 'POST', '/mfr-payment-requests', { orderId: p4Mo.id, kind: 'Balance', amount: 10 })).status === 403);
+ok('another manufacturer does not see this request', ((await call(p3OtherT, 'GET', '/mfr-payment-requests')).json ?? []).length === 0);
+const p4Draft = (await call(T.factory, 'POST', '/production-orders', { date: p4Day, productId: p4Mo.productId, containers: 1 })).json;
+ok('no request on an order that is not accepted -> 400', (await call(T.factory, 'POST', '/mfr-payment-requests', { orderId: p4Draft.id, kind: 'Advance' })).status === 400);
+ok('a future date -> 400', (await call(p3Maker, 'POST', '/mfr-payment-requests', { orderId: p4Mo.id, kind: 'Balance', amount: 10, date: '2999-01-01' })).status === 400);
+ok('the company is alerted to approve it', ((await call(T.owner, 'GET', '/reports/alerts')).json ?? []).some((a) => a.kind === 'approval' && a.title.includes(p4Adv.json.refNo)));
+ok('the manufacturer cannot sign its own request -> 403', (await call(p3Maker, 'POST', `/mfr-payment-requests/${p4Adv.json.id}/sign`, { seat: 'A' })).status === 403);
+ok('it cannot be paid before approval -> 400', (await call(T.finance, 'POST', `/mfr-payment-requests/${p4Adv.json.id}/pay`, { date: p4Day, amount: 100, method: 'Bank Transfer' })).status === 400);
+ok('seat B cannot sign as A -> 403', (await call(T.partner, 'POST', `/mfr-payment-requests/${p4Adv.json.id}/sign`, { seat: 'A' })).status === 403);
+const p4Signed = await call(T.finance, 'POST', `/mfr-payment-requests/${p4Adv.json.id}/sign`, { seat: 'A' });
+ok('below the threshold one signature approves it', p4Signed.json?.approved === true && p4Signed.json?.state === 'Approved', JSON.stringify(p4Signed.json?.state));
+ok('signing an approved request -> 400', (await call(T.partner, 'POST', `/mfr-payment-requests/${p4Adv.json.id}/sign`, { seat: 'B' })).status === 400);
+ok('an approved request can no longer be withdrawn -> 400', (await call(p3Maker, 'POST', `/mfr-payment-requests/${p4Adv.json.id}/withdraw`)).status === 400);
+ok('an approved request cannot be rejected -> 400', (await call(T.finance, 'POST', `/mfr-payment-requests/${p4Adv.json.id}/reject`, { reason: 'x' })).status === 400);
+ok('the alert moves to "approved, not paid"', ((await call(T.owner, 'GET', '/reports/alerts')).json ?? []).some((a) => a.kind === 'payment' && a.title.includes(p4Adv.json.refNo)));
+ok('Manufacturing staff cannot pay -> 403', (await call(T.factory, 'POST', `/mfr-payment-requests/${p4Adv.json.id}/pay`, { date: p4Day, amount: 100, method: 'Bank Transfer' })).status === 403);
+ok('paying more than due -> 400', (await call(T.finance, 'POST', `/mfr-payment-requests/${p4Adv.json.id}/pay`, { date: p4Day, amount: 20000, method: 'Bank Transfer' })).status === 400);
+ok('a payment method not in Settings -> 400', (await call(T.finance, 'POST', `/mfr-payment-requests/${p4Adv.json.id}/pay`, { date: p4Day, amount: 100, method: 'Barter' })).status === 400);
+ok('a payment dated in the future -> 400', (await call(T.finance, 'POST', `/mfr-payment-requests/${p4Adv.json.id}/pay`, { date: '2999-01-01', amount: 100, method: 'Bank Transfer' })).status === 400);
+const p4Part = await call(T.finance, 'POST', `/mfr-payment-requests/${p4Adv.json.id}/pay`, { date: p4Day, amount: 5000, method: 'Bank Transfer', fromAccount: 'Zen Foods Bank Account', reference: 'TRX-1' });
+ok('a part payment', p4Part.json?.state === 'Part paid' && p4Part.json?.paid === 5000 && p4Part.json?.due === 6016, JSON.stringify(p4Part.json?.state));
+const p4J = ((await call(T.finance, 'GET', '/reports/journal?period=all')).json ?? []).filter((l) => l.reference === p4Part.json?.payments?.[0]?.refNo);
+ok('it posts Advance to Manufacturer / Cash & Bank (a prepayment, not a cost)',
+  p4J.some((l) => l.account === 'Advance to Manufacturer' && l.debit === 5000) && p4J.some((l) => l.account === 'Cash & Bank' && l.credit === 5000), JSON.stringify(p4J));
+ok('cash goes down by the payment', Math.abs(((await call(T.owner, 'GET', '/reports/dashboard')).json?.cash) - (p4Cash0 - 5000)) < 0.01);
+ok('pay the rest', (await call(T.finance, 'POST', `/mfr-payment-requests/${p4Adv.json.id}/pay`, { date: p4Day, amount: 6016, method: 'Cash' })).json?.state === 'Paid');
+ok('nothing more to pay -> 400', (await call(T.finance, 'POST', `/mfr-payment-requests/${p4Adv.json.id}/pay`, { date: p4Day, amount: 1, method: 'Cash' })).status === 400);
+const p4Pos = (await call(p3Maker, 'GET', '/mfr-payment-requests/position')).json;
+const p4Row = p4Pos?.rows?.find((r) => r.orderId === p4Mo.id);
+ok('the position: value, asked, approved, paid, still to pay', p4Row?.value === 36720 && p4Row?.requested === 11016 && p4Row?.approved === 11016 && p4Row?.paid === 11016 && p4Row?.advancePaid === 11016 && p4Row?.toPay === 25704, JSON.stringify(p4Row));
+// withdraw and reject give the amount back
+const p4Bal = await call(p3Maker, 'POST', '/mfr-payment-requests', { orderId: p4Mo.id, kind: 'Balance', amount: 1000 });
+ok('ask for part of the balance', p4Bal.status === 201 && p4Bal.json?.kind === 'Balance');
+ok('withdraw it before anyone signs', (await call(p3Maker, 'POST', `/mfr-payment-requests/${p4Bal.json.id}/withdraw`)).json?.status === 'Withdrawn');
+const p4Bal2 = await call(p3Maker, 'POST', '/mfr-payment-requests', { orderId: p4Mo.id, kind: 'Balance' });
+ok('a withdrawn request frees its amount: the whole balance can be asked for', p4Bal2.json?.amount === 25704, JSON.stringify(p4Bal2.json?.amount));
+ok('a rejection needs a reason -> 400', (await call(T.finance, 'POST', `/mfr-payment-requests/${p4Bal2.json.id}/reject`, { reason: '' })).status === 400);
+ok('Finance rejects it with a reason', (await call(T.finance, 'POST', `/mfr-payment-requests/${p4Bal2.json.id}/reject`, { reason: 'Goods not delivered yet' })).json?.state === 'Rejected');
+// at or above the threshold two signatures are needed
+const p4Big = (await call(T.factory, 'POST', '/production-orders', { date: p4Day, productId: p4Mo.productId, containers: 10, send: true })).json;
+await call(p3Maker, 'POST', `/production-orders/${p4Big.id}/accept`, {});
+const p4BigReq = await call(p3Maker, 'POST', '/mfr-payment-requests', { orderId: p4Big.id, kind: 'Advance' });
+ok('a large advance needs two signatures', p4BigReq.json?.amount >= 50000 && p4BigReq.json?.requiredSignatures === 2, JSON.stringify([p4BigReq.json?.amount, p4BigReq.json?.requiredSignatures]));
+await call(T.finance, 'POST', `/mfr-payment-requests/${p4BigReq.json.id}/sign`, { seat: 'A' });
+ok('one of two signatures is not enough', (await call(T.finance, 'POST', `/mfr-payment-requests/${p4BigReq.json.id}/pay`, { date: p4Day, amount: 1, method: 'Cash' })).status === 400);
+ok('the second signature approves it', (await call(T.partner, 'POST', `/mfr-payment-requests/${p4BigReq.json.id}/sign`, { seat: 'B' })).json?.approved === true);
+ok('a Distributor login cannot see payment requests -> 403', (await call(T.dist, 'GET', '/mfr-payment-requests')).status === 403);
+ok('the ledger still balances', (await call(T.owner, 'GET', '/reports/trial-balance')).json?.balanced === true);
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

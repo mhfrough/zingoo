@@ -57,7 +57,77 @@ export interface FactoryProfile {
   stages: string[];
 }
 
-/** Every call about production orders (company desk and factory portal). */
+/** the bank account a request asks to be paid at */
+export interface RequestBank {
+  bank: string;
+  title: string;
+  account: string;
+  branch?: string;
+}
+
+/** one payment against a request */
+export interface RequestPayment {
+  id: string;
+  refNo: string;
+  date: string;
+  amount: number;
+  method: string;
+  fromAccount: string | null;
+  reference: string | null;
+}
+
+/** A manufacturer's payment request (advance or balance of an order), with approval and payments worked out. */
+export interface PaymentRequest {
+  id: string;
+  refNo: string;
+  date: string;
+  orderId: string;
+  order: ProductionOrder;
+  manufacturerId: string;
+  manufacturer: Manufacturer;
+  kind: 'Advance' | 'Balance';
+  amount: number;
+  invoiceNo: string | null;
+  bank: RequestBank;
+  status: 'Submitted' | 'Rejected' | 'Withdrawn';
+  note: string | null;
+  reason: string | null;
+  raisedBy: string;
+  signatures: string[];
+  requiredSignatures: number;
+  approved: boolean;
+  payments: RequestPayment[];
+  paid: number;
+  due: number;
+  /** "Waiting approval (1/2)", "Approved", "Part paid", "Paid", "Rejected", "Withdrawn" */
+  state: string;
+}
+
+/** what the company owes a manufacturer on one order */
+export interface PositionRow {
+  orderId: string;
+  refNo: string;
+  status: string;
+  sku: string;
+  manufacturer: string;
+  value: number;
+  advancePct: number;
+  advance: number;
+  requested: number;
+  /** advance already asked for (not rejected or withdrawn) */
+  advanceRequested: number;
+  approved: number;
+  paid: number;
+  advancePaid: number;
+  toPay: number;
+}
+
+export interface Position {
+  rows: PositionRow[];
+  totals: { value: number; advance: number; requested: number; approved: number; paid: number; toPay: number };
+}
+
+/** Every call about production orders and payment requests (company desk and factory portal). */
 @Injectable({ providedIn: 'root' })
 export class FactoryApi {
   private api = inject(ApiService);
@@ -72,6 +142,14 @@ export class FactoryApi {
   accept = (id: string, body: { readyDate?: string; note?: string }) => this.api.post<ProductionOrder>(`production-orders/${id}/accept`, body);
   reject = (id: string, reason: string) => this.api.post<ProductionOrder>(`production-orders/${id}/reject`, { reason });
   stage = (id: string, body: { stage: string; note?: string }) => this.api.post<ProductionOrder>(`production-orders/${id}/stage`, body);
+
+  requests = (manufacturerId?: string) => this.api.get<PaymentRequest[]>('mfr-payment-requests', { manufacturerId });
+  position = (manufacturerId?: string) => this.api.get<Position>('mfr-payment-requests/position', { manufacturerId });
+  request = (body: unknown) => this.api.post<PaymentRequest>('mfr-payment-requests', body);
+  withdraw = (id: string) => this.api.post<PaymentRequest>(`mfr-payment-requests/${id}/withdraw`, {});
+  signRequest = (id: string, seat: 'A' | 'B') => this.api.post<PaymentRequest>(`mfr-payment-requests/${id}/sign`, { seat });
+  rejectRequest = (id: string, reason: string) => this.api.post<PaymentRequest>(`mfr-payment-requests/${id}/reject`, { reason });
+  payRequest = (id: string, body: unknown) => this.api.post<PaymentRequest>(`mfr-payment-requests/${id}/pay`, body);
 }
 
 /** the tone of a status tag */

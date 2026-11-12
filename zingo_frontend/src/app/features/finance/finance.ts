@@ -17,6 +17,8 @@ import { FinanceEntryForm } from './finance-entry-form';
 import { FundingPositionView } from './funding-position';
 import { Budget, FinanceEntry, FundingRoom } from './models';
 import { RepaymentForm } from './repayment-form';
+import { FactoryApi } from '../factory/factory.api';
+import { RequestsPanel } from '../factory/requests-panel';
 
 const today = () => new Date().toISOString().slice(0, 10);
 
@@ -53,7 +55,7 @@ const TYPE_TONE: Record<string, Tone> = {
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [
     Btn, DataTable, Kpi, PageHeader, Tag, FinanceEntryForm, BudgetForm, CostCenterForm, CapitalTargetForm, CapitalInjectionForm,
-    FundingPositionView, RepaymentForm,
+    FundingPositionView, RepaymentForm, RequestsPanel,
   ],
   templateUrl: './finance.html',
   styleUrl: './finance.css',
@@ -70,6 +72,10 @@ export class Finance {
   /** changes on every reload, so an open position drawer reads its data again */
   protected version = this.tick.asReadonly();
   protected entries = rxResource({ params: () => this.tick(), stream: () => this.fin.entries() });
+  private factory = inject(FactoryApi);
+  /** manufacturer payment requests and what is owed per order (signed and paid here) */
+  protected mfrRequests = rxResource({ params: () => this.tick(), stream: () => this.factory.requests() });
+  protected mfrPosition = rxResource({ params: () => this.tick(), stream: () => this.factory.position() });
   protected budgets = rxResource({ params: () => this.tick(), stream: () => this.fin.budgets() });
   /** the accounts a capital injection can come from: people, manufacturers and distributors */
   protected accounts = rxResource({ params: () => this.tick(), stream: () => this.fin.investorAccounts() });

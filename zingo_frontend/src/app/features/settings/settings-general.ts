@@ -5,6 +5,7 @@ import { SettingsStore } from '../../core/settings.store';
 import { errorText } from '../../shared/errors';
 import { Btn, Field, ToastService, MoneyInput } from '../../ui';
 import { SettingsApi } from './settings.api';
+import { SettingsCompanies } from './settings-companies';
 
 const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
 /** locales the number format can follow (the browser formats amounts with it) */
@@ -26,8 +27,10 @@ const numbers = (text: string) => text.split(/[,\s]+/).filter(Boolean).map(Numbe
 @Component({
   selector: 'app-settings-general',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [MoneyInput, ReactiveFormsModule, Field, Btn],
+  imports: [MoneyInput, ReactiveFormsModule, Field, Btn, SettingsCompanies],
   template: `
+    <div class="stack">
+    <app-settings-companies />
     <form [formGroup]="form" (ngSubmit)="save()" novalidate class="stack">
       <div class="card">
         <div class="card__head"><div><h2>Company</h2><p>How the business is named and how numbers are written</p></div></div>
@@ -120,6 +123,7 @@ const numbers = (text: string) => text.split(/[,\s]+/).filter(Boolean).map(Numbe
         <div class="notice"><span>View only. Only an Admin can change the settings.</span></div>
       }
     </form>
+    </div>
   `,
 })
 export class SettingsGeneral {

@@ -2,6 +2,20 @@ import { Injectable, inject } from '@angular/core';
 import { ApiService } from '../../core/api.service';
 import { Manufacturer } from '../ops/models';
 
+/** A company of the group; exactly one is primary. */
+export interface Company {
+  id: string;
+  name: string;
+  legalName: string;
+  taxNo: string;
+  address: string;
+  phone: string;
+  email: string;
+  poc: string;
+  primary: boolean;
+  active: boolean;
+}
+
 /** Every change Settings & Data makes. Reads come from SettingsStore, OpsApi and FinanceApi. */
 @Injectable({ providedIn: 'root' })
 export class SettingsApi {
@@ -26,6 +40,12 @@ export class SettingsApi {
   addCategory = (body: unknown) => this.api.post('categories', body);
   renameCategory = (id: string, name: string) => this.api.patch(`categories/${id}`, { name });
   deleteCategory = (id: string) => this.api.delete(`categories/${id}`);
+
+  // companies
+  companies = () => this.api.get<Company[]>('companies');
+  saveCompany = (id: string | null, body: unknown) =>
+    id ? this.api.patch<Company>(`companies/${id}`, body) : this.api.post<Company>('companies', body);
+  deleteCompany = (id: string) => this.api.delete(`companies/${id}`);
 
   // manufacturers
   saveManufacturer = (id: string | null, body: unknown) =>

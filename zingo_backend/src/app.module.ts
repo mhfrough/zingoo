@@ -12,6 +12,7 @@ import { ManufacturingModule } from './manufacturing/manufacturing.module';
 import { PortalModule } from './portal/portal.module';
 import { ReportsModule } from './reports/reports.module';
 import { SetupModule } from './setup/setup.module';
+import { CompaniesModule } from './companies/companies.module';
 import { UsersModule } from './users/users.module';
 
 @Module({
@@ -43,6 +44,7 @@ import { UsersModule } from './users/users.module';
 
     // setup: settings, currencies, chart of accounts, cost centers
     SetupModule,
+    CompaniesModule,
 
     // masters
     CatalogModule,

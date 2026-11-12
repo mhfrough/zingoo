@@ -43,7 +43,7 @@ const COSTS = [
         <app-field label="Container type" [required]="true">
           <select formControlName="container">
             @for (c of containers(); track c.code) {
-              <option [value]="c.code">{{ c.code }} · planning {{ c.maxCartons }} cartons</option>
+              <option [value]="c.code">{{ c.code }} · planning {{ c.maxCartons }} bundles</option>
             }
           </select>
         </app-field>
@@ -62,7 +62,7 @@ const COSTS = [
             }
           </select>
         </app-field>
-        <app-field label="Cartons in this container" [required]="true" [error]="invalid('cartons') ? 'Enter at least 1 carton' : null">
+        <app-field label="Cartons in this container" [required]="true" [error]="invalid('cartons') ? 'Enter at least 1 bundle' : null">
           <input type="number" formControlName="cartons" min="1" step="1" />
         </app-field>
         <app-field label="Invoice currency" [required]="true">

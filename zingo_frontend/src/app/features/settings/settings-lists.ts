@@ -41,7 +41,7 @@ const LINES = ['origin', 'ocean', 'insurance', 'destination', 'duty'];
 
         <div class="card" data-flush>
           <div class="card__head">
-            <div><h2>Container types</h2><p>Planning cartons per container</p></div>
+            <div><h2>Container types</h2><p>Planning bundles per container</p></div>
             @if (canEdit()) {
               <button appBtn size="sm" icon="plus" (click)="openContainer()">Add type</button>
             }
@@ -191,6 +191,8 @@ export class SettingsLists {
     { list: 'BILL_TYPE', title: 'Bill types', sub: 'The first choice on every bill / expense', add: 'Add bill type' },
     { list: 'BILL_TREATMENT', title: 'Accounting treatments', sub: 'How a bill is treated. A label for now: bills post as expenses', add: 'Add treatment' },
     { list: 'APPROVER', title: 'Approvers', sub: 'Who approves a bill. The two signatures still decide', add: 'Add approver' },
+    { list: 'FLAVOUR', title: 'Flavours', sub: 'Offered on every product / SKU', add: 'Add flavour' },
+    { list: 'PACKET_SIZE', title: 'Packet sizes', sub: 'Weight or price tier of a packet, offered on every product', add: 'Add size' },
   ];
   protected simpleRows = computed(() => {
     const out: Partial<Record<LookupList, Lookup[]>> = {};
@@ -241,7 +243,7 @@ export class SettingsLists {
 
   protected containerColumns: TableColumn<ContainerType>[] = [
     { id: 'code', label: 'Container', value: (c) => c.code },
-    { id: 'max', label: 'Planning cartons', kind: 'number', align: 'end', value: (c) => c.maxCartons },
+    { id: 'max', label: 'Planning bundles', kind: 'number', align: 'end', value: (c) => c.maxCartons },
   ];
   protected containerActions = (): RowAction[] => !this.canEdit() ? [] : [{ id: 'edit', label: 'Edit' }, { id: 'delete', label: 'Delete', tone: 'danger' }];
 

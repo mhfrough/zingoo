@@ -86,7 +86,7 @@ export class Distribution {
     { id: 'order', label: 'Order', value: (o) => o.refNo, sub: (o) => fmtDate(o.date) },
     { id: 'distributor', label: 'Distributor', value: (o) => o.distributor.name, sub: (o) => o.distributor.region },
     { id: 'product', label: 'Product', value: (o) => `${o.product.name} · Rs ${o.product.pack}`, sub: (o) => o.product.sku, priority: 2 },
-    { id: 'cartons', label: 'Cartons', kind: 'number', value: (o) => o.cartons, priority: 3 },
+    { id: 'cartons', label: 'Bundles', kind: 'number', value: (o) => o.cartons, priority: 3 },
     {
       id: 'invoice', label: 'Invoice (PKR)', kind: 'money', value: (o) => o.billed,
       sub: (o) => (o.status === 'Dispatched' ? `Due ${fmtAmount(o.outstanding)} · ${fmtDate(o.dueDate)}` : o.creditHold ? 'Over credit limit' : null),
@@ -124,7 +124,7 @@ export class Distribution {
     if (e.id === 'dispatch') {
       const ok = await this.confirm.ask({
         title: `Dispatch order ${o.refNo}?`,
-        message: `${fmtNumber(o.cartons)} cartons of ${o.product.sku} go to ${o.distributor.name}. Stock goes down and an invoice for ${fmtMoney(o.billed)} is created.`,
+        message: `${fmtNumber(o.cartons)} bundles of ${o.product.sku} go to ${o.distributor.name}. Stock goes down and an invoice for ${fmtMoney(o.billed)} is created.`,
         confirmLabel: 'Dispatch order',
       });
       if (!ok) return;

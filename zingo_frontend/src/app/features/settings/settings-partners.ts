@@ -52,7 +52,7 @@ const contractText = (p: { contract?: string | null; files?: unknown[] }) =>
     </div>
 
     <app-manufacturer-form [(open)]="manufacturerOpen" [manufacturer]="editingManufacturer()" (saved)="reload()" />
-    <app-distributor-form [(open)]="distributorOpen" [distributor]="editingDistributor()" [paymentCycles]="store.settings()?.paymentCycles ?? [15, 30, 45, 60]" (saved)="reload()" />
+    <app-distributor-form [(open)]="distributorOpen" [distributor]="editingDistributor()" [paymentCycles]="store.settings()?.paymentCycles ?? [15, 30, 45, 60]" [defaultSelloutDays]="store.settings()?.defaultSelloutDays ?? 30" (saved)="reload()" />
   `,
 })
 export class SettingsPartners {
@@ -79,7 +79,7 @@ export class SettingsPartners {
   protected distributorColumns: TableColumn<Distributor>[] = [
     { id: 'name', label: 'Distributor', value: (d) => d.name, sub: (d) => d.region },
     { id: 'contact', label: 'Contact', value: (d) => d.poc || d.contact, sub: (d) => contractText(d) ?? d.address, priority: 3 },
-    { id: 'days', label: 'Payment terms', kind: 'number', align: 'end', priority: 2, value: (d) => d.paymentDays, sub: () => 'days' },
+    { id: 'days', label: 'Payment terms', kind: 'number', align: 'end', priority: 2, value: (d) => d.paymentDays, sub: (d) => `days · sell-out ${d.selloutDays ?? 30} days` },
     { id: 'limit', label: 'Credit limit (PKR)', kind: 'money', value: (d) => d.creditLimit, sub: (d) => (d.advancePct ? `${d.advancePct}% advance` : null) },
   ];
   protected distributorActions = (): RowAction[] => !this.canDistributors() ? [] : [{ id: 'edit', label: 'Edit' }];

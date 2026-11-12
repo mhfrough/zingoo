@@ -120,7 +120,7 @@ export class Portal {
 
   protected orderColumns: TableColumn<PortalOrder>[] = [
     { id: 'ref', label: 'Order', value: (o) => o.refNo, sub: (o) => `${fmtDate(o.date)} · ${o.poRef ?? 'No PO ref'}` },
-    { id: 'sku', label: 'SKU / cartons', value: (o) => o.product.sku, sub: (o) => `${fmtNumber(o.cartons)} cartons`, priority: 2 },
+    { id: 'sku', label: 'SKU / bundles', value: (o) => o.product.sku, sub: (o) => `${fmtNumber(o.cartons)} bundles`, priority: 2 },
     { id: 'rate', label: 'Rate / pack', kind: 'mono', align: 'end', value: (o) => fmtAmount2(o.rate), sortValue: (o) => Number(o.rate), priority: 3 },
     { id: 'total', label: 'Total (PKR)', kind: 'money', value: (o) => o.billed, sub: (o) => o.voucher },
     this.statusCol('status', 'Status', (o) => o.portalStatus, (o) => (o.status === 'Dispatched' ? `Due ${fmtDate(o.dueDate)}` : 'Due at dispatch')),
@@ -133,7 +133,7 @@ export class Portal {
 
   protected requestColumns: TableColumn<PortalRequest>[] = [
     { id: 'ref', label: 'Request', value: (r) => r.refNo, sub: (r) => fmtDate(r.date) },
-    { id: 'sku', label: 'SKU / cartons', value: (r) => r.product.sku, sub: (r) => `${fmtNumber(r.cartons)} cartons`, priority: 2 },
+    { id: 'sku', label: 'SKU / bundles', value: (r) => r.product.sku, sub: (r) => `${fmtNumber(r.cartons)} bundles`, priority: 2 },
     { id: 'wanted', label: 'Wanted by', kind: 'date', value: (r) => r.requestedDate, priority: 3 },
     {
       id: 'status', label: 'Status', kind: 'tag', value: (r) => r.status, tone: (r): Tone => tone(r.status),
@@ -143,7 +143,7 @@ export class Portal {
 
   protected cargoColumns: TableColumn<PortalOrder>[] = [
     { id: 'ref', label: 'Shipment', value: (o) => o.refNo, sub: (o) => `Dispatched ${fmtDate(o.dispatchDate)}` },
-    { id: 'sku', label: 'SKU / cartons', value: (o) => o.product.sku, sub: (o) => `${fmtNumber(o.cartons)} cartons`, priority: 2 },
+    { id: 'sku', label: 'SKU / bundles', value: (o) => o.product.sku, sub: (o) => `${fmtNumber(o.cartons)} bundles`, priority: 2 },
     { id: 'value', label: 'Value (PKR)', kind: 'money', value: (o) => o.billed, priority: 3 },
     {
       id: 'receipt', label: 'Delivery receipt', kind: 'tag', value: (o) => o.receipt?.status ?? 'Awaiting receipt',
@@ -186,7 +186,7 @@ export class Portal {
       id: 'rate', label: 'Your rate / pack', kind: 'mono', align: 'end', value: (r) => fmtAmount2(r.rate), sortValue: (r) => r.rate,
       sub: (r) => (r.agreed ? `Agreed (standard ${fmtAmount2(r.standardRate)})` : 'Standard price'),
     },
-    { id: 'carton', label: 'Per carton', kind: 'money', value: (r) => r.perCarton, sub: (r) => `${r.packsPerCarton} packs`, priority: 2 },
+    { id: 'carton', label: 'Per bundle', kind: 'money', value: (r) => r.perCarton, sub: (r) => `${r.packsPerCarton} packs`, priority: 2 },
     { id: 'spread', label: 'Retail spread / pack', kind: 'mono', align: 'end', value: (r) => fmtAmount2(r.spread), sortValue: (r) => r.spread, sub: (r) => fmtPct(r.spreadPct), priority: 2 },
   ];
 
@@ -210,7 +210,7 @@ export class Portal {
   // desk
   protected deskRequestColumns: TableColumn<DeskRequest>[] = [
     { id: 'ref', label: 'Request', value: (r) => r.refNo, sub: (r) => fmtDate(r.date) },
-    { id: 'who', label: 'Distributor', value: (r) => r.distributor.name, sub: (r) => `${r.product.sku} · ${fmtNumber(r.cartons)} cartons`, priority: 2 },
+    { id: 'who', label: 'Distributor', value: (r) => r.distributor.name, sub: (r) => `${r.product.sku} · ${fmtNumber(r.cartons)} bundles`, priority: 2 },
     { id: 'value', label: 'Value (PKR)', kind: 'money', value: (r) => r.value, sub: (r) => `${fmtAmount2(r.rate)} / pack` },
     { id: 'wanted', label: 'Wanted by', kind: 'date', value: (r) => r.requestedDate, priority: 3 },
   ];
@@ -362,7 +362,7 @@ export class Portal {
     const packs = o.product.packsPerCarton;
     const rows: [string, string][] = [
       ['Order', o.refNo], ['Customer', p?.distributor.name ?? ''], ['Date', fmtDate(o.status === 'Dispatched' ? o.dispatchDate : o.date)],
-      ['Your PO', o.poRef ?? '-'], ['SKU', `${o.product.sku} · ${o.product.name}`], ['Cartons', `${o.cartons} × ${packs} packs`],
+      ['Your PO', o.poRef ?? '-'], ['SKU', `${o.product.sku} · ${o.product.name}`], ['Bundles', `${o.cartons} × ${packs} packs`],
       ['Price per pack', `PKR ${fmtAmount2(o.rate)}`], ['Total', fmtMoney(o.billed)], ['Paid', fmtMoney(o.collected)],
       ['Credit notes', fmtMoney(o.credited)], ['Open', fmtMoney(o.status === 'Dispatched' ? o.outstanding : Math.max(0, o.billed - o.collected))],
       ['Due', o.status === 'Dispatched' ? fmtDate(o.dueDate) : 'At dispatch'],

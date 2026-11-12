@@ -98,7 +98,7 @@ export class UiSpecimen {
     { id: 'date', label: 'Date', kind: 'date', value: (o) => o.date, priority: 2 },
     { id: 'distributor', label: 'Distributor', value: (o) => o.distributor },
     { id: 'product', label: 'Product', value: (o) => o.product, sub: (o) => o.sku, priority: 3 },
-    { id: 'cartons', label: 'Cartons', kind: 'number', value: (o) => o.cartons, priority: 3 },
+    { id: 'cartons', label: 'Bundles', kind: 'number', value: (o) => o.cartons, priority: 3 },
     { id: 'value', label: 'Invoice (PKR)', kind: 'money', value: (o) => o.value },
     { id: 'status', label: 'Status', kind: 'tag', value: (o) => o.status, tone: (o) => tone(o.status), priority: 2 },
   ];
@@ -190,7 +190,7 @@ export class UiSpecimen {
     { id: 'id', label: 'Order', value: (o) => o.id, sub: (o) => fmtDate(o.date) },
     { id: 'distributor', label: 'Distributor', value: (o) => o.distributor, sub: (o) => o.region },
     { id: 'product', label: 'Product', value: (o) => o.product, sub: (o) => o.sku, priority: 2 },
-    { id: 'cartons', label: 'Cartons', kind: 'number', value: (o) => o.cartons, priority: 3 },
+    { id: 'cartons', label: 'Bundles', kind: 'number', value: (o) => o.cartons, priority: 3 },
     { id: 'value', label: 'Invoice (PKR)', kind: 'money', value: (o) => o.value, sub: (o) => (o.status === 'Dispatched' ? `Due ${o.due.toLocaleString('en-PK')}` : null) },
     { id: 'status', label: 'Status', kind: 'tag', value: (o) => o.status, tone: (o) => tone(o.status), priority: 2 },
   ];

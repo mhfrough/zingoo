@@ -12,7 +12,7 @@ const today = () => new Date().toISOString().slice(0, 10);
 const CONDITIONS = ['Good', 'Damaged', 'Wet', 'Tampered', 'Other'];
 
 /**
- * Proof of delivery. Good + damaged + missing cartons must equal what was shipped; a shortage or damage becomes
+ * Proof of delivery. Good + damaged + missing bundles must equal what was shipped; a shortage or damage becomes
  * a claim that Zingo reviews. Attach a photo or PDF if you have one (under 450 KB).
  */
 @Component({
@@ -21,7 +21,7 @@ const CONDITIONS = ['Good', 'Damaged', 'Wet', 'Tampered', 'Other'];
   imports: [ReactiveFormsModule, Offcanvas, Field, Btn],
   template: `
     <app-offcanvas #oc [(open)]="open" title="Confirm delivery" size="lg" [dirty]="form.dirty"
-                   [subtitle]="order() ? order()!.refNo + ' · ' + order()!.product.sku + ' · ' + order()!.cartons + ' cartons shipped' : ''">
+                   [subtitle]="order() ? order()!.refNo + ' · ' + order()!.product.sku + ' · ' + order()!.cartons + ' bundles shipped' : ''">
       @if (error()) {
         <div class="notice" data-tone="danger" role="alert">{{ error() }}</div>
       }
@@ -33,9 +33,9 @@ const CONDITIONS = ['Good', 'Damaged', 'Wet', 'Tampered', 'Other'];
       </div>
       <form [id]="formId" [formGroup]="form" (ngSubmit)="submit()" class="form-grid" novalidate>
         <app-field label="Date received" [required]="true"><input type="date" formControlName="date" /></app-field>
-        <app-field label="Good cartons" [required]="true"><input type="number" formControlName="goodCartons" min="0" step="1" /></app-field>
-        <app-field label="Damaged cartons"><input type="number" formControlName="damagedCartons" min="0" step="1" /></app-field>
-        <app-field label="Missing cartons"><input type="number" formControlName="missingCartons" min="0" step="1" /></app-field>
+        <app-field label="Good bundles" [required]="true"><input type="number" formControlName="goodCartons" min="0" step="1" /></app-field>
+        <app-field label="Damaged bundles"><input type="number" formControlName="damagedCartons" min="0" step="1" /></app-field>
+        <app-field label="Missing bundles"><input type="number" formControlName="missingCartons" min="0" step="1" /></app-field>
         <app-field label="Condition">
           <select formControlName="condition">
             @for (c of conditions; track c) {

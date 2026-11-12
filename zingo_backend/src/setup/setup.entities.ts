@@ -24,8 +24,17 @@ export class Setting {
   @Column({ type: 'decimal', precision: 16, scale: 2, transformer: numeric })
   capitalTarget: number;
 
+  /** packets per bundle, the default for a new SKU */
   @Column({ type: 'int' })
   packsPerCarton: number;
+
+  /** bundles per container (the batch given to a distributor), the default for a new SKU */
+  @Column({ type: 'int', default: 10 })
+  bundlesPerContainer: number;
+
+  /** days a distributor has to sell a container out, the default for a new distributor */
+  @Column({ type: 'int', default: 30 })
+  defaultSelloutDays: number;
 
   /** spend at or above this needs two signatures */
   @Column({ type: 'decimal', precision: 16, scale: 2, transformer: numeric })

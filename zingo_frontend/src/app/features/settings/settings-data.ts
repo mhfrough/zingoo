@@ -14,9 +14,9 @@ interface Source {
 }
 
 const SOURCES: Source[] = [
-  { title: 'PRODUCTS', path: 'products', row: (r) => ({ sku: r.sku, name: r.name, pack: r.pack, packs_per_carton: r.packsPerCarton, mrp: r.mrp, distributor_rate: r.rate, factory_rate: r.manufacturerRate, packaging: r.packagingRate, printing: r.printingRate, inbound: r.inboundRate, active: r.active }) },
+  { title: 'PRODUCTS', path: 'products', row: (r) => ({ sku: r.sku, name: r.name, pack: r.pack, flavour: r.flavour, packet_size: r.packetSize, packets_per_bundle: r.packsPerCarton, bundles_per_container: r.bundlesPerContainer, manufacturer: r.manufacturer?.name, distributor: r.distributor?.name, sellout_days: r.selloutDays, mrp: r.mrp, distributor_rate: r.rate, factory_rate: r.manufacturerRate, packaging: r.packagingRate, printing: r.printingRate, inbound: r.inboundRate, active: r.active }) },
   { title: 'MANUFACTURERS', path: 'manufacturers', row: (r) => ({ name: r.name, payment_days: r.paymentDays, currency: r.currency, contact: r.contact }) },
-  { title: 'DISTRIBUTORS', path: 'distributors', row: (r) => ({ name: r.name, region: r.region, contact: r.contact, payment_days: r.paymentDays, credit_limit: r.creditLimit, advance_pct: r.advancePct }) },
+  { title: 'DISTRIBUTORS', path: 'distributors', row: (r) => ({ name: r.name, region: r.region, contact: r.contact, payment_days: r.paymentDays, credit_limit: r.creditLimit, advance_pct: r.advancePct, sellout_days: r.selloutDays }) },
   { title: 'PRODUCTION BATCHES', path: 'batches', row: (r) => ({ reference: r.refNo, date: r.date, status: r.status, sku: r.product?.sku, manufacturer: r.manufacturer?.name, target_cartons: r.targetCartons, produced_cartons: r.producedCartons, qc: r.qc, cost: r.cost }) },
   { title: 'SALES ORDERS', path: 'orders', row: (r) => ({ reference: r.refNo, date: r.date, status: r.status, distributor: r.distributor?.name, sku: r.product?.sku, cartons: r.cartons, rate: r.rate, billed: r.billed, collected: r.collected, outstanding: r.outstanding }) },
   { title: 'COLLECTIONS', path: 'collections', row: (r) => ({ reference: r.refNo, date: r.date, order: r.order?.refNo, amount: r.amount, method: r.method }) },

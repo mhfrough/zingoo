@@ -28,7 +28,7 @@ export const NAV: NavItem[] = [
   },
   {
     path: 'manufacturing', label: 'Manufacturing', icon: 'factory', group: 'Operations', phase: 3,
-    description: 'Record batches from the production partner, pass quality control and release cartons into stock.',
+    description: 'Record batches from the production partner, pass quality control and release bundles into stock.',
     forms: ['Product / SKU', 'Production batch', 'Pay manufacturer'],
     tables: ['Live SKU stock', 'Production batches', 'Manufacturer payables'],
   },

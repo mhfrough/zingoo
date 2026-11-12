@@ -37,6 +37,7 @@ export class Manufacturing {
   protected batches = rxResource({ params: () => this.tick(), stream: () => this.api.batches() });
   protected products = rxResource({ params: () => this.tick(), stream: () => this.api.products() });
   protected manufacturers = rxResource({ params: () => this.tick(), stream: () => this.api.manufacturers() });
+  protected distributors = rxResource({ params: () => this.tick(), stream: () => this.api.distributors() });
 
   protected canWrite = computed(() => this.auth.can('manufacturing'));
   protected loading = computed(() => this.stock.isLoading() || this.batches.isLoading());
@@ -78,9 +79,32 @@ export class Manufacturing {
   }
 
   // ───────────── tables ─────────────
+  /** the catalogue: each SKU with its packaging chain and the partners it is assigned to */
+  protected productColumns: TableColumn<Product>[] = [
+    { id: 'sku', label: 'Product', value: (p) => p.sku, sub: (p) => [p.name, p.flavour !== p.name ? p.flavour : null, p.packetSize].filter(Boolean).join(' · ') },
+    {
+      id: 'packaging', label: 'Packets per container', kind: 'number', value: (p) => p.packetsPerContainer ?? p.packsPerCarton * (p.bundlesPerContainer || 1),
+      sub: (p) => `${fmtNumber(p.packsPerCarton)} per bundle × ${fmtNumber(p.bundlesPerContainer)} bundles`, priority: 2,
+    },
+    { id: 'manufacturer', label: 'Manufacturer', value: (p) => p.manufacturer?.name ?? 'Not assigned', priority: 2 },
+    {
+      id: 'distributor', label: 'Distributor', value: (p) => p.distributor?.name ?? 'Not assigned',
+      sub: (p) => (p.effectiveSelloutDays ? `Sell out in ${p.effectiveSelloutDays} days` : null),
+    },
+    { id: 'rate', label: 'Distributor price', kind: 'money', value: (p) => p.rate, sub: (p) => `MRP ${fmtAmount(p.mrp)}`, priority: 3 },
+    { id: 'status', label: 'Status', kind: 'tag', value: (p) => (p.active ? 'Active' : 'Inactive'), tone: (p) => (p.active ? 'success' : 'neutral'), priority: 3 },
+  ];
+  protected productActions = (): RowAction[] => (this.canWrite() ? [{ id: 'edit', label: 'Edit product' }] : []);
+  /** SKUs still missing a manufacturer or a distributor */
+  protected unassigned = computed(() => (this.products.value() ?? []).filter((p) => p.active && (!p.manufacturerId || !p.distributorId)).length);
+
+  protected onProductAction(e: RowActionEvent<Product>) {
+    if (e.id === 'edit') this.openProduct(e.row);
+  }
+
   protected stockColumns: TableColumn<StockRow>[] = [
     { id: 'sku', label: 'SKU', value: (s) => s.sku, sub: (s) => `${s.name} · Rs ${s.pack}` },
-    { id: 'cartons', label: 'Available cartons', kind: 'number', value: (s) => s.cartons, sub: (s) => `${fmtNumber(s.packs)} packs` },
+    { id: 'cartons', label: 'Available bundles', kind: 'number', value: (s) => s.cartons, sub: (s) => `${fmtNumber(s.packs)} packs` },
     {
       id: 'status', label: 'Stock status', kind: 'tag', value: (s) => (!s.active ? 'Inactive' : s.low ? 'Replenish' : 'Available'),
       tone: (s) => (!s.active ? 'neutral' : s.low ? 'warning' : 'success'),
@@ -147,7 +171,7 @@ export class Manufacturing {
     if (e.id === 'release') {
       const ok = await this.confirm.ask({
         title: `Release batch ${b.refNo}?`,
-        message: `${fmtNumber(b.producedCartons)} cartons of ${b.product.sku} go into warehouse stock, and ${b.manufacturer.name} is owed ${fmtMoney(b.cost)}. A released batch can no longer be edited.`,
+        message: `${fmtNumber(b.producedCartons)} bundles of ${b.product.sku} go into warehouse stock, and ${b.manufacturer.name} is owed ${fmtMoney(b.cost)}. A released batch can no longer be edited.`,
         confirmLabel: 'Release batch',
       });
       if (!ok) return;

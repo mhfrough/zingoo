@@ -8,6 +8,8 @@ export class UpdateSettingsDto {
   @IsOptional() @IsString() numberFormat?: string;
   @IsOptional() @IsNumber() @Min(0) capitalTarget?: number;
   @IsOptional() @IsInt() @Min(1) packsPerCarton?: number;
+  @IsOptional() @IsInt() @Min(1) bundlesPerContainer?: number;
+  @IsOptional() @IsInt() @Min(1) @Max(365) defaultSelloutDays?: number;
   @IsOptional() @IsNumber() @Min(0) approvalThreshold?: number;
   @IsOptional() @IsString() signatoryA?: string;
   @IsOptional() @IsString() signatoryB?: string;

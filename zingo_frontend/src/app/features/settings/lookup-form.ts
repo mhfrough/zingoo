@@ -31,6 +31,8 @@ const LIST_TEXT: Record<LookupList, { word: string; use: string; code: string; m
   BILL_TREATMENT: { word: 'accounting treatment', use: 'How a bill is treated (expense, inventory, asset, prepaid). A label for now.', code: 'Name', meaning: 'Meaning' },
   APPROVER: { word: 'approver', use: 'Offered as "Approved by" on every bill. The two signatures still decide.', code: 'Name', meaning: 'Role or contact' },
   DELIVERY_STATUS: { word: 'delivery status', use: 'Offered on every income invoice: where the goods are (dispatched, delivered, accepted ...).', code: 'Name', meaning: 'Meaning' },
+  FLAVOUR: { word: 'flavour', use: 'Offered on every product / SKU.', code: 'Name', meaning: 'Meaning' },
+  PACKET_SIZE: { word: 'packet size', use: 'Offered on every product / SKU (weight or price tier).', code: 'Name', meaning: 'Meaning' },
   BANK_ACCOUNT: { word: 'bank or cash account', use: 'The account that took or paid the money. It is recorded on the entry; the books keep one Cash & Bank account.', code: 'Name', meaning: 'Details' },
 };
 

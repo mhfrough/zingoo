@@ -7,6 +7,8 @@ export const DEFAULT_SETTINGS = {
   numberFormat: 'en-PK',
   capitalTarget: 8000000,
   packsPerCarton: 432,
+  bundlesPerContainer: 10,
+  defaultSelloutDays: 30,
   approvalThreshold: 50000,
   signatoryA: 'Signatory A (Arittek)',
   signatoryB: 'Signatory B (BCP)',
@@ -87,7 +89,7 @@ export const CAPITAL_SOURCE_DEFAULTS: { code: string; description: string; liabi
  * Starting entries of the simple pick-lists behind the loan and advance forms (the client prototype's choices),
  * plus the company's bank and cash accounts. Every one is editable on Settings & Data.
  */
-export const SIMPLE_LIST_DEFAULTS: Record<'LOAN_TENURE' | 'REPAY_PLAN' | 'REPAY_FREQUENCY' | 'ADVANCE_PURPOSE' | 'SETTLEMENT_METHOD' | 'BANK_ACCOUNT' | 'DELIVERY_STATUS' | 'BILL_TYPE' | 'BILL_TREATMENT' | 'APPROVER', string[]> = {
+export const SIMPLE_LIST_DEFAULTS: Record<'LOAN_TENURE' | 'REPAY_PLAN' | 'REPAY_FREQUENCY' | 'ADVANCE_PURPOSE' | 'SETTLEMENT_METHOD' | 'BANK_ACCOUNT' | 'DELIVERY_STATUS' | 'BILL_TYPE' | 'BILL_TREATMENT' | 'APPROVER' | 'FLAVOUR' | 'PACKET_SIZE', string[]> = {
   LOAN_TENURE: ['Short-term (up to 12 months)', 'Long-term (over 12 months)', 'On demand'],
   REPAY_PLAN: ['Lump sum', 'Installments', 'On demand'],
   REPAY_FREQUENCY: ['Monthly', 'Quarterly', 'Half-yearly', 'Custom'],
@@ -98,6 +100,9 @@ export const SIMPLE_LIST_DEFAULTS: Record<'LOAN_TENURE' | 'REPAY_PLAN' | 'REPAY_
   BILL_TYPE: ['Supplier / Manufacturing', 'Internal Expense', 'Marketing Expense', 'Operating Expense', 'Distribution Expense', 'Export Expense', 'Asset Purchase', 'Prepaid Expense'],
   BILL_TREATMENT: ['Operating expense', 'Inventory / stock', 'Fixed asset', 'Prepaid expense'],
   APPROVER: ['Zeeshan', 'Ahsan', 'Mudassir', 'Mansoor', 'Joint Approval'],
+  // the client's sample flavours (prototype SKUs) and packet weights; illustrative, editable
+  FLAVOUR: ['Masala Masti', 'Ketchup Tango'],
+  PACKET_SIZE: ['Rs 10 pack', 'Rs 20 pack'],
 };
 
 /** Starting types of investment stream. A depreciable type carries a depreciation rate. Editable on Settings & Data. */

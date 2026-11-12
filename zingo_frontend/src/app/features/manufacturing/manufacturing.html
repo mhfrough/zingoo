@@ -1,5 +1,5 @@
 <app-page-header eyebrow="Zingoo · Zen Foods" title="Factory & production control"
-  description="Record batches from the production partner, pass quality control and release finished cartons into stock.">
+  description="Record batches from the production partner, pass quality control and release finished bundles into stock.">
   @if (canWrite()) {
     <ng-container pageActions>
       <button appBtn variant="primary" icon="plus" (click)="openBatch()">New production batch</button>
@@ -10,7 +10,7 @@
 
 <div class="stack">
   <div class="grid-auto">
-    <app-kpi label="Finished cartons produced" [value]="fmtNumber(producedCartons())" icon="package" tone="accent" foot="Released production only" />
+    <app-kpi label="Finished bundles produced" [value]="fmtNumber(producedCartons())" icon="package" tone="accent" foot="Released production only" />
     <app-kpi label="Warehouse available" [value]="fmtNumber(stockCartons())" icon="boxes" tone="success" foot="After distributor dispatches" />
     <app-kpi label="Batches in planning" [value]="fmtNumber(plannedCount())" icon="clock" tone="warning" foot="QC and release required" />
     <app-kpi label="Pack equivalent" [value]="fmtNumber(stockPacks())" icon="coins" tone="info" foot="Finished packs in stock" />
@@ -18,9 +18,26 @@
 
   <div class="notice">
     <span>
-      <strong>Production to inventory.</strong> Create a batch, enter the actual cartons and QC result, then release it:
+      <strong>Production to inventory.</strong> Create a batch, enter the actual bundles and QC result, then release it:
       stock goes up and the manufacturer payable is accrued in the ledger. Dispatching to a distributor brings stock down again.
     </span>
+  </div>
+
+  <div class="card" data-flush>
+    <div class="card__head">
+      <div>
+        <h2>Products</h2>
+        <p>Packet → bundle → container, and the manufacturer and distributor each SKU is assigned to
+          @if (unassigned()) { · <strong>{{ unassigned() }} not fully assigned</strong> }
+        </p>
+      </div>
+    </div>
+    <div class="card__body">
+      <app-data-table [columns]="productColumns" [rows]="products.value() ?? []" [actions]="productActions"
+        [loading]="products.isLoading()" [error]="products.error() ? 'The server did not answer.' : null"
+        searchPlaceholder="Search products" emptyTitle="No products yet" emptyText="Add the first SKU to start."
+        (retry)="reload()" (action)="onProductAction($event)" />
+    </div>
   </div>
 
   <div class="card" data-flush>
@@ -60,5 +77,6 @@
 
 <app-batch-form [(open)]="batchOpen" [batch]="editingBatch()" [products]="products.value() ?? []"
   [manufacturers]="manufacturers.value() ?? []" (saved)="reload()" />
-<app-product-form [(open)]="productOpen" [product]="editingProduct()" (saved)="reload()" />
+<app-product-form [(open)]="productOpen" [product]="editingProduct()" [manufacturers]="manufacturers.value() ?? []"
+  [distributors]="distributors.value() ?? []" (saved)="reload()" />
 <app-pay-manufacturer-form [(open)]="payOpen" [batch]="payingBatch()" (saved)="reload()" />

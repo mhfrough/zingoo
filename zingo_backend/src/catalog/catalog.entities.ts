@@ -2,7 +2,6 @@ import { Column, Entity, JoinColumn, ManyToOne, Unique } from 'typeorm';
 import { AppEntity } from '../common/app.entity';
 import { numeric } from '../common/numeric.transformer';
 
-/** A SKU: one flavour in one pack tier (Rs 10 or Rs 20). */
 /** an uploaded file kept on a manufacturer or a distributor */
 export interface PartnerFile {
   id: string;
@@ -11,6 +10,11 @@ export interface PartnerFile {
   size: number;
 }
 
+/**
+ * A SKU: one flavour in one packet size and price tier.
+ * Packaging: snack packet -> bundle (packsPerCarton packets) -> container (bundlesPerContainer bundles).
+ * A container is the batch the business hands to a distributor. Each SKU is assigned one manufacturer and one distributor.
+ */
 @Entity('products')
 export class Product extends AppEntity {
   @Column({ type: 'varchar', length: 40, unique: true })
@@ -44,8 +48,45 @@ export class Product extends AppEntity {
   @Column({ type: 'decimal', precision: 12, scale: 4, default: 0, transformer: numeric })
   inboundRate: number;
 
+  /** packets in one bundle (the column keeps its first name: a bundle was called a carton) */
   @Column({ type: 'int' })
   packsPerCarton: number;
+
+  /** bundles in one container (a container is the batch given to a distributor) */
+  @Column({ type: 'int', default: 10 })
+  bundlesPerContainer: number;
+
+  /** flavour, from the Settings list FLAVOUR */
+  @Column({ type: 'varchar', length: 80, nullable: true })
+  flavour: string | null;
+
+  /** packet size (weight), from the Settings list PACKET_SIZE */
+  @Column({ type: 'varchar', length: 40, nullable: true })
+  packetSize: string | null;
+
+  /** what the product is, in words */
+  @Column({ type: 'text', nullable: true })
+  description: string | null;
+
+  /** the manufacturer that makes this SKU */
+  @ManyToOne(() => Manufacturer, { nullable: true })
+  @JoinColumn({ name: 'manufacturerId' })
+  manufacturer: Manufacturer | null;
+
+  @Column({ type: 'uuid', nullable: true })
+  manufacturerId: string | null;
+
+  /** the distributor that sells this SKU */
+  @ManyToOne(() => Distributor, { nullable: true })
+  @JoinColumn({ name: 'distributorId' })
+  distributor: Distributor | null;
+
+  @Column({ type: 'uuid', nullable: true })
+  distributorId: string | null;
+
+  /** days the distributor has to sell a container out; empty = the distributor's own default */
+  @Column({ type: 'int', nullable: true })
+  selloutDays: number | null;
 
   @Column({ type: 'varchar', length: 3, default: 'PKR' })
   currency: string;
@@ -109,6 +150,10 @@ export class Distributor extends AppEntity {
 
   @Column({ type: 'decimal', precision: 16, scale: 2, default: 0, transformer: numeric })
   creditLimit: number;
+
+  /** days a distributor has to sell a container out, unless the product says otherwise */
+  @Column({ type: 'int', default: 30 })
+  selloutDays: number;
 
   /** advance the distributor is asked to pay, % of the order */
   @Column({ type: 'decimal', precision: 5, scale: 2, default: 0, transformer: numeric })

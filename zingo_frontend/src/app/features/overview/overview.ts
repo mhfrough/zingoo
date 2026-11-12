@@ -39,7 +39,7 @@ export class Overview {
   protected orderColumns: TableColumn<LatestOrder>[] = [
     { id: 'order', label: 'Order', value: (o) => o.refNo, sub: (o) => fmtDate(o.date) },
     { id: 'distributor', label: 'Distributor', value: (o) => o.distributor, sub: (o) => o.sku },
-    { id: 'cartons', label: 'Cartons', kind: 'number', value: (o) => o.cartons, priority: 3 },
+    { id: 'cartons', label: 'Bundles', kind: 'number', value: (o) => o.cartons, priority: 3 },
     { id: 'value', label: 'Value (PKR)', kind: 'money', value: (o) => o.value },
     {
       id: 'status', label: 'Status', kind: 'tag', value: (o) => o.status, priority: 2,

@@ -85,7 +85,7 @@ export class Exports {
     { id: 'ref', label: 'Container', value: (e) => e.refNo, sub: (e) => (e.shipDate ? `Shipped ${fmtDate(e.shipDate)}` : `Quoted ${fmtDate(e.date)}`) },
     { id: 'buyer', label: 'Buyer / destination', value: (e) => e.buyer, sub: (e) => (e.port ? `${e.country} · ${e.port}` : e.country), priority: 2 },
     { id: 'term', label: 'Container / term', value: (e) => e.container, sub: (e) => e.incoterm, priority: 3 },
-    { id: 'sku', label: 'SKU / cartons', value: (e) => e.product.sku, sub: (e) => `${fmtNumber(e.cartons)} cartons`, priority: 3 },
+    { id: 'sku', label: 'SKU / bundles', value: (e) => e.product.sku, sub: (e) => `${fmtNumber(e.cartons)} bundles`, priority: 3 },
     {
       id: 'invoice', label: 'Invoice value', kind: 'mono', align: 'end', value: (e) => `${e.currency} ${fmtAmount2(e.revenueForeign)}`,
       sortValue: (e) => e.revenuePKR, sub: (e) => fmtMoney(e.revenuePKR),
@@ -139,7 +139,7 @@ export class Exports {
 
   protected containerColumns: TableColumn<ContainerType>[] = [
     { id: 'code', label: 'Container', value: (c) => c.code },
-    { id: 'max', label: 'Planning cartons', kind: 'number', align: 'end', value: (c) => c.maxCartons },
+    { id: 'max', label: 'Planning bundles', kind: 'number', align: 'end', value: (c) => c.maxCartons },
   ];
 
   // ───────────── forms and actions ─────────────
@@ -167,7 +167,7 @@ export class Exports {
     if (ev.id === 'ship') {
       const ok = await this.confirm.ask({
         title: `Ship ${e.refNo} to ${e.buyer}?`,
-        message: `${fmtNumber(e.cartons)} cartons of ${e.product.sku} leave the warehouse. The invoice (${e.currency} ${fmtAmount2(e.revenueForeign)}), the goods cost and the seller's costs are posted, and the container is locked.`,
+        message: `${fmtNumber(e.cartons)} bundles of ${e.product.sku} leave the warehouse. The invoice (${e.currency} ${fmtAmount2(e.revenueForeign)}), the goods cost and the seller's costs are posted, and the container is locked.`,
         confirmLabel: 'Ship container',
       });
       if (!ok) return;

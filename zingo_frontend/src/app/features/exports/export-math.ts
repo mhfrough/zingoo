@@ -40,7 +40,7 @@ export function sellerCosts(x: QuoteInputs, flags: SellerFlags): ShipmentCosts {
   return { origin, ocean, insurance, destination, fees: n(x.bankFees), extras: n(x.otherCosts), seller: rnd(seller) };
 }
 
-/** A live estimate shown while the quote form is open. `unitCost` is the goods cost per carton in PKR. */
+/** A live estimate shown while the quote form is open. `unitCost` is the goods cost per bundle in PKR. */
 export function quoteEstimate(x: QuoteInputs, packsPerCarton: number, unitCost: number, flags: SellerFlags) {
   const revenueForeign = rnd(n(x.cartons) * packsPerCarton * n(x.rate));
   const revenuePKR = rnd(revenueForeign * n(x.fxRate));

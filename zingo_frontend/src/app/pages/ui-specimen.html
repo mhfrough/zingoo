@@ -174,7 +174,7 @@
         <app-field label="Distributor" [required]="true" hint="Grouped options">
           <app-select formControlName="distributor" [options]="distributors" placeholder="Choose a distributor" />
         </app-field>
-        <app-field label="Cartons" hint="Hold the buttons to repeat">
+        <app-field label="Bundles" hint="Hold the buttons to repeat">
           <app-number-input formControlName="cartons" [min]="1" [max]="500" />
         </app-field>
         <app-field label="Method (floating)" [float]="true">
@@ -394,7 +394,7 @@
 <div class="grid-auto" style="--grid-min: 14rem; margin-block-start: var(--space-4)">
   <app-skeleton-kpi />
   <app-kpi label="Cash available" [value]="tableLoading() ? '' : 'PKR 1,897,000'" icon="wallet" tone="success" [loading]="tableLoading()" foot="Counts up from 0 when it loads" />
-  <app-kpi label="Warehouse stock" [value]="tableLoading() ? '' : '65 cartons'" icon="boxes" tone="info" [loading]="tableLoading()" foot="28,080 finished packs" />
+  <app-kpi label="Warehouse stock" [value]="tableLoading() ? '' : '65 bundles'" icon="boxes" tone="info" [loading]="tableLoading()" foot="28,080 finished packs" />
   <app-kpi label="Net profit after expenses" [value]="tableLoading() ? '' : 'PKR -20,942'" icon="trending-up" tone="danger" [loading]="tableLoading()" foot="Revenue - COGS - booked expenses" />
 </div>
 <div class="card" style="margin-block-start: var(--space-4)" data-flush>
@@ -438,7 +438,7 @@
 <h2 class="section-title">KPI cards</h2>
 <div class="grid-auto" style="--grid-min: 14rem">
   <app-kpi label="Cash available" value="PKR 1,897,000" icon="wallet" tone="success" foot="Capital + receipts - cash disbursements" />
-  <app-kpi label="Warehouse stock" value="65 cartons" icon="boxes" tone="info" foot="28,080 finished packs" />
+  <app-kpi label="Warehouse stock" value="65 bundles" icon="boxes" tone="info" foot="28,080 finished packs" />
   <app-kpi label="Net profit after expenses" value="PKR -20,942" icon="trending-up" tone="danger" foot="Revenue - COGS - booked expenses" />
   <app-kpi label="Open receivables" value="PKR 55,600" icon="clock" tone="warning" foot="2 pending spending approvals" />
 </div>

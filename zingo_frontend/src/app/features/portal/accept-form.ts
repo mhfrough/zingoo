@@ -13,7 +13,7 @@ import { DeskRequest } from './portal.models';
   imports: [MoneyInput, ReactiveFormsModule, Offcanvas, Field, Btn],
   template: `
     <app-offcanvas #oc [(open)]="open" title="Accept request" size="lg" [dirty]="form.dirty"
-                   [subtitle]="req() ? req()!.distributor.name + ' · ' + req()!.product.sku + ' · ' + req()!.cartons + ' cartons · ' + money(req()!.value) : ''">
+                   [subtitle]="req() ? req()!.distributor.name + ' · ' + req()!.product.sku + ' · ' + req()!.cartons + ' bundles · ' + money(req()!.value) : ''">
       @if (error()) {
         <div class="notice" data-tone="danger" role="alert">{{ error() }}</div>
       }

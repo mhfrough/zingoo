@@ -879,5 +879,35 @@ ok('once approved: expense 11,600, payable 11,100, withholding payable 500',
   && blJ.some((l) => l.account === 'Accounts Payable' && l.credit === 11100) && blJ.some((l) => l.account === 'Withholding Tax Payable' && l.credit === 500));
 ok('then it can be paid', (await call(T.finance, 'POST', `/accounting-documents/${bl.json.id}/settle`, { date: ciDay, amount: 11100, method: 'Bank Transfer' })).status === 201);
 
+// ── P1 products: packet -> bundle -> container, assigned manufacturer and distributor, sell-out days ──
+const p1Prods = (await call(T.owner, 'GET', '/products')).json ?? [];
+const p1Mas = p1Prods.find((p) => p.sku === 'Z10-MAS');
+const p1Ket = p1Prods.find((p) => p.sku === 'Z10-KET');
+ok('a product knows its flavour, packet size and packets per container', p1Mas?.flavour === 'Masala Masti' && p1Mas?.packetSize === 'Rs 10 pack' && p1Mas?.packetsPerContainer === 432 * 10, JSON.stringify(p1Mas));
+ok('every sample SKU has a manufacturer and a distributor', p1Prods.filter((p) => p.sku.startsWith('Z')).every((p) => p.manufacturer?.name && p.distributor?.name));
+ok('sell-out days fall back to the distributor (South Route: 40)', p1Ket?.selloutDays === null && p1Ket?.effectiveSelloutDays === 40, JSON.stringify(p1Ket));
+const p1Lk = (await call(T.owner, 'GET', '/lookups')).json ?? [];
+ok('flavours and packet sizes are Settings lists', p1Lk.some((l) => l.list === 'FLAVOUR') && p1Lk.some((l) => l.list === 'PACKET_SIZE'));
+const p1Set = (await call(T.owner, 'GET', '/settings')).json;
+ok('Settings hold bundles per container and sell-out days defaults', p1Set?.bundlesPerContainer === 10 && p1Set?.defaultSelloutDays === 30, JSON.stringify(p1Set));
+const p1Body = (o = {}) => ({ sku: `P1-${Date.now() % 100000}`, name: 'Chilli Twist', pack: 10, mrp: 10, rate: 6, packsPerCarton: 20, bundlesPerContainer: 10, ...o });
+ok('a flavour not in Settings -> 400', (await call(T.owner, 'POST', '/products', p1Body({ flavour: 'Moon Dust' }))).status === 400);
+ok('a packet size not in Settings -> 400', (await call(T.owner, 'POST', '/products', p1Body({ packetSize: '9 kg' }))).status === 400);
+ok('an unknown manufacturer -> 400', (await call(T.owner, 'POST', '/products', p1Body({ manufacturerId: '00000000-0000-4000-8000-000000000000' }))).status === 400);
+ok('an unknown distributor -> 400', (await call(T.owner, 'POST', '/products', p1Body({ distributorId: '00000000-0000-4000-8000-000000000000' }))).status === 400);
+ok('zero bundles per container -> 400', (await call(T.owner, 'POST', '/products', p1Body({ bundlesPerContainer: 0 }))).status === 400);
+ok('sell-out days over 365 -> 400', (await call(T.owner, 'POST', '/products', p1Body({ selloutDays: 400 }))).status === 400);
+const p1New = await call(T.owner, 'POST', '/products', p1Body({ flavour: 'Masala Masti', packetSize: 'Rs 10 pack', manufacturerId: p1Mas.manufacturerId, distributorId: p1Ket.distributorId, selloutDays: 21 }));
+ok('a product with partners and its own sell-out days is saved', p1New.status === 201 && p1New.json?.distributorId === p1Ket.distributorId, JSON.stringify(p1New.json));
+const p1Find = async () => ((await call(T.owner, 'GET', '/products')).json ?? []).find((p) => p.id === p1New.json?.id);
+ok('its own sell-out days win over the distributor', (await p1Find())?.effectiveSelloutDays === 21);
+await call(T.owner, 'PATCH', `/products/${p1New.json?.id}`, { selloutDays: null });
+ok('clearing them goes back to the distributor', (await p1Find())?.effectiveSelloutDays === 40);
+ok('20 packets x 10 bundles = 200 packets per container', (await p1Find())?.packetsPerContainer === 200);
+ok('a Distributor login cannot add products -> 403', (await call(T.dist, 'POST', '/products', p1Body())).status === 403);
+const p1D = (await call(T.owner, 'GET', '/distributors')).json?.[0];
+ok('a distributor has its own sell-out days', typeof p1D?.selloutDays === 'number');
+ok('distributor sell-out days over 365 -> 400', (await call(T.owner, 'PATCH', `/distributors/${p1D.id}`, { selloutDays: 400 })).status === 400);
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

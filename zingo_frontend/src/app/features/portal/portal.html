@@ -103,7 +103,7 @@
     <ng-template appTabPanel="cargo">
       <div class="stack">
         <div class="card" data-flush>
-          <div class="card__head"><div><h2>Delivery receipts</h2><p>Confirm what arrived. Damaged or missing cartons become a claim.</p></div></div>
+          <div class="card__head"><div><h2>Delivery receipts</h2><p>Confirm what arrived. Damaged or missing bundles become a claim.</p></div></div>
           <div class="card__body">
             <app-data-table [columns]="cargoColumns" [rows]="shipped()" [actions]="cargoActions" [loading]="orders.isLoading()"
               searchPlaceholder="Search shipments" emptyTitle="Nothing shipped yet" emptyText="Dispatched orders appear here." (action)="onOrderAction($event)" />

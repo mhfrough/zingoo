@@ -21,6 +21,8 @@ const addDays = (iso: string, days: number) => {
 
 type Uom = 'Packs' | 'Dozens' | 'Cartons';
 const UOMS: Uom[] = ['Packs', 'Dozens', 'Cartons'];
+/** what each unit is called on screen ('Cartons' is the stored name of a bundle) */
+const UOM_LABEL: Record<Uom, string> = { Packs: 'Packets', Dozens: 'Dozens', Cartons: 'Bundles' };
 const COSTS = [['freight', 'Freight / delivery'], ['insurance', 'Insurance'], ['customs', 'Customs / clearance'], ['packaging', 'Extra packaging / handling'], ['other', 'Other order costs']] as const;
 
 const lineGroup = (fb: NonNullableFormBuilder, l?: { productId: string; qty: number; uom: Uom; sellPrice: number; unitCost: number }) =>
@@ -282,7 +284,7 @@ type LineForm = ReturnType<typeof lineGroup>;
           @case ('items') {
             <div class="step">
               <section class="block">
-                <header><h3>SKU-wise sales and landed margin</h3><p>Quantity in packs, dozens or cartons. Selling price is per pack in {{ cur() }}; unit cost is per pack in PKR.</p></header>
+                <header><h3>SKU-wise sales and landed margin</h3><p>Quantity in packs, dozens or bundles. Selling price is per pack in {{ cur() }}; unit cost is per pack in PKR.</p></header>
                 <div class="items" formArrayName="lines">
                   <div class="items__bar">
                     <strong>Invoice items <app-tag tone="neutral">{{ lines.length }}</app-tag></strong>
@@ -307,7 +309,7 @@ type LineForm = ReturnType<typeof lineGroup>;
                       <div class="field"><span class="cap">UOM</span><div class="field__control">
                         <select formControlName="uom" [attr.aria-label]="'Unit, line ' + (i + 1)">
                           @for (u of uoms; track u) {
-                            <option [value]="u">{{ u }}</option>
+                            <option [value]="u">{{ uomLabel[u] }}</option>
                           }
                         </select>
                       </div>
@@ -323,7 +325,7 @@ type LineForm = ReturnType<typeof lineGroup>;
                       <button appBtn type="button" size="sm" variant="ghost" icon="x" [attr.aria-label]="'Remove line ' + (i + 1)" (click)="removeLine(i)"></button>
                     </div>
                   }
-                  <span class="items__note">Price and cost start from the SKU set-up on Pricing & Margins; change them per invoice. Cartons use the SKU's packs per carton.</span>
+                  <span class="items__note">Price and cost start from the SKU set-up on Pricing & Margins; change them per invoice. Bundles use the SKU's packs per bundle.</span>
                 </div>
               </section>
 
@@ -387,6 +389,7 @@ export class IncomeInvoiceForm extends FormModal {
   protected money = fmtMoney;
   protected num = (n: number) => (Number(n) || 0).toLocaleString('en-PK', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   protected uoms = UOMS;
+  protected uomLabel = UOM_LABEL;
   protected costs = COSTS;
   protected steps: TabItem[] = [
     { id: 'details', label: '01 · Invoice details' },

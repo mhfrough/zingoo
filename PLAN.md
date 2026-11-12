@@ -284,3 +284,49 @@ Everything runs on Render from `render.yaml` (a Blueprint named `zingoo`, repo `
 - Free plan: the database expires after 30 days and the API sleeps when idle (first request about 30 to 50 seconds).
 - The web app is built with `API_URL` (see `zingo_frontend/scripts/set-env.mjs`); if Render ever gives a service another address, change `API_URL` on `zingo-web` and `CORS_ORIGIN` on `zingo-api`.
 - Before real customer data: move from `DB_SYNC` to migrations, and move off the free database.
+
+---
+
+## 11. Scope v2: consignment chain (2026-11-12)
+
+Sources: `instruction and plans/` (client's handwritten notes, flow chart, written instructions, voice transcript).
+
+Flow: **Investor → Company → Manufacturer → Distributor → Customer.**
+
+### 11.1 Client answers (2026-11-12)
+1. Sale at dispatch: the user had no view; my suggestion below (11.2) applies until the client says otherwise.
+2. Units: snack packet → bundle → container. **Container = batch** (the unit handed to a distributor). Today's "carton" becomes "bundle".
+3. Settings gets a bank list. A manufacturer is linked to one or more banks (one default); the manufacturer picks the bank on its payment invoice and the payment goes to that bank.
+4. Income on a distributor invoice = distributor rate × packets.
+5. Sell-out days: default on the distributor, can be changed on the product assignment and on each shipment.
+6. One manufacturer and one distributor per product for now (tables allow more later).
+7. Investor returns / profit share: later, not now.
+8. Departments vs cost centers: open; cost centers stay as they are.
+
+### 11.2 What happens to the old flow
+Today: staff release a batch into the **Zen Foods warehouse**; a **sales order** to a distributor is dispatched from that stock, and dispatch posts the sale at once (A/R / Sales and COGS / Inventory); the distributor then pays.
+New: the manufacturer ships **straight to the distributor**; the stock stays ours (consignment) until the distributor reports a batch distributed and sends its invoice; income posts then.
+Suggestion: the production order has a destination, **assigned distributor** (default) or **Zen Foods warehouse**. Warehouse stock feeds export containers only. Domestic sales orders and dispatch are retired from the menu (data kept); the distributor portal's stock requests become requests for a new order.
+
+### 11.3 Postings
+| Event | Debit | Credit |
+| --- | --- | --- |
+| Advance paid (after approval) | Advance to Manufacturer | Cash / Bank |
+| Containers received by distributor | Inventory at Distributor | Manufacturer Payable |
+| Advance applied | Manufacturer Payable | Advance to Manufacturer |
+| Balance paid | Manufacturer Payable | Cash / Bank |
+| Distributor invoice for a batch | A/R Distributor | Sales Revenue |
+| Same | COGS | Inventory at Distributor |
+| Collection | Cash / Bank | A/R Distributor |
+
+### 11.4 Phases
+| Phase | What |
+| --- | --- |
+| P1 Product | flavour, description, packet size, packets per bundle, bundles per container (packets per container worked out), assigned manufacturer and distributor, sell-out days |
+| P2 Settings | bank list; manufacturer banks (default) and advance %; distributor area (Pakistan places) and default sell-out days |
+| P3 Manufacturer portal + orders | Manufacturer role and login; production order (product, containers, rate, destination, due date); accept / reject; status steps (Accepted, Preparation, Production, QC, Ready, Shipped) from Settings; alerts to the company |
+| P4 Payment requests | advance (from advance %) and balance requests raised by the manufacturer to a chosen bank; approval with signatures; pay; manufacturer position: to pay / approved / paid / remaining |
+| P5 Shipment to distributor | containers (batches) shipped to the assigned distributor; receipt confirmed in the distributor portal; stock at distributor; sell-out clock starts |
+| P6 Distributor sales | distributor marks a batch distributed and sends its invoice; company verifies; income and receivable post; payments against it; stock left; sell-out deadline alerts; domestic sales orders retired |
+| P7 Reports + data | manufacturer and distributor statements, batch trail (sent / distributed / invoiced / collected), chain dashboard, new sample data, parity and API checks rewritten |
+| P8 Leftovers | polish, realtime, income invoice steps 03-04, bill Rejected, print invoice, paused loan / advance rework, investor returns |

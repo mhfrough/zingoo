@@ -60,7 +60,7 @@ export interface PortalReceipt {
   hasEvidence: boolean;
   status: 'Accepted' | 'Disputed' | 'Approved' | 'Rejected';
   reviewNote: string | null;
-  /** value of the damaged and missing cartons at the order's price */
+  /** value of the damaged and missing bundles at the order's price */
   claimValue: number;
   order: { refNo: string };
   distributorName?: string;

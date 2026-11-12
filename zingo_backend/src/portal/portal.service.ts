@@ -258,7 +258,7 @@ export class PortalService {
       if (dto.requestedDate && dto.requestedDate < dto.date) throw new BadRequestException('The requested delivery cannot be before the request date.');
       const refNo = await nextRef(em, PortalRequest, 'REQ', 3);
       const r = await em.save(em.create(PortalRequest, { ...dto, distributorId, refNo, status: 'Requested' }));
-      await this.audit(em, user, 'Request submitted', refNo, `${product.sku} / ${dto.cartons} cartons`);
+      await this.audit(em, user, 'Request submitted', refNo, `${product.sku} / ${dto.cartons} bundles`);
       return r;
     });
   }
@@ -307,7 +307,7 @@ export class PortalService {
       if (o.status !== 'Dispatched') throw new BadRequestException('Only a dispatched order can be received.');
       if (await em.findOne(CargoReceipt, { where: { orderId: o.id } })) throw new BadRequestException('A cargo receipt already exists for this order; ask Zingoo to amend it.');
       if (dto.goodCartons + dto.damagedCartons + dto.missingCartons !== o.cartons) {
-        throw new BadRequestException(`Good + damaged + missing cartons must equal the ${o.cartons} shipped.`);
+        throw new BadRequestException(`Good + damaged + missing bundles must equal the ${o.cartons} shipped.`);
       }
       const discrepancy = dto.damagedCartons > 0 || dto.missingCartons > 0;
       if ((discrepancy || dto.condition !== 'Good') && !dto.reason?.trim()) throw new BadRequestException('Explain the cargo discrepancy before submitting.');

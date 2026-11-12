@@ -166,7 +166,7 @@ export class OrdersService {
 
       const available = await this.stock.stockOf(o.productId, em);
       if (available < o.cartons) {
-        throw new BadRequestException(`Insufficient stock: ${available} cartons available; ${o.cartons} required.`);
+        throw new BadRequestException(`Insufficient stock: ${available} bundles available; ${o.cartons} required.`);
       }
 
       o.status = 'Dispatched';

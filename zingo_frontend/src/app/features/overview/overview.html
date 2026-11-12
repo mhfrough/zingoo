@@ -26,7 +26,7 @@
   <div class="grid-auto">
     <app-kpi label="Cash available" [value]="d() ? money(d()!.cash) : '...'" icon="wallet" tone="success"
       foot="Capital + receipts - cash disbursements" />
-    <app-kpi label="Warehouse stock" [value]="d() ? number(d()!.stockCartons) + ' cartons' : '...'" icon="boxes" tone="info"
+    <app-kpi label="Warehouse stock" [value]="d() ? number(d()!.stockCartons) + ' bundles' : '...'" icon="boxes" tone="info"
       [foot]="d() ? number(d()!.stockPacks) + ' finished packs' : ''" />
     <app-kpi label="Net profit after expenses" [value]="d() ? money(d()!.netProfit) : '...'" icon="trending-up"
       [tone]="d() && d()!.netProfit < 0 ? 'danger' : 'success'" foot="Revenue - COGS - booked expenses" />
@@ -38,7 +38,7 @@
   <div class="flows">
     <a class="flow" routerLink="/admin/manufacturing">
       <span class="flow__icon"><app-icon name="factory" [size]="22" /></span>
-      <span class="flow__text"><strong>1. Manufacture</strong>Plan, quality-check and release finished cartons into the warehouse.</span>
+      <span class="flow__text"><strong>1. Manufacture</strong>Plan, quality-check and release finished bundles into the warehouse.</span>
       <app-icon class="flow__go" name="arrow-right" [size]="18" />
     </a>
     <a class="flow" routerLink="/admin/finance">

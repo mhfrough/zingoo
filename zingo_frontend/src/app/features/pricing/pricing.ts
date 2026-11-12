@@ -92,7 +92,7 @@ export class Pricing {
       sortValue: (r) => r.eco.net, sub: (r) => fmtPct(r.eco.netPct),
     },
     this.perPack('spread', 'Retail spread', (r) => r.eco.retailSpread, undefined, 3),
-    { id: 'stock', label: 'Stock (cartons)', kind: 'number', align: 'end', priority: 3, value: (r) => r.product.stockCartons ?? 0 },
+    { id: 'stock', label: 'Stock (bundles)', kind: 'number', align: 'end', priority: 3, value: (r) => r.product.stockCartons ?? 0 },
   ];
 
   protected bridgeActions = (r: PriceRow): RowAction[] =>

@@ -13,7 +13,7 @@ const today = () => new Date().toISOString().slice(0, 10);
   imports: [MoneyInput, ReactiveFormsModule, Offcanvas, Field, Btn],
   template: `
     <app-offcanvas #oc [(open)]="open" [title]="batch() ? 'Edit production batch ' + batch()!.refNo : 'New production batch'"
-               subtitle="Enter the actual cartons and cost after the run, then release it once QC passes." size="lg" [dirty]="form.dirty">
+               subtitle="Enter the actual bundles and cost after the run, then release it once QC passes." size="lg" [dirty]="form.dirty">
       @if (error()) {
         <div class="notice" data-tone="danger" role="alert">{{ error() }}</div>
       }
@@ -44,10 +44,10 @@ const today = () => new Date().toISOString().slice(0, 10);
             }
           </select>
         </app-field>
-        <app-field label="Target cartons" [required]="true" [error]="invalid('targetCartons') ? 'At least 1 carton' : null">
+        <app-field label="Target bundles" [required]="true" [error]="invalid('targetCartons') ? 'At least 1 bundle' : null">
           <input type="number" formControlName="targetCartons" min="1" step="1" />
         </app-field>
-        <app-field label="Actual finished cartons" hint="Leave 0 until the run is done">
+        <app-field label="Actual finished bundles" hint="Leave 0 until the run is done">
           <input type="number" formControlName="producedCartons" min="0" step="1" />
         </app-field>
         <app-field label="Actual / accrued batch cost" hint="What the manufacturer charges for the whole batch" [wide]="true">

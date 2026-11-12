@@ -50,6 +50,10 @@ import { Distributor } from '../ops/models';
         <app-field label="Advance guide (%)" hint="Share of an order the distributor is asked to pay up front">
           <input type="number" formControlName="advancePct" min="0" max="100" step="1" />
         </app-field>
+        <app-field label="Sell-out days" hint="Days to sell one container. A product can set its own" [required]="true"
+                   [error]="invalid('selloutDays') ? '1 to 365 days' : null">
+          <input type="number" formControlName="selloutDays" min="1" max="365" step="1" />
+        </app-field>
         <h4 class="form-section">Contract</h4>
         <app-field label="Point of contact" hint="Who to speak to: name, phone or email"><input type="text" formControlName="poc" maxlength="150" /></app-field>
         <app-field label="Contract" hint="Contract number or title"><input type="text" formControlName="contract" maxlength="150" /></app-field>
@@ -69,6 +73,8 @@ export class DistributorForm extends FormModal {
   readonly distributor = input<Distributor | null>(null);
   /** allowed payment terms, from Settings */
   readonly paymentCycles = input<number[]>([15, 30, 45, 60]);
+  /** sell-out days for a new distributor (Settings) */
+  readonly defaultSelloutDays = input(30);
   readonly formId = 'form-distributor';
 
   readonly form = this.fb.nonNullable.group({
@@ -80,6 +86,7 @@ export class DistributorForm extends FormModal {
     paymentDays: [30],
     creditLimit: [0, Validators.min(0)],
     advancePct: [0, [Validators.min(0), Validators.max(100)]],
+    selloutDays: [30, [Validators.required, Validators.min(1), Validators.max(365)]],
     poc: [''],
     contract: [''],
     terms: [''],
@@ -89,9 +96,9 @@ export class DistributorForm extends FormModal {
   protected reset() {
     const d = this.distributor();
     this.form.reset(d
-      ? { name: d.name, region: d.region, contact: d.contact ?? '', address: d.address ?? '', taxNo: d.taxNo ?? '', paymentDays: d.paymentDays, creditLimit: Number(d.creditLimit), advancePct: Number(d.advancePct),
+      ? { name: d.name, region: d.region, contact: d.contact ?? '', address: d.address ?? '', taxNo: d.taxNo ?? '', paymentDays: d.paymentDays, creditLimit: Number(d.creditLimit), advancePct: Number(d.advancePct), selloutDays: d.selloutDays ?? 30,
           poc: d.poc ?? '', contract: d.contract ?? '', terms: d.terms ?? '', files: d.files ?? [] }
-      : { name: '', region: '', contact: '', address: '', taxNo: '', paymentDays: 30, creditLimit: 0, advancePct: 0, poc: '', contract: '', terms: '', files: [] });
+      : { name: '', region: '', contact: '', address: '', taxNo: '', paymentDays: 30, creditLimit: 0, advancePct: 0, selloutDays: this.defaultSelloutDays(), poc: '', contract: '', terms: '', files: [] });
   }
 
   protected request() {

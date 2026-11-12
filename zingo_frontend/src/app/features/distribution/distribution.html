@@ -26,7 +26,7 @@
 
   <div class="card" data-flush>
     <div class="card__head">
-      <div><h2>Sales order desk</h2><p>Invoice = cartons × packs per carton × rate per pack</p></div>
+      <div><h2>Sales order desk</h2><p>Invoice = bundles × packs per bundle × rate per pack</p></div>
     </div>
     <div class="card__body">
       <app-data-table [columns]="orderColumns" [rows]="orders.value() ?? []" [actions]="orderActions"
@@ -63,5 +63,5 @@
   [products]="products.value() ?? []" (saved)="reload()" />
 <app-collection-form [(open)]="collectOpen" [order]="collectingOrder()" (saved)="reload()" />
 <app-distributor-form [(open)]="distributorOpen" [distributor]="editingDistributor()"
-  [paymentCycles]="settings.value()?.paymentCycles ?? [15, 30, 45, 60]" (saved)="reload()" />
+  [paymentCycles]="settings.value()?.paymentCycles ?? [15, 30, 45, 60]" [defaultSelloutDays]="settings.value()?.defaultSelloutDays ?? 30" (saved)="reload()" />
 <app-credit-override-form [(open)]="overrideOpen" [order]="overrideOrder()" (saved)="reload()" />

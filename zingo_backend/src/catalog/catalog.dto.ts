@@ -1,6 +1,6 @@
 import { PartialType } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
-import { ArrayMaxSize, IsArray, IsBoolean, IsIn, IsInt, IsNotEmpty, IsNumber, IsOptional, IsString, IsUUID, MaxLength, Min, ValidateNested } from 'class-validator';
+import { ArrayMaxSize, IsArray, IsBoolean, IsIn, IsInt, IsNotEmpty, IsNumber, IsOptional, IsString, IsUUID, Max, MaxLength, Min, ValidateNested } from 'class-validator';
 
 /** an uploaded file on a partner (from POST /attachments) */
 export class PartnerFileDto {
@@ -16,7 +16,16 @@ export class CreateProductDto {
   @IsInt() @Min(1) pack: number;
   @IsNumber() @Min(0) mrp: number;
   @IsNumber() @Min(0) rate: number;
-  @IsInt() @Min(1) packsPerCarton: number;
+  /** packets per bundle */
+  @IsInt() @Min(1) @Max(100000) packsPerCarton: number;
+  @IsOptional() @IsInt() @Min(1) @Max(100000) bundlesPerContainer?: number;
+  @IsOptional() @IsString() @MaxLength(80) flavour?: string | null;
+  @IsOptional() @IsString() @MaxLength(40) packetSize?: string | null;
+  @IsOptional() @IsString() @MaxLength(2000) description?: string | null;
+  @IsOptional() @IsUUID() manufacturerId?: string | null;
+  @IsOptional() @IsUUID() distributorId?: string | null;
+  /** empty = the distributor's default */
+  @IsOptional() @IsInt() @Min(1) @Max(365) selloutDays?: number | null;
   @IsOptional() @IsNumber() @Min(0) manufacturerRate?: number;
   @IsOptional() @IsNumber() @Min(0) packagingRate?: number;
   @IsOptional() @IsNumber() @Min(0) printingRate?: number;
@@ -47,6 +56,7 @@ export class CreateDistributorDto {
   @IsOptional() @IsIn([15, 30, 45, 60, 90]) paymentDays?: number;
   @IsOptional() @IsNumber() @Min(0) creditLimit?: number;
   @IsOptional() @IsNumber() @Min(0) advancePct?: number;
+  @IsOptional() @IsInt() @Min(1) @Max(365) selloutDays?: number;
   @IsOptional() @IsString() @MaxLength(150) poc?: string;
   @IsOptional() @IsString() @MaxLength(150) contract?: string;
   @IsOptional() @IsString() @MaxLength(5000) terms?: string;

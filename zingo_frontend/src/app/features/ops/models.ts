@@ -12,10 +12,26 @@ export interface Product {
   packagingRate: number;
   printingRate: number;
   inboundRate: number;
+  /** packets per bundle */
   packsPerCarton: number;
+  /** bundles per container (a container is one batch handed to a distributor) */
+  bundlesPerContainer: number;
+  flavour: string | null;
+  packetSize: string | null;
+  description: string | null;
+  manufacturerId: string | null;
+  manufacturer?: Manufacturer | null;
+  distributorId: string | null;
+  distributor?: Distributor | null;
+  /** the product's own sell-out days; empty = the distributor's */
+  selloutDays: number | null;
   currency: string;
   active: boolean;
   stockCartons?: number;
+  /** packets per bundle x bundles per container */
+  packetsPerContainer?: number;
+  /** the sell-out days that apply: the product's own, else the distributor's */
+  effectiveSelloutDays?: number | null;
 }
 
 export interface Manufacturer {
@@ -41,6 +57,8 @@ export interface Distributor {
   paymentDays: number;
   creditLimit: number;
   advancePct: number;
+  /** days to sell one container out, unless a product says otherwise */
+  selloutDays?: number;
   /** point of contact */
   poc?: string | null;
   contract?: string | null;
@@ -137,7 +155,12 @@ export interface Dashboard {
 
 /** Company settings the pages read (the full record has more fields). */
 export interface Settings {
+  /** packets per bundle, default for a new SKU */
   packsPerCarton: number;
+  /** bundles per container, default for a new SKU */
+  bundlesPerContainer?: number;
+  /** sell-out days, default for a new distributor */
+  defaultSelloutDays?: number;
   lowStockCartons: number;
   paymentCycles: number[];
   defaultPaymentCycle: number;

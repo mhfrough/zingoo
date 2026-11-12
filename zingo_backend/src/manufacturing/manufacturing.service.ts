@@ -47,7 +47,7 @@ export class BatchesService {
   private check(dto: { targetCartons?: number; producedCartons?: number }, current?: ProductionBatch) {
     const target = dto.targetCartons ?? current?.targetCartons ?? 0;
     const produced = dto.producedCartons ?? current?.producedCartons ?? 0;
-    if (produced > target * 5) throw new BadRequestException('Actual cartons look unusually high. Check the entry.');
+    if (produced > target * 5) throw new BadRequestException('Actual bundles look unusually high. Check the entry.');
   }
 
   create(dto: CreateBatchDto, opts: { refNo?: string } = {}) {
@@ -86,7 +86,7 @@ export class BatchesService {
       if (!b) throw new NotFoundException('Batch not found');
       if (b.status === 'Released') throw new BadRequestException('This batch is already released.');
       if (b.qc !== 'Passed') throw new BadRequestException('Quality control must be Passed before release.');
-      if (!(b.producedCartons > 0)) throw new BadRequestException('Enter the actual finished cartons before release.');
+      if (!(b.producedCartons > 0)) throw new BadRequestException('Enter the actual finished bundles before release.');
       b.status = 'Released';
       await em.save(b);
       await this.posting.syncBatch(em, id);

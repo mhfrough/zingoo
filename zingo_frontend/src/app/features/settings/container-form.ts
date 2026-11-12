@@ -5,14 +5,14 @@ import { ContainerType } from '../exports/models';
 import { FormModal } from '../ops/form-modal';
 import { SettingsApi } from './settings.api';
 
-/** Add a container type or change how many cartons it plans for. The code stays, since quotes use it. */
+/** Add a container type or change how many bundles it plans for. The code stays, since quotes use it. */
 @Component({
   selector: 'app-container-form',
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [ReactiveFormsModule, Offcanvas, Field, Btn],
   template: `
     <app-offcanvas #oc [(open)]="open" [title]="container() ? 'Edit container type' : 'Add container type'"
-               subtitle="Planning cartons only. Check weight and volume yourself." size="lg" [dirty]="form.dirty">
+               subtitle="Planning bundles only. Check weight and volume yourself." size="lg" [dirty]="form.dirty">
       @if (error()) {
         <div class="notice" data-tone="danger" role="alert">{{ error() }}</div>
       }
@@ -20,7 +20,7 @@ import { SettingsApi } from './settings.api';
         <app-field label="Code" hint="For example 40HC" [required]="true" [error]="invalid('code') ? 'Enter a code' : null">
           <input type="text" formControlName="code" maxlength="10" />
         </app-field>
-        <app-field label="Planning cartons" [required]="true" [error]="invalid('maxCartons') ? 'Enter at least 1' : null">
+        <app-field label="Planning bundles" [required]="true" [error]="invalid('maxCartons') ? 'Enter at least 1' : null">
           <input type="number" formControlName="maxCartons" min="1" step="1" />
         </app-field>
       </form>

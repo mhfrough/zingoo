@@ -131,7 +131,7 @@ export class ExportsService {
       if (x.status === 'Shipped') throw new BadRequestException('This container has already shipped.');
       const available = await this.stock.stockOf(x.productId, em);
       if (x.cartons > available) {
-        throw new BadRequestException(`Not enough stock: ${x.cartons} cartons needed, ${available} in the warehouse.`);
+        throw new BadRequestException(`Not enough stock: ${x.cartons} bundles needed, ${available} in the warehouse.`);
       }
       const s = await this.settings.get(em);
       const packs = x.product.packsPerCarton ?? s.packsPerCarton;

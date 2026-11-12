@@ -37,7 +37,7 @@ const today = () => new Date().toISOString().slice(0, 10);
             }
           </select>
         </app-field>
-        <app-field label="Cartons ordered" [required]="true" [error]="invalid('cartons') ? 'At least 1 carton' : null">
+        <app-field label="Cartons ordered" [required]="true" [error]="invalid('cartons') ? 'At least 1 bundle' : null">
           <input type="number" formControlName="cartons" min="1" step="1" />
         </app-field>
         <app-field label="Rate per pack" hint="Filled from the SKU price; change it for this order if needed" [required]="true">
@@ -50,7 +50,7 @@ const today = () => new Date().toISOString().slice(0, 10);
       </form>
       @if (invoice() > 0) {
         <div class="notice">
-          <span>Invoice value <strong>{{ money(invoice()) }}</strong> = {{ cartons() }} cartons × {{ packs() }} packs × PKR {{ rate() }}</span>
+          <span>Invoice value <strong>{{ money(invoice()) }}</strong> = {{ cartons() }} bundles × {{ packs() }} packs × PKR {{ rate() }}</span>
         </div>
       }
       <ng-container offcanvasFooter>

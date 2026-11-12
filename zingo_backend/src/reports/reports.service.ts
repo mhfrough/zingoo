@@ -329,15 +329,15 @@ export class ReportsService {
       })),
       ...stock.filter((p: any) => p.active && p.low).map((p: any) => ({
         kind: 'stock', page: 'manufacturing', title: `Low stock · ${p.sku}`,
-        text: `${p.cartons} cartons available · replenish below ${s.lowStockCartons}`,
+        text: `${p.cartons} bundles available · replenish below ${s.lowStockCartons}`,
       })),
       ...orders.filter((o) => o.status === 'Draft').map((o) => ({
         kind: 'order', page: 'distribution', title: `Undispatched order · ${o.refNo}`,
-        text: `${o.cartons} cartons for ${o.distributor.name}`,
+        text: `${o.cartons} bundles for ${o.distributor.name}`,
       })),
       ...batches.filter((b) => b.status === 'Planned').map((b) => ({
         kind: 'batch', page: 'manufacturing', title: `Batch awaiting release · ${b.refNo}`,
-        text: `${b.targetCartons} target cartons · ${b.qc} QC`,
+        text: `${b.targetCartons} target bundles · ${b.qc} QC`,
       })),
     ];
   }

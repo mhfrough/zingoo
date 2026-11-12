@@ -30,7 +30,7 @@ const inDays = (n: number) => new Date(Date.now() + n * 86_400_000).toISOString(
             }
           </select>
         </app-field>
-        <app-field label="Cartons" [required]="true" [error]="invalid('cartons') ? 'Enter a whole number, 1 or more' : null">
+        <app-field label="Bundles" [required]="true" [error]="invalid('cartons') ? 'Enter a whole number, 1 or more' : null">
           <input type="number" formControlName="cartons" min="1" step="1" />
         </app-field>
         <app-field label="Delivery wanted by"><input type="date" formControlName="requestedDate" /></app-field>

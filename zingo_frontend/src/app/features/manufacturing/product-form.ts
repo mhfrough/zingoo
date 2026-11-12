@@ -2,7 +2,7 @@ import { ChangeDetectionStrategy, Component, computed, inject, input } from '@an
 import { toSignal } from '@angular/core/rxjs-interop';
 import { ReactiveFormsModule, Validators } from '@angular/forms';
 import { SettingsStore } from '../../core/settings.store';
-import { fmtNumber } from '../../shared/format';
+import { fmtAmount2, fmtNumber } from '../../shared/format';
 import { Btn, Field, MoneyInput, Offcanvas, Select, SelectOption } from '../../ui';
 import { FormModal } from '../ops/form-modal';
 import { Distributor, Manufacturer, Product } from '../ops/models';
@@ -86,7 +86,7 @@ const withCurrent = (list: string[], current: string | null | undefined): Select
         </section>
 
         <section class="block">
-          <header><h3>Rates per packet</h3><p>In PKR.</p></header>
+          <header><h3>Rates per packet</h3><p>In PKR. Type the price of one packet; the bundle and container prices are worked out below.</p></header>
           <div class="form-grid">
             <app-field label="MRP">
               <app-money-input formControlName="mrp" />
@@ -107,6 +107,26 @@ const withCurrent = (list: string[], current: string | null | undefined): Select
               <app-money-input formControlName="inboundRate" />
             </app-field>
           </div>
+          <table class="prices" aria-label="Prices per packet, bundle and container">
+            <thead>
+              <tr>
+                <th scope="col">PKR</th>
+                <th scope="col">Per packet</th>
+                <th scope="col">Per bundle<small>{{ num(packetsPerBundle()) }} packets</small></th>
+                <th scope="col">Per container<small>{{ num(packetsPerContainer()) }} packets</small></th>
+              </tr>
+            </thead>
+            <tbody>
+              @for (r of priceRows(); track r.label) {
+                <tr [attr.data-total]="r.total ? '' : null">
+                  <th scope="row">{{ r.label }}</th>
+                  <td>{{ amount2(r.packet) }}</td>
+                  <td>{{ amount2(r.packet * packetsPerBundle()) }}</td>
+                  <td>{{ amount2(r.packet * packetsPerContainer()) }}</td>
+                </tr>
+              }
+            </tbody>
+          </table>
         </section>
       </form>
       <ng-container offcanvasFooter>
@@ -118,6 +138,42 @@ const withCurrent = (list: string[], current: string | null | undefined): Select
     </app-offcanvas>
   `,
   styles: `
+    /* the worked-out prices: per packet, bundle and container, read only */
+    .prices {
+      inline-size: 100%;
+      border-collapse: collapse;
+      font-size: var(--text-sm);
+
+      & th,
+      & td {
+        padding: var(--space-2) var(--space-2);
+        border-block-end: 1px solid var(--border);
+        text-align: end;
+        font-variant-numeric: tabular-nums;
+      }
+
+      & th:first-child {
+        text-align: start;
+        font-weight: var(--weight-medium, 500);
+      }
+
+      & thead th {
+        font-size: var(--text-xs);
+        color: var(--text-3);
+        font-weight: var(--weight-semibold);
+
+        & small {
+          display: block;
+          font-weight: 400;
+        }
+      }
+
+      & tr[data-total] {
+        font-weight: var(--weight-semibold);
+        background: var(--surface-sunken);
+      }
+    }
+
     .sections {
       display: flex;
       flex-direction: column;
@@ -189,6 +245,24 @@ export class ProductForm extends FormModal {
     const v = this.value();
     return `${fmtNumber(Number(v.packsPerCarton || 0) * Number(v.bundlesPerContainer || 0))} packets`;
   });
+  /** packets in one bundle and in one container, as typed */
+  protected packetsPerBundle = computed(() => Number(this.value().packsPerCarton || 0));
+  protected packetsPerContainer = computed(() => this.packetsPerBundle() * Number(this.value().bundlesPerContainer || 0));
+  /** each per-packet price, and what it comes to for a bundle and a container (for understanding only, nothing is stored) */
+  protected priceRows = computed(() => {
+    const v = this.value();
+    const n = (x: unknown) => Number(x || 0);
+    const landed = n(v.manufacturerRate) + n(v.packagingRate) + n(v.printingRate) + n(v.inboundRate);
+    return [
+      { label: 'MRP', packet: n(v.mrp), total: false },
+      { label: 'Distributor price', packet: n(v.rate), total: false },
+      { label: 'Manufacturer rate', packet: n(v.manufacturerRate), total: false },
+      { label: 'Landed cost', packet: landed, total: false },
+      { label: 'Margin', packet: n(v.rate) - landed, total: true },
+    ];
+  });
+  protected amount2 = fmtAmount2;
+  protected num = fmtNumber;
   protected selloutHint = computed(() => {
     const d = this.distributors().find((x) => x.id === this.value().distributorId);
     return d ? `Empty = ${d.name}'s ${d.selloutDays ?? 30} days` : 'Empty = the distributor default';

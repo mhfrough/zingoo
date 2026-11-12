@@ -34,13 +34,6 @@
       [foot]="d() ? number(d()!.pendingApprovals) + ' pending spending approvals' : ''" />
   </div>
 
-  <div class="card">
-    <div class="card__head">
-      <div><h2>The business chain</h2><p>Investors fund Zen Foods, which orders from manufacturers; containers go to distributors, who sell to customers</p></div>
-    </div>
-    <div class="card__body"><app-chain [data]="chain.value() ?? null" /></div>
-  </div>
-
   <h2>Where to work</h2>
   <div class="flows">
     <a class="flow" routerLink="/admin/manufacturing">
@@ -111,5 +104,12 @@
       <app-data-table [columns]="orderColumns" [rows]="d()?.latestOrders ?? []" [loading]="data.isLoading()"
         [searchable]="false" emptyTitle="No orders yet" />
     </div>
+  </div>
+
+  <div class="card">
+    <div class="card__head">
+      <div><h2>The business chain</h2><p>Investors fund Zen Foods, which orders from manufacturers; containers go to distributors, who sell to customers</p></div>
+    </div>
+    <div class="card__body"><app-chain [data]="chain.value() ?? null" /></div>
   </div>
 </div>

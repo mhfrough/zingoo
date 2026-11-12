@@ -16,6 +16,7 @@ import { FactoryApi } from '../factory/factory.api';
 import { OrdersPanel } from '../factory/orders-panel';
 import { RequestsPanel } from '../factory/requests-panel';
 import { ShipmentsPanel } from '../factory/shipments-panel';
+import { ProductsPanel } from '../products/products-panel';
 import { SettingsStore } from '../../core/settings.store';
 
 const QC_TONE: Record<string, Tone> = { Passed: 'success', Pending: 'warning', Failed: 'danger' };
@@ -24,7 +25,7 @@ const STATUS_TONE: Record<string, Tone> = { Released: 'success', Planned: 'warni
 @Component({
   selector: 'app-manufacturing',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [Btn, DataTable, Kpi, PageHeader, Tabs, TabPanel, BatchForm, ProductForm, PayManufacturerForm, OrdersPanel, RequestsPanel, ShipmentsPanel],
+  imports: [Btn, DataTable, Kpi, PageHeader, Tabs, TabPanel, BatchForm, ProductForm, PayManufacturerForm, OrdersPanel, RequestsPanel, ShipmentsPanel, ProductsPanel],
   templateUrl: './manufacturing.html',
 })
 export class Manufacturing {
@@ -37,7 +38,7 @@ export class Manufacturing {
   /** ?new=batch or ?new=product opens that form straight away (used by the Overview quick-add buttons) */
   readonly new = input<string>();
 
-  private tick = signal(0);
+  protected tick = signal(0);
   protected stock = rxResource({ params: () => this.tick(), stream: () => this.api.stock() });
   protected batches = rxResource({ params: () => this.tick(), stream: () => this.api.batches() });
   protected products = rxResource({ params: () => this.tick(), stream: () => this.api.products() });

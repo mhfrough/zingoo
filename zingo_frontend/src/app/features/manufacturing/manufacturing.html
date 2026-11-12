@@ -38,25 +38,7 @@
     </ng-template>
 
     <ng-template appTabPanel="products">
-      <div class="card" data-flush>
-        <div class="card__head">
-          <div>
-            <h2>Products</h2>
-            <p>Packet → bundle → container, and the manufacturer and distributor each SKU is assigned to
-              @if (unassigned()) { · <strong>{{ unassigned() }} not fully assigned</strong> }
-            </p>
-          </div>
-          @if (canWrite()) {
-            <button appBtn variant="primary" icon="plus" (click)="openProduct()">Add product / SKU</button>
-          }
-        </div>
-        <div class="card__body">
-          <app-data-table [columns]="productColumns" [rows]="products.value() ?? []" [actions]="productActions"
-            [loading]="products.isLoading()" [error]="products.error() ? 'The server did not answer.' : null"
-            searchPlaceholder="Search products" emptyTitle="No products yet" emptyText="Add the first SKU to start."
-            (retry)="reload()" (action)="onProductAction($event)" />
-        </div>
-      </div>
+      <app-products-panel [version]="tick()" (changed)="reload()" />
     </ng-template>
 
     <ng-template appTabPanel="warehouse">

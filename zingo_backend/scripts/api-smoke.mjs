@@ -803,16 +803,22 @@ ok('and renames the business in Settings', (await call(T.owner, 'GET', '/setting
 await call(T.owner, 'PATCH', `/companies/${coOld.id}`, { primary: true });
 ok('the other company can then be deleted', (await call(T.owner, 'DELETE', `/companies/${coNew.json.id}`)).status === 200);
 
-// ── view as: an Admin previews the app as another login, read-only ──
-const vaOpts = (await call(T.owner, 'GET', '/auth/view-as')).json ?? [];
-const vaDist = vaOpts.find((u) => u.role === 'Distributor');
-ok('an Admin lists the logins to view as', vaOpts.length >= 7 && !!vaDist);
-ok('a Finance user cannot view as -> 403', (await call(T.finance, 'GET', '/auth/view-as')).status === 403);
+// ── switch account: an Admin switches to another login without signing in again ──
+const vaOpts = (await call(T.owner, 'GET', '/auth/view-as')).json ?? {};
+const vaDist = (vaOpts.users ?? []).find((u) => u.role === 'Distributor');
+ok('an Admin lists the logins and every role to switch to', (vaOpts.users ?? []).length >= 8 && !!vaDist && vaOpts.roles?.includes('Investor'));
+ok('a Finance user cannot switch -> 403', (await call(T.finance, 'GET', '/auth/view-as')).status === 403);
 const va = await call(T.owner, 'POST', `/auth/view-as/${vaDist.id}`);
-ok('viewing as a distributor gives their role and pages', va.status === 201 && va.json?.user?.role === 'Distributor' && va.json?.user?.viewAs === true);
+ok('switching to a distributor gives their role and pages', va.status === 201 && va.json?.user?.role === 'Distributor' && va.json?.user?.viewAs === true);
 const vaT = va.json?.access_token;
-ok('the preview reads what the distributor reads', (await call(vaT, 'GET', '/portal/profile')).status === 200 && (await call(vaT, 'GET', '/products')).status === 403);
-ok('the preview cannot change anything -> 403', (await call(vaT, 'POST', '/portal/requests', {})).status === 403);
+ok('the switched session is that distributor', (await call(vaT, 'GET', '/portal/profile')).status === 200 && (await call(vaT, 'GET', '/products')).status === 403);
+const vaInv = await call(T.owner, 'POST', '/auth/switch-role/Investor');
+ok('switching to the Investor role uses its login', vaInv.status === 201 && vaInv.json?.user?.role === 'Investor' && vaInv.json?.user?.pages?.join() === 'overview,finance');
+ok('an investor reads finance but changes nothing', (await call(vaInv.json?.access_token, 'GET', '/finance')).status === 200 && (await call(vaInv.json?.access_token, 'POST', '/finance', {})).status === 403);
+await call(T.owner, 'PATCH', `/users/${vaInv.json.user.id}`, { status: 'Disabled' });
+const vaNew = await call(T.owner, 'POST', '/auth/switch-role/Investor');
+ok('a role with no active login gets one made', vaNew.status === 201 && vaNew.json?.user?.role === 'Investor' && vaNew.json?.user?.id !== vaInv.json.user.id && vaNew.json?.user?.email?.endsWith('@zingoo.local'));
+ok('an unknown role -> 400', (await call(T.owner, 'POST', '/auth/switch-role/Pirate')).status === 400);
 
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

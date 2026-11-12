@@ -13,7 +13,7 @@ import { UserForm } from './user-form';
 import { ROLE_LIST, UserRow, UsersApi } from './users.api';
 
 const ROLE_TONE: Record<string, Tone> = {
-  Admin: 'accent', Finance: 'info', Manufacturing: 'warning', Distribution: 'success', Exports: 'success', Viewer: 'neutral', Distributor: 'neutral',
+  Admin: 'accent', Finance: 'info', Manufacturing: 'warning', Distribution: 'success', Exports: 'success', Viewer: 'neutral', Investor: 'info', Distributor: 'neutral',
 };
 
 /** what each kind of change is called in the permission table */

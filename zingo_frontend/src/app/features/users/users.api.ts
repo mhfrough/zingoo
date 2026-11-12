@@ -20,7 +20,7 @@ export interface AccessMatrix {
   writes: Record<string, string[]>;
 }
 
-export const ROLE_LIST = ['Admin', 'Manufacturing', 'Finance', 'Distribution', 'Exports', 'Viewer', 'Distributor'] as const;
+export const ROLE_LIST = ['Admin', 'Manufacturing', 'Finance', 'Distribution', 'Exports', 'Viewer', 'Investor', 'Distributor'] as const;
 
 /** Every call the Users & Roles page makes. */
 @Injectable({ providedIn: 'root' })

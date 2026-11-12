@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, inject, input, signal } from '@angular/core';
 import { rxResource } from '@angular/core/rxjs-interop';
 import { AuthService } from '../../core/auth.service';
 import { SettingsStore } from '../../core/settings.store';
@@ -20,6 +20,7 @@ const contractText = (p: { contract?: string | null; files?: unknown[] }) =>
   imports: [Btn, DataTable, ManufacturerForm, DistributorForm],
   template: `
     <div class="stack">
+      @if (section() === 'manufacturers') {
       <div class="card" data-flush>
         <div class="card__head">
           <div><h2>Manufacturers</h2><p>Who makes the goods and how long they allow to pay</p></div>
@@ -32,7 +33,9 @@ const contractText = (p: { contract?: string | null; files?: unknown[] }) =>
             searchPlaceholder="Search manufacturers" emptyTitle="No manufacturers" emptyText="Add the first one." (action)="onManufacturerAction($event)" />
         </div>
       </div>
+      }
 
+      @if (section() === 'distributors') {
       <div class="card" data-flush>
         <div class="card__head">
           <div><h2>Distributors</h2><p>Credit limits and payment terms; their prices are on Pricing & Margins</p></div>
@@ -45,6 +48,7 @@ const contractText = (p: { contract?: string | null; files?: unknown[] }) =>
             searchPlaceholder="Search distributors" emptyTitle="No distributors" emptyText="Add the first one." (action)="onDistributorAction($event)" />
         </div>
       </div>
+      }
     </div>
 
     <app-manufacturer-form [(open)]="manufacturerOpen" [manufacturer]="editingManufacturer()" (saved)="reload()" />
@@ -52,6 +56,8 @@ const contractText = (p: { contract?: string | null; files?: unknown[] }) =>
   `,
 })
 export class SettingsPartners {
+  /** the Manufacturers tab or the Distributors tab */
+  readonly section = input<'manufacturers' | 'distributors'>('manufacturers');
   private ops = inject(OpsApi);
   protected store = inject(SettingsStore);
   protected auth = inject(AuthService);

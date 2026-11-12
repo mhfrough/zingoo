@@ -33,6 +33,7 @@ export const users = [
   { name: 'Distribution Coordinator', email: 'sales@example.test', role: 'Distribution', seat: 'None' },
   { name: 'Export Executive', email: 'export@example.test', role: 'Exports', seat: 'None' },
   { name: 'Read-only Reviewer', email: 'audit@example.test', role: 'Viewer', seat: 'None' },
+  { name: 'Investor (Demo)', email: 'investor@example.test', role: 'Investor', seat: 'None' },
   { name: 'Hyderabad Distributor (Demo)', email: 'distributor@demo.local', role: 'Distributor', seat: 'None', distributor: 'd1' },
 ] as const;
 

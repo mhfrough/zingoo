@@ -8,7 +8,7 @@ import { Roles } from '../auth/roles.decorator';
 import { MAX_ATTACHMENT_BYTES, AttachmentsService } from './attachments.service';
 
 /** Roles that may add files (everyone inside the company except the read-only reviewer). */
-const UPLOADERS = STAFF.filter((r) => r !== 'Viewer');
+const UPLOADERS = STAFF.filter((r) => r !== 'Viewer' && r !== 'Investor');
 
 /** Optional: what the file will belong to. */
 class UploadMeta {

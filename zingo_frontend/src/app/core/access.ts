@@ -2,7 +2,7 @@
  * Who may change what. Mirrors zingo_backend/src/auth/access.ts (the server enforces it;
  * this only hides buttons that would be refused).
  */
-export type Role = 'Admin' | 'Manufacturing' | 'Finance' | 'Distribution' | 'Exports' | 'Viewer' | 'Distributor';
+export type Role = 'Admin' | 'Manufacturing' | 'Finance' | 'Distribution' | 'Exports' | 'Viewer' | 'Investor' | 'Distributor';
 export type WriteGroup = 'manufacturing' | 'distribution' | 'finance' | 'exports' | 'admin';
 
 export const WRITE_ROLES: Record<WriteGroup, Role[]> = {

@@ -22,7 +22,9 @@ import { SettingsPartners } from './settings-partners';
       <ng-template appTabPanel="general"><app-settings-general /></ng-template>
       <ng-template appTabPanel="lists"><app-settings-lists /></ng-template>
       <ng-template appTabPanel="categories"><app-settings-categories /></ng-template>
-      <ng-template appTabPanel="partners"><app-settings-partners /></ng-template>
+      <ng-template appTabPanel="manufacturers"><app-settings-partners section="manufacturers" /></ng-template>
+      <ng-template appTabPanel="distributors"><app-settings-partners section="distributors" /></ng-template>
+      <ng-template appTabPanel="investors"><app-settings-lists section="investors" /></ng-template>
       <ng-template appTabPanel="data"><app-settings-data /></ng-template>
     </app-tabs>
   `,
@@ -33,7 +35,9 @@ export class Settings {
     { id: 'general', label: 'Company & assumptions', icon: 'settings' },
     { id: 'lists', label: 'Lists & currencies', icon: 'list' },
     { id: 'categories', label: 'Categories & cost centers', icon: 'landmark' },
-    { id: 'partners', label: 'Manufacturers & distributors', icon: 'handshake' },
+    { id: 'manufacturers', label: 'Manufacturers', icon: 'factory' },
+    { id: 'distributors', label: 'Distributors', icon: 'truck' },
+    { id: 'investors', label: 'Investor accounts', icon: 'users' },
     { id: 'data', label: 'Data', icon: 'download' },
   ];
 }

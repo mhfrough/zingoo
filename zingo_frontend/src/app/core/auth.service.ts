@@ -15,7 +15,7 @@ export interface AuthUser {
   /** pages this role may open (from the server) */
   pages?: string[];
   isRoot?: boolean;
-  /** an Admin is previewing the app as this login (read-only) */
+  /** an Admin switched into this login (their own session is kept to switch back) */
   viewAs?: boolean;
 }
 
@@ -69,14 +69,15 @@ export class AuthService {
     );
   }
 
-  /** the logins an Admin can preview the app as */
+  /** the logins and roles an Admin can switch to */
   viewAsOptions() {
-    return this.http.get<ViewAsOption[]>(`${environment.apiUrl}/auth/view-as`);
+    return this.http.get<{ users: ViewAsOption[]; roles: string[] }>(`${environment.apiUrl}/auth/view-as`);
   }
 
-  /** see the app as another login without signing in again (read-only); the Admin's own session is kept aside */
-  viewAs(userId: string) {
-    return this.http.post<LoginResponse>(`${environment.apiUrl}/auth/view-as/${userId}`, {}).pipe(
+  /** switch to another login (by id) or to a role ("role:Investor", made when missing) without signing in again */
+  viewAs(target: string) {
+    const url = target.startsWith('role:') ? `auth/switch-role/${target.slice(5)}` : `auth/view-as/${target}`;
+    return this.http.post<LoginResponse>(`${environment.apiUrl}/${url}`, {}).pipe(
       tap((res) => {
         if (!localStorage.getItem(OWN_TOKEN_KEY)) {
           localStorage.setItem(OWN_TOKEN_KEY, this.token ?? '');

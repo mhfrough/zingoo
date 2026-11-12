@@ -11,6 +11,8 @@ export const ROLE_PAGES: Record<Role, string[]> = {
   Distribution: ['overview', 'distribution', 'pricing', 'portal'],
   Exports: ['overview', 'exports', 'pricing', 'distribution'],
   Viewer: ['overview', 'manufacturing', 'finance', 'accounting', 'distribution', 'pricing', 'exports', 'ledger', 'users', 'settings'],
+  /** an investor or business owner: sees the business and where the money went, changes nothing */
+  Investor: ['overview', 'finance'],
   Distributor: ['portal'],
 };
 

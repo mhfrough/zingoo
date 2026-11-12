@@ -41,19 +41,21 @@
       @if (viewing()) {
         <div class="view-as" data-viewing role="status">
           <app-icon name="eye" [size]="16" />
-          <span>Viewing as <strong>{{ auth.user()?.name }}</strong> · read-only</span>
-          <button type="button" class="btn" data-size="sm" (click)="backToOwn()">Back to my view</button>
+          <span>Switched to <strong>{{ auth.user()?.name }}</strong> · {{ auth.user()?.role }}</span>
+          <button type="button" class="btn" data-size="sm" (click)="backToOwn()">Back to my account</button>
         </div>
       } @else if (auth.user()?.role === 'Admin') {
         <label class="view-as">
           <app-icon name="eye" [size]="16" />
-          <span class="sr-only">View the app as</span>
-          <select #va (focus)="loadViewAs()" (pointerdown)="loadViewAs()" (change)="switchTo(va)" aria-label="View the app as another role">
-            <option value="">View as…</option>
+          <span class="sr-only">Switch account</span>
+          <select #va (focus)="loadViewAs()" (pointerdown)="loadViewAs()" (change)="switchTo(va)" aria-label="Switch to another account">
+            <option value="">Switch account…</option>
             @for (g of viewAsGroups(); track g.role) {
               <optgroup [label]="g.role">
                 @for (u of g.users; track u.id) {
                   <option [value]="u.id">{{ u.name }}{{ u.distributorName ? ' · ' + u.distributorName : '' }}</option>
+                } @empty {
+                  <option [value]="'role:' + g.role">+ Create {{ g.role }} account</option>
                 }
               </optgroup>
             }

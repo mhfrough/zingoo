@@ -1,7 +1,7 @@
 // Fixed lists from the client's prototype. Stored as plain varchar, validated with @IsIn(...).
 // Adding a value later needs no migration.
 
-export const ROLES = ['Admin', 'Manufacturing', 'Finance', 'Distribution', 'Exports', 'Viewer', 'Distributor'] as const;
+export const ROLES = ['Admin', 'Manufacturing', 'Finance', 'Distribution', 'Exports', 'Viewer', 'Investor', 'Distributor'] as const;
 export type Role = (typeof ROLES)[number];
 
 /** Approval seat: A / B = the two signatories, Both = can sign as either. */

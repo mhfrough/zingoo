@@ -32,13 +32,13 @@ export class Shell {
   protected conn = inject(CONNECTION_STATUS, { optional: true });
 
   private toast = inject(ToastService);
-  /** an Admin can preview the app as another login; while previewing, a banner offers the way back */
+  /** an Admin can switch to another account; while switched, the top bar offers the way back */
   protected viewing = computed(() => !!this.auth.user()?.viewAs);
-  protected viewAsOptions = signal<ViewAsOption[]>([]);
+  private viewAsOptions = signal<{ users: ViewAsOption[]; roles: string[] }>({ users: [], roles: [] });
+  /** every role with its logins; a role without one offers to make it */
   protected viewAsGroups = computed(() => {
-    const by = new Map<string, ViewAsOption[]>();
-    for (const o of this.viewAsOptions()) if (o.id !== this.auth.user()?.id) by.set(o.role, [...(by.get(o.role) ?? []), o]);
-    return [...by.entries()].map(([role, users]) => ({ role, users }));
+    const { users, roles } = this.viewAsOptions();
+    return roles.map((role) => ({ role, users: users.filter((u) => u.role === role && u.id !== this.auth.user()?.id) }));
   });
 
   protected navOpen = signal(false);
@@ -107,7 +107,7 @@ export class Shell {
 
   /** the logins to preview, loaded once for an Admin */
   protected loadViewAs() {
-    if (this.viewAsOptions().length || this.auth.user()?.role !== 'Admin' || this.viewing()) return;
+    if (this.viewAsOptions().roles.length || this.auth.user()?.role !== 'Admin' || this.viewing()) return;
     this.auth.viewAsOptions().subscribe({ next: (o) => this.viewAsOptions.set(o), error: () => {} });
   }
 

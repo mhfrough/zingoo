@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, inject, input, signal } from '@angular/core';
 import { AuthService } from '../../core/auth.service';
 import { Lookup, LookupList, SettingsStore } from '../../core/settings.store';
 import { errorText } from '../../shared/errors';
@@ -23,6 +23,7 @@ const LINES = ['origin', 'ocean', 'insurance', 'destination', 'duty'];
   imports: [Btn, DataTable, LookupForm, ContainerForm, CurrencyForm],
   template: `
     <div class="stack">
+      @if (section() === 'lists') {
       <div class="two-col">
         <div class="card" data-flush>
           <div class="card__head">
@@ -100,9 +101,11 @@ const LINES = ['origin', 'ocean', 'insurance', 'destination', 'duty'];
         }
       </div>
 
+      }
+      @if (section() === 'investors') {
       <div class="card" data-flush>
         <div class="card__head">
-          <div><h2>Investor accounts</h2><p>Investors and business owners (or both). Each one gets a separate account. Manufacturers and distributors are added under Partners</p></div>
+          <div><h2>Investor accounts</h2><p>Investors and business owners (or both), with company and point of contact. Each one gets a separate account in the books</p></div>
           @if (canEdit()) {
             <button appBtn size="sm" icon="plus" (click)="openLookup('PERSON')">Add investor account</button>
           }
@@ -113,7 +116,9 @@ const LINES = ['origin', 'ocean', 'insurance', 'destination', 'duty'];
             (action)="onLookupAction($event)" />
         </div>
       </div>
+      }
 
+      @if (section() === 'lists') {
       <div class="card" data-flush>
         <div class="card__head">
           <div><h2>Incoterms</h2><p>Which cost lines the seller carries decides the export costing and the posted logistics</p></div>
@@ -139,6 +144,7 @@ const LINES = ['origin', 'ocean', 'insurance', 'destination', 'duty'];
             [loading]="store.currenciesRes.isLoading()" emptyTitle="No currencies" emptyText="Add the first one." (action)="onCurrencyAction($event)" />
         </div>
       </div>
+      }
     </div>
 
     <app-lookup-form [(open)]="lookupOpen" [list]="lookupList()" [entry]="editingLookup()" (saved)="store.reload()" />
@@ -158,6 +164,8 @@ const LINES = ['origin', 'ocean', 'insurance', 'destination', 'duty'];
   `,
 })
 export class SettingsLists {
+  /** which part to show: the pick-lists and currencies, or the investor accounts (their own tab) */
+  readonly section = input<'lists' | 'investors'>('lists');
   protected store = inject(SettingsStore);
   protected auth = inject(AuthService);
   protected canEdit = computed(() => this.auth.can('admin'));

@@ -4,6 +4,7 @@ import { AuthService } from './auth.service';
 import { LoginDto } from './login.dto';
 import { Public } from './public.decorator';
 import { Write } from './roles.decorator';
+import { Role } from '../common/enums';
 
 @ApiTags('auth')
 @Controller('auth')
@@ -19,14 +20,21 @@ export class AuthController {
 
   @Get('view-as')
   @Write('admin')
-  @ApiOperation({ summary: 'Logins an Admin can preview the app as' })
+  @ApiOperation({ summary: 'Logins and roles an Admin can switch to' })
   viewAsOptions() {
     return this.auth.viewAsOptions();
   }
 
+  @Post('switch-role/:role')
+  @Write('admin')
+  @ApiOperation({ summary: 'Switch to a login of a role (one is made when the role has none)' })
+  switchRole(@Request() req: any, @Param('role') role: Role) {
+    return this.auth.switchToRole(req.user.id, role);
+  }
+
   @Post('view-as/:id')
   @Write('admin')
-  @ApiOperation({ summary: 'A read-only token to see the app as another login' })
+  @ApiOperation({ summary: 'Switch to another login without signing in again' })
   viewAs(@Request() req: any, @Param('id', ParseUUIDPipe) id: string) {
     return this.auth.viewAs(req.user.id, id);
   }

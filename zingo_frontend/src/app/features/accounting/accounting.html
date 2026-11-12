@@ -204,7 +204,7 @@
   </app-tabs>
 </div>
 
-<app-accounting-doc-form [(open)]="docOpen" [doc]="editingDoc()" [kind]="docKind()" [categories]="docCategories()"
+<app-expense-bill-form [(open)]="billOpen" [doc]="editingDoc()" [categories]="expenseCats.value()?.map(c => c.name) ?? []"
   [currencies]="currencies.value() ?? []" (saved)="reload()" />
 <app-income-invoice-form [(open)]="incomeOpen" [doc]="editingDoc()" [categories]="incomeCats.value()?.map(c => c.name) ?? []"
   [currencies]="currencies.value() ?? []" (saved)="reload()" />

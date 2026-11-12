@@ -268,7 +268,13 @@ export class PostingService implements OnModuleInit {
             ...this.pair(a.date, 'Accounting', a.refNo, `Income invoice · ${a.party}`, ACC.AR, `Income · ${a.category}`, round2(Number(a.amount) - tax), extra),
             ...(tax > 0 ? this.pair(a.date, 'Accounting', a.refNo, `Sales tax on invoice · ${a.party}`, ACC.AR, 'Sales Tax Payable', tax, extra) : []),
           ]
-        : this.pair(a.date, 'Accounting', a.refNo, `Supplier bill · ${a.party}`, `Expense · ${a.category}`, ACC.AP, a.amount, extra);
+        : [
+            ...this.pair(a.date, 'Accounting', a.refNo, `Supplier bill · ${a.party}`, `Expense · ${a.category}`, ACC.AP, a.amount, extra),
+            // withholding kept back from the supplier is still part of the cost, owed to the tax authority
+            ...(Number(a.whtAmount) > 0
+              ? this.pair(a.date, 'Accounting', a.refNo, `Withholding on bill · ${a.party}`, `Expense · ${a.category}`, 'Withholding Tax Payable', Number(a.whtAmount), extra)
+              : []),
+          ];
     }
     await this.ledger.replace(em, 'ACC_DOC', id, rows);
     // payments against it only count while the document itself is approved

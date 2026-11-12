@@ -27,6 +27,9 @@ const LIST_TEXT: Record<LookupList, { word: string; use: string; code: string; m
   REPAY_FREQUENCY: { word: 'repayment frequency', use: 'Offered on a loan that is repaid in installments.', code: 'Name', meaning: 'Meaning' },
   ADVANCE_PURPOSE: { word: 'advance purpose', use: 'Offered on every advance.', code: 'Name', meaning: 'Meaning' },
   SETTLEMENT_METHOD: { word: 'settlement method', use: 'How an advance is expected to be settled. Offered on every advance.', code: 'Name', meaning: 'Meaning' },
+  BILL_TYPE: { word: 'bill type', use: 'The first choice on every bill / expense. The standard types ask for their own extra fields.', code: 'Name', meaning: 'Meaning' },
+  BILL_TREATMENT: { word: 'accounting treatment', use: 'How a bill is treated (expense, inventory, asset, prepaid). A label for now.', code: 'Name', meaning: 'Meaning' },
+  APPROVER: { word: 'approver', use: 'Offered as "Approved by" on every bill. The two signatures still decide.', code: 'Name', meaning: 'Role or contact' },
   DELIVERY_STATUS: { word: 'delivery status', use: 'Offered on every income invoice: where the goods are (dispatched, delivered, accepted ...).', code: 'Name', meaning: 'Meaning' },
   BANK_ACCOUNT: { word: 'bank or cash account', use: 'The account that took or paid the money. It is recorded on the entry; the books keep one Cash & Bank account.', code: 'Name', meaning: 'Details' },
 };

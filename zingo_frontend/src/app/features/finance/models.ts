@@ -180,6 +180,21 @@ export interface AccountingDoc {
   taxAmount?: number;
   sellerCosts?: Record<string, number>;
   costOfGoods?: number;
+  // expense bill details
+  billType?: string;
+  billDetails?: Record<string, string>;
+  grossAmount?: number;
+  billTax?: number;
+  billWht?: number;
+  whtAmount?: number;
+  treatment?: string;
+  allocations?: { stream: string; amount: number }[];
+  paymentMethod?: string;
+  approver?: string;
+  costCenter?: string;
+  projectRef?: string;
+  createdBy?: string;
+  attachmentId?: string | null;
   signatures: string[];
   requiredSignatures: number;
   needsApproval: boolean;

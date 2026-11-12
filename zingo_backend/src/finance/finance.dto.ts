@@ -101,6 +101,12 @@ export class SignDto {
   @IsIn(['A', 'B']) seat: 'A' | 'B';
 }
 
+/** A part of a bill put on one stream (cost center), in the bill currency. */
+export class AllocationDto {
+  @IsString() @IsNotEmpty() @MaxLength(80) stream: string;
+  @IsNumber() @Min(0) amount: number;
+}
+
 /** One SKU line of an income invoice. */
 export class InvoiceLineDto {
   @IsUUID() productId: string;
@@ -134,6 +140,21 @@ export class CreateAccountingDto {
   @IsOptional() @IsNumber() @Min(0) @Max(100) salesTaxPct?: number;
   @IsOptional() @IsNumber() @Min(0) @Max(100) whtPct?: number;
   @IsOptional() @IsObject() sellerCosts?: Record<string, number>;
+  // expense bill
+  @IsOptional() @IsString() @MaxLength(60) billType?: string;
+  @IsOptional() @IsObject() billDetails?: Record<string, string>;
+  /** gross bill amount in the bill currency; with it the amount owed is gross + tax - withholding */
+  @IsOptional() @IsNumber() @Min(0) grossAmount?: number;
+  @IsOptional() @IsNumber() @Min(0) billTax?: number;
+  @IsOptional() @IsNumber() @Min(0) billWht?: number;
+  @IsOptional() @IsString() @MaxLength(60) treatment?: string;
+  @IsOptional() @IsArray() @ArrayMaxSize(12) @ValidateNested({ each: true }) @Type(() => AllocationDto) allocations?: AllocationDto[];
+  @IsOptional() @IsString() @MaxLength(30) paymentMethod?: string;
+  @IsOptional() @IsString() @MaxLength(60) approver?: string;
+  @IsOptional() @IsString() @MaxLength(80) costCenter?: string;
+  @IsOptional() @IsString() @MaxLength(100) projectRef?: string;
+  @IsOptional() @IsString() @MaxLength(120) createdBy?: string;
+  @IsOptional() @IsUUID() attachmentId?: string;
   @IsOptional() @IsString() currency?: string;
   /** PKR per 1 unit of the currency; must be 1 for PKR */
   @IsOptional() @IsNumber() @Min(0.000001) fxRate?: number;

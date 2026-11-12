@@ -1,10 +1,10 @@
-import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ConflictException, Injectable, NotFoundException, OnApplicationBootstrap } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Subject } from 'rxjs';
 import { EntityManager, Repository } from 'typeorm';
 import { LookupsService } from './lookups.service';
 import { Account, Category, ContainerType, Currency, Lookup, Setting } from './setup.entities';
-import { DEFAULT_SETTINGS } from './setup.constants';
+import { DEFAULT_SETTINGS, STARTER_ACCOUNTS } from './setup.constants';
 
 @Injectable()
 export class SettingsService {
@@ -46,8 +46,18 @@ export class SettingsService {
 }
 
 @Injectable()
-export class AccountsService {
+export class AccountsService implements OnApplicationBootstrap {
   constructor(@InjectRepository(Account) private readonly repo: Repository<Account>) {}
+
+  /** a database made before an account was added to the starting chart gets it (when its code is still free) */
+  async onApplicationBootstrap() {
+    const have = await this.repo.find();
+    if (!have.length) return; // a new database is filled by the seed
+    const names = new Set(have.map((a) => a.name));
+    const codes = new Set(have.map((a) => a.code));
+    const missing = STARTER_ACCOUNTS.filter(([code, name]) => !names.has(name) && !codes.has(code));
+    if (missing.length) await this.repo.save(missing.map(([code, name, type]) => this.repo.create({ code, name, type, active: true })));
+  }
 
   list() {
     return this.repo.find({ order: { code: 'ASC' } });

@@ -849,5 +849,35 @@ ok('a delivery status not in Settings -> 400', (await call(T.finance, 'POST', '/
 ok('cartons use the SKU packs per carton', (await call(T.finance, 'POST', '/accounting-documents', ivBody({ lines: [{ productId: ivP.id, qty: 1, uom: 'Cartons', sellPrice: 1 }], discount: 0, salesTaxPct: 0 }))).json?.lines?.[0]?.packs === (ivP.packsPerCarton || 24));
 ok('an old-style income document without lines still works', (await call(T.finance, 'POST', '/accounting-documents', { kind: 'Income', date: ciDay, category: ivCat, party: 'Plain Pat', foreignAmount: 500 })).json?.amount === 500);
 
+// ── universal bill: type, gross + tax - withholding, split across streams, approval before payment ──
+const blCat = ((await call(T.owner, 'GET', '/categories?kind=EXPENSE')).json ?? [])[0]?.name;
+const blStreams = ((await call(T.owner, 'GET', '/categories?kind=COST_CENTER')).json ?? []).map((c) => c.name);
+const blBody = (o = {}) => ({
+  kind: 'Expense', billType: 'Marketing Expense', date: ciDay, party: 'Agency Amy', category: blCat, grossAmount: 10000, billTax: 1600, billWht: 500,
+  treatment: 'Operating expense', note: 'Eid campaign', billDetails: { 'Campaign name': 'Eid push' }, approver: 'Mudassir', paymentMethod: 'Bank Transfer',
+  receivingAccount: 'Zen Foods Bank Account', costCenter: blStreams[0], projectRef: 'CMP-1', createdBy: 'Finance Controller',
+  allocations: [{ stream: blStreams[0], amount: 6000 }, { stream: blStreams[1], amount: 4000 }], ...o,
+});
+const blJ0 = ((await call(T.finance, 'GET', '/reports/journal?period=all')).json ?? []).length;
+const bl = await call(T.finance, 'POST', '/accounting-documents', blBody());
+ok('a bill owes gross + tax - withholding', bl.status === 201 && bl.json?.amount === 11100 && bl.json?.whtAmount === 500 && bl.json?.allocations?.length === 2);
+ok('it keeps type, treatment, approver and the type details', bl.json?.billType === 'Marketing Expense' && bl.json?.treatment === 'Operating expense' && bl.json?.approver === 'Mudassir' && bl.json?.billDetails?.['Campaign name'] === 'Eid push');
+ok('a bill waits for approval and cannot be paid yet', bl.json?.approved === false && (await call(T.finance, 'POST', `/accounting-documents/${bl.json.id}/settle`, { date: ciDay, amount: 100, method: 'Cash' })).status === 400);
+ok('nothing posts before approval', ((await call(T.finance, 'GET', '/reports/journal?period=all')).json ?? []).length === blJ0);
+ok('streams that do not add up to the gross -> 400', (await call(T.finance, 'POST', '/accounting-documents', blBody({ allocations: [{ stream: blStreams[0], amount: 100 }] }))).status === 400);
+ok('an unknown stream -> 400', (await call(T.finance, 'POST', '/accounting-documents', blBody({ allocations: [{ stream: 'Moon base', amount: 10000 }] }))).status === 400);
+ok('an approver not in Settings -> 400', (await call(T.finance, 'POST', '/accounting-documents', blBody({ approver: 'Stranger' }))).status === 400);
+ok('a bill type not in Settings -> 400', (await call(T.finance, 'POST', '/accounting-documents', blBody({ billType: 'Mystery' }))).status === 400);
+ok('withholding over gross + tax -> 400', (await call(T.finance, 'POST', '/accounting-documents', blBody({ billWht: 99999 }))).status === 400);
+const blDraft = await call(T.finance, 'POST', '/accounting-documents', blBody({ status: 'Draft', allocations: [{ stream: blStreams[0], amount: 1 }] }));
+ok('a draft bill may be unfinished and posts nothing', blDraft.status === 201 && blDraft.json?.status === 'Draft');
+await call(T.finance, 'POST', `/accounting-documents/${bl.json.id}/sign`, { seat: 'A' });
+await call(T.partner, 'POST', `/accounting-documents/${bl.json.id}/sign`, { seat: 'B' });
+const blJ = ((await call(T.finance, 'GET', '/reports/journal?period=all')).json ?? []).filter((l) => l.reference === bl.json.refNo);
+ok('once approved: expense 11,600, payable 11,100, withholding payable 500',
+  blJ.filter((l) => l.account === `Expense · ${blCat}`).reduce((n, l) => n + l.debit, 0) === 11600
+  && blJ.some((l) => l.account === 'Accounts Payable' && l.credit === 11100) && blJ.some((l) => l.account === 'Withholding Tax Payable' && l.credit === 500));
+ok('then it can be paid', (await call(T.finance, 'POST', `/accounting-documents/${bl.json.id}/settle`, { date: ciDay, amount: 11100, method: 'Bank Transfer' })).status === 201);
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

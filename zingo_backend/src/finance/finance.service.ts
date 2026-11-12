@@ -408,6 +408,7 @@ export class AccountingService {
     private readonly posting: PostingService,
     private readonly settings: SettingsService,
     private readonly lookups: LookupsService,
+    private readonly files: AttachmentsService,
   ) {}
 
   private async paidOf(em: EntityManager, id: string): Promise<number> {
@@ -462,9 +463,23 @@ export class AccountingService {
   private async amounts(em: EntityManager, v: {
     kind: string; foreignAmount?: number; currency?: string; fxRate?: number; lines?: InvoiceLineDto[]; discount?: number;
     salesTaxPct?: number; sellerCosts?: Record<string, number>; status?: string;
+    grossAmount?: number; billTax?: number; billWht?: number; allocations?: { stream: string; amount: number }[];
   }) {
     const draft = v.status === 'Draft';
     const costs = Object.fromEntries(AccountingService.COST_KEYS.map((k) => [k, round2(Math.max(0, Number(v.sellerCosts?.[k]) || 0))]));
+    // an expense bill with a gross amount: owed = gross + tax - withholding; the gross is split across streams
+    if (v.kind === 'Expense' && v.grossAmount !== undefined) {
+      const gross = round2(v.grossAmount);
+      const tax = round2(v.billTax ?? 0);
+      const wht = round2(v.billWht ?? 0);
+      if (wht > gross + tax) throw new BadRequestException('The withholding cannot be more than the gross amount plus tax.');
+      const allocations = await this.allocations(em, v.allocations ?? [], gross, draft);
+      const m = await this.money(em, { foreignAmount: round2(gross + tax - wht), currency: v.currency, fxRate: v.fxRate }, draft);
+      return {
+        ...m, lines: [], discount: 0, taxAmount: round2(tax * m.fxRate), costOfGoods: 0, sellerCosts: costs,
+        grossAmount: gross, billTax: tax, billWht: wht, whtAmount: round2(wht * m.fxRate), allocations,
+      };
+    }
     if (v.kind !== 'Income' || !v.lines?.length) {
       if (v.foreignAmount === undefined) throw new BadRequestException('Enter the amount, or add the SKU lines.');
       return { ...(await this.money(em, { foreignAmount: v.foreignAmount, currency: v.currency, fxRate: v.fxRate }, draft)), lines: [], discount: 0, taxAmount: 0, costOfGoods: 0, sellerCosts: costs };
@@ -490,10 +505,44 @@ export class AccountingService {
     };
   }
 
-  /** the Settings lists an invoice picks from */
-  private async checkLists(em: EntityManager, d: { receivingAccount?: string; deliveryStatus?: string }) {
+  /** a bill's split across streams: known cost centers, each once, adding up to the gross amount */
+  private async allocations(em: EntityManager, list: { stream: string; amount: number }[], gross: number, draft: boolean) {
+    const seen = new Set<string>();
+    const out: { stream: string; amount: number }[] = [];
+    for (const a of list) {
+      if (seen.has(a.stream)) throw new BadRequestException(`Stream "${a.stream}" is listed twice.`);
+      seen.add(a.stream);
+      await this.checkStream(em, a.stream);
+      out.push({ stream: a.stream, amount: round2(a.amount) });
+    }
+    const sum = round2(out.reduce((n, a) => n + a.amount, 0));
+    if (!draft && out.length && Math.abs(sum - gross) > 0.02) {
+      throw new BadRequestException(`The streams add up to ${sum} but the gross bill is ${gross}. Make them equal.`);
+    }
+    return out;
+  }
+
+  private async checkStream(em: EntityManager, name: string) {
+    const [row] = await em.query(`SELECT 1 FROM categories WHERE kind = 'COST_CENTER' AND name = $1`, [name]);
+    if (!row) throw new BadRequestException(`Unknown stream "${name}".`);
+  }
+
+  /** the Settings lists an invoice or a bill picks from */
+  private async checkLists(em: EntityManager, d: {
+    receivingAccount?: string; deliveryStatus?: string; billType?: string; treatment?: string; approver?: string; paymentMethod?: string; costCenter?: string;
+  }) {
     if (d.receivingAccount) await this.lookups.assertActive('BANK_ACCOUNT', d.receivingAccount, em);
     if (d.deliveryStatus) await this.lookups.assertActive('DELIVERY_STATUS', d.deliveryStatus, em);
+    if (d.billType) await this.lookups.assertActive('BILL_TYPE', d.billType, em);
+    if (d.treatment) await this.lookups.assertActive('BILL_TREATMENT', d.treatment, em);
+    if (d.approver) await this.lookups.assertActive('APPROVER', d.approver, em);
+    if (d.paymentMethod) await this.lookups.assertActive('PAY_METHOD', d.paymentMethod, em);
+    if (d.costCenter) await this.checkStream(em, d.costCenter);
+  }
+
+  /** a bill type's own fields: short text only */
+  private cleanDetails(d?: Record<string, string>) {
+    return Object.fromEntries(Object.entries(d ?? {}).slice(0, 6).map(([k, v]) => [String(k).slice(0, 60), String(v ?? '').trim().slice(0, 150)]));
   }
 
   create(dto: CreateAccountingDto, opts: { refNo?: string } = {}) {
@@ -501,10 +550,12 @@ export class AccountingService {
       const s = await this.settings.get(em);
       await this.checkLists(em, dto);
       const refNo = opts.refNo ?? (await nextRef(em, AccountingDocument, s.docPrefixes['accounting'] ?? 'ACC', 3));
-      const { foreignAmount: _f, currency: _c, fxRate: _x, lines: _l, discount: _d, sellerCosts: _s, ...rest } = dto;
+      const { foreignAmount: _f, currency: _c, fxRate: _x, lines: _l, discount: _d, sellerCosts: _s, grossAmount: _g, billTax: _t, billWht: _w, allocations: _a, ...rest } = dto;
       const a = await em.save(em.create(AccountingDocument, {
         ...rest, ...(await this.amounts(em, dto)), refNo, invoiceNo: dto.invoiceNo?.trim() || refNo, dueDate: dto.dueDate ?? dto.date,
+        billDetails: this.cleanDetails(dto.billDetails),
       }));
+      if (dto.attachmentId) await this.files.attach(dto.attachmentId, 'ACCOUNTING', a.id, em);
       await this.posting.syncAccountingDoc(em, a.id);
       return this.findOne(a.id, em);
     });
@@ -519,18 +570,25 @@ export class AccountingService {
       if (a.kind === 'Expense' && st.approved) throw new BadRequestException('Approved expense bills are locked.');
       if (a.status === 'Issued' && dto.status === 'Draft') throw new BadRequestException('An issued invoice cannot go back to draft.');
       await this.checkLists(em, dto);
-      const { foreignAmount, currency, fxRate, lines, discount, sellerCosts, ...rest } = dto;
-      const patch: Partial<AccountingDocument> = { ...rest };
+      const { foreignAmount, currency, fxRate, lines, discount, sellerCosts, grossAmount, billTax, billWht, allocations, ...rest } = dto;
+      const patch: Partial<AccountingDocument> = { ...rest } as Partial<AccountingDocument>;
       if (dto.invoiceNo !== undefined) patch.invoiceNo = dto.invoiceNo.trim() || a.refNo;
-      const money = [foreignAmount, currency, fxRate, lines, discount, dto.salesTaxPct, sellerCosts, dto.status].some((x) => x !== undefined);
+      if (dto.billDetails !== undefined) patch.billDetails = this.cleanDetails(dto.billDetails);
+      const money = [foreignAmount, currency, fxRate, lines, discount, dto.salesTaxPct, sellerCosts, dto.status, grossAmount, billTax, billWht, allocations].some((x) => x !== undefined);
       if (money) {
+        const isBill = a.kind === 'Expense' && (grossAmount !== undefined || Number(a.grossAmount) > 0);
         Object.assign(patch, await this.amounts(em, {
           kind: a.kind, status: dto.status ?? a.status,
           foreignAmount: foreignAmount ?? Number(a.foreignAmount ?? a.amount), currency: currency ?? a.currency, fxRate: fxRate ?? (currency ? undefined : Number(a.fxRate)),
           lines: lines ?? (a.lines as InvoiceLineDto[]), discount: discount ?? Number(a.discount), salesTaxPct: dto.salesTaxPct ?? Number(a.salesTaxPct),
           sellerCosts: sellerCosts ?? a.sellerCosts,
+          ...(isBill ? {
+            grossAmount: grossAmount ?? Number(a.grossAmount), billTax: billTax ?? Number(a.billTax), billWht: billWht ?? Number(a.billWht),
+            allocations: allocations ?? a.allocations,
+          } : {}),
         }));
       }
+      if (dto.attachmentId && dto.attachmentId !== a.attachmentId) await this.files.attach(dto.attachmentId, 'ACCOUNTING', id, em);
       await em.save(em.merge(AccountingDocument, a, patch));
       await em.delete(Approval, { docType: 'ACCOUNTING', docId: id });
       await this.posting.syncAccountingDoc(em, id);

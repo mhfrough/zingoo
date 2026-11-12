@@ -10,8 +10,8 @@ import {
 } from '../../ui';
 import { FinanceApi } from '../finance/finance.api';
 import { AccountingDoc, CashBookRow, JournalLine, OpenItem, Settlement } from '../finance/models';
-import { AccountingDocForm } from './accounting-doc-form';
 import { IncomeInvoiceForm } from './income-invoice-form';
+import { ExpenseBillForm } from './expense-bill-form';
 import { SettleForm } from './settle-form';
 
 /** `YYYY-MM` -> "Nov 2026" for the period selector */
@@ -39,7 +39,7 @@ interface OpenRow extends OpenItem {
   selector: 'app-accounting',
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [
-    Btn, DataTable, Kpi, PageHeader, Tag, Tabs, TabPanel, AccountingDocForm, IncomeInvoiceForm, SettleForm,
+    Btn, DataTable, Kpi, PageHeader, Tag, Tabs, TabPanel, IncomeInvoiceForm, ExpenseBillForm, SettleForm,
   ],
   templateUrl: './accounting.html',
   styleUrl: './accounting.css',
@@ -220,14 +220,10 @@ export class Accounting {
   protected cashRows = computed(() => [...(this.cashBook.value() ?? [])].reverse());
 
   // ───────────── forms ─────────────
-  protected docOpen = signal(false);
   protected docKind = signal<'Income' | 'Expense'>('Income');
   protected editingDoc = signal<AccountingDoc | null>(null);
   protected settleOpen = signal(false);
   protected settling = signal<AccountingDoc | null>(null);
-
-  protected docCategories = computed(() =>
-    ((this.editingDoc()?.kind ?? this.docKind()) === 'Income' ? this.incomeCats.value() : this.expenseCats.value())?.map((c) => c.name) ?? []);
 
   protected reload() {
     this.tick.update((n) => n + 1);
@@ -235,12 +231,13 @@ export class Accounting {
 
   /** an income invoice opens the step-by-step invoice; an expense bill the short form */
   protected incomeOpen = signal(false);
+  protected billOpen = signal(false);
 
   protected openDoc(kind: 'Income' | 'Expense', doc: AccountingDoc | null = null) {
     this.docKind.set(kind);
     this.editingDoc.set(doc);
     if (kind === 'Income') this.incomeOpen.set(true);
-    else this.docOpen.set(true);
+    else this.billOpen.set(true);
   }
 
   protected openSettle(doc: AccountingDoc) {

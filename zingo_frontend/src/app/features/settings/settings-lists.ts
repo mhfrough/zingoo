@@ -188,6 +188,9 @@ export class SettingsLists {
     { list: 'SETTLEMENT_METHOD', title: 'Settlement method', sub: 'How an advance is expected to be settled', add: 'Add method' },
     { list: 'BANK_ACCOUNT', title: 'Bank and cash accounts', sub: 'Which account took or paid the money. A label on each entry', add: 'Add account' },
     { list: 'DELIVERY_STATUS', title: 'Delivery statuses', sub: 'Dispatch and acceptance of an income invoice', add: 'Add status' },
+    { list: 'BILL_TYPE', title: 'Bill types', sub: 'The first choice on every bill / expense', add: 'Add bill type' },
+    { list: 'BILL_TREATMENT', title: 'Accounting treatments', sub: 'How a bill is treated. A label for now: bills post as expenses', add: 'Add treatment' },
+    { list: 'APPROVER', title: 'Approvers', sub: 'Who approves a bill. The two signatures still decide', add: 'Add approver' },
   ];
   protected simpleRows = computed(() => {
     const out: Partial<Record<LookupList, Lookup[]>> = {};

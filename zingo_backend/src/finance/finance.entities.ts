@@ -292,6 +292,61 @@ export class AccountingDocument extends DocEntity {
   /** cost of the goods on the lines, PKR (profit estimate only) */
   @Column({ type: 'decimal', precision: 14, scale: 2, default: 0, transformer: numeric })
   costOfGoods: number;
+
+  // ───── expense bill details (the universal bill form) ─────
+  /** Supplier / Manufacturing, Marketing Expense ... (Settings list) */
+  @Column({ type: 'varchar', length: 60, default: '' })
+  billType: string;
+
+  /** the fields that belong to the bill type, e.g. { 'Campaign name': 'Eid push' } */
+  @Column({ type: 'jsonb', default: () => "'{}'" })
+  billDetails: Record<string, string>;
+
+  /** gross bill amount before tax and withholding, in the bill currency */
+  @Column({ type: 'decimal', precision: 14, scale: 2, default: 0, transformer: numeric })
+  grossAmount: number;
+
+  /** sales tax / other tax on the bill, in the bill currency */
+  @Column({ type: 'decimal', precision: 14, scale: 2, default: 0, transformer: numeric })
+  billTax: number;
+
+  /** withholding deducted from the payment, in the bill currency (owed to the tax authority, not the supplier) */
+  @Column({ type: 'decimal', precision: 14, scale: 2, default: 0, transformer: numeric })
+  billWht: number;
+
+  /** the withholding in PKR, posted to Withholding Tax Payable */
+  @Column({ type: 'decimal', precision: 14, scale: 2, default: 0, transformer: numeric })
+  whtAmount: number;
+
+  /** accounting treatment (Settings list). A label for now: every bill posts as an expense */
+  @Column({ type: 'varchar', length: 60, default: '' })
+  treatment: string;
+
+  /** the gross amount split across streams (cost centers), in the bill currency */
+  @Column({ type: 'jsonb', default: () => "'[]'" })
+  allocations: { stream: string; amount: number }[];
+
+  /** how it will be paid once approved (Settings payment methods) */
+  @Column({ type: 'varchar', length: 30, default: '' })
+  paymentMethod: string;
+
+  /** who approves it (Settings list); the signatures still decide */
+  @Column({ type: 'varchar', length: 60, default: '' })
+  approver: string;
+
+  /** cost center / department */
+  @Column({ type: 'varchar', length: 80, default: '' })
+  costCenter: string;
+
+  @Column({ type: 'varchar', length: 100, default: '' })
+  projectRef: string;
+
+  @Column({ type: 'varchar', length: 120, default: '' })
+  createdBy: string;
+
+  /** the supporting bill or receipt */
+  @Column({ type: 'uuid', nullable: true })
+  attachmentId: string | null;
 }
 
 /** One SKU line of an income invoice. */

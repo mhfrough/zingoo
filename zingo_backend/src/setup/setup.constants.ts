@@ -62,7 +62,7 @@ export const STARTER_ACCOUNTS: [string, string, AccountType][] = [
   ['2000', 'Accounts Payable', 'Liability'], ['2050', 'Production Cost Clearing', 'Liability'],
   ['2100', 'Manufacturer Payable', 'Liability'], ['2150', 'Customer Advances', 'Liability'],
   ['2160', 'Distributor Credit Payable', 'Liability'], ['2200', 'Export Costs Payable', 'Liability'],
-  ['2300', 'Partner Loans', 'Liability'], ['2400', 'Sales Tax Payable', 'Liability'],
+  ['2300', 'Partner Loans', 'Liability'], ['2400', 'Sales Tax Payable', 'Liability'], ['2410', 'Withholding Tax Payable', 'Liability'],
   ['3000', 'Owner Equity', 'Equity'], ['3100', 'Opening Balance Equity', 'Equity'],
   ['4000', 'Sales Revenue', 'Revenue'], ['4010', 'Sales Returns & Allowances', 'Revenue'],
   ['4100', 'Export Sales Revenue', 'Revenue'], ['4200', 'Other Income', 'Revenue'], ['4300', 'FX Gain', 'Revenue'],
@@ -87,7 +87,7 @@ export const CAPITAL_SOURCE_DEFAULTS: { code: string; description: string; liabi
  * Starting entries of the simple pick-lists behind the loan and advance forms (the client prototype's choices),
  * plus the company's bank and cash accounts. Every one is editable on Settings & Data.
  */
-export const SIMPLE_LIST_DEFAULTS: Record<'LOAN_TENURE' | 'REPAY_PLAN' | 'REPAY_FREQUENCY' | 'ADVANCE_PURPOSE' | 'SETTLEMENT_METHOD' | 'BANK_ACCOUNT' | 'DELIVERY_STATUS', string[]> = {
+export const SIMPLE_LIST_DEFAULTS: Record<'LOAN_TENURE' | 'REPAY_PLAN' | 'REPAY_FREQUENCY' | 'ADVANCE_PURPOSE' | 'SETTLEMENT_METHOD' | 'BANK_ACCOUNT' | 'DELIVERY_STATUS' | 'BILL_TYPE' | 'BILL_TREATMENT' | 'APPROVER', string[]> = {
   LOAN_TENURE: ['Short-term (up to 12 months)', 'Long-term (over 12 months)', 'On demand'],
   REPAY_PLAN: ['Lump sum', 'Installments', 'On demand'],
   REPAY_FREQUENCY: ['Monthly', 'Quarterly', 'Half-yearly', 'Custom'],
@@ -95,6 +95,9 @@ export const SIMPLE_LIST_DEFAULTS: Record<'LOAN_TENURE' | 'REPAY_PLAN' | 'REPAY_
   SETTLEMENT_METHOD: ['Cash repayment', 'Expense adjustment', 'Invoice settlement', 'Mixed / partial'],
   BANK_ACCOUNT: ['Zen Foods Bank Account', 'Cash in Hand', 'Manufacturing Account', 'Distribution Account'],
   DELIVERY_STATUS: ['Not dispatched', 'Dispatched', 'Delivered', 'Accepted by customer', 'Partly returned', 'Returned'],
+  BILL_TYPE: ['Supplier / Manufacturing', 'Internal Expense', 'Marketing Expense', 'Operating Expense', 'Distribution Expense', 'Export Expense', 'Asset Purchase', 'Prepaid Expense'],
+  BILL_TREATMENT: ['Operating expense', 'Inventory / stock', 'Fixed asset', 'Prepaid expense'],
+  APPROVER: ['Zeeshan', 'Ahsan', 'Mudassir', 'Mansoor', 'Joint Approval'],
 };
 
 /** Starting types of investment stream. A depreciable type carries a depreciation rate. Editable on Settings & Data. */

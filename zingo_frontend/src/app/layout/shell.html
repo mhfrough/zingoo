@@ -38,6 +38,28 @@
       </div>
 
       <span class="topbar__spacer"></span>
+      @if (viewing()) {
+        <div class="view-as" data-viewing role="status">
+          <app-icon name="eye" [size]="16" />
+          <span>Viewing as <strong>{{ auth.user()?.name }}</strong> · read-only</span>
+          <button type="button" class="btn" data-size="sm" (click)="backToOwn()">Back to my view</button>
+        </div>
+      } @else if (auth.user()?.role === 'Admin') {
+        <label class="view-as">
+          <app-icon name="eye" [size]="16" />
+          <span class="sr-only">View the app as</span>
+          <select #va (focus)="loadViewAs()" (pointerdown)="loadViewAs()" (change)="switchTo(va)" aria-label="View the app as another role">
+            <option value="">View as…</option>
+            @for (g of viewAsGroups(); track g.role) {
+              <optgroup [label]="g.role">
+                @for (u of g.users; track u.id) {
+                  <option [value]="u.id">{{ u.name }}{{ u.distributorName ? ' · ' + u.distributorName : '' }}</option>
+                }
+              </optgroup>
+            }
+          </select>
+        </label>
+      }
       @if (conn) {
         <app-connection-status [status]="conn()" />
       }

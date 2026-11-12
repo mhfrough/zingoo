@@ -273,6 +273,41 @@
     }
   }
 
+  /* "View as": an Admin previews the app as another login, without signing in again */
+  .view-as {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-2);
+    min-inline-size: 0;
+    color: var(--text-2);
+    font-size: var(--text-sm);
+
+    & select {
+      max-inline-size: 14rem;
+      block-size: var(--btn-h-sm);
+      padding-inline: var(--space-2);
+      border: 1px solid var(--control-line);
+      border-radius: var(--radius-md);
+      background-color: var(--surface-field);
+      color: var(--text);
+      font: inherit;
+    }
+
+    &[data-viewing] {
+      padding: var(--space-1) var(--space-1) var(--space-1) var(--space-3);
+      border: 1px solid var(--tone-warning-line);
+      border-radius: var(--radius-md);
+      background: var(--tone-warning-bg);
+      color: var(--tone-warning-fg);
+    }
+
+    @media (max-width: 40rem) {
+      & > span:not(.sr-only) {
+        display: none;
+      }
+    }
+  }
+
   /* connection pill in the top bar: green Live, amber Connecting (pulsing dot), red Offline */
   .conn {
     --_bg: var(--tone-neutral-bg);

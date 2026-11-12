@@ -9,8 +9,10 @@ import {
 import { filter, map } from 'rxjs';
 import { AuthService } from '../core/auth.service';
 import { SettingsStore } from '../core/settings.store';
-import { NAV, NAV_GROUPS, visibleNav } from '../portal.config';
-import { CONNECTION_STATUS, ConnectionStatus, IconComponent, Tag } from '../ui';
+import { NAV, NAV_GROUPS, homePath, visibleNav } from '../portal.config';
+import { errorText } from '../shared/errors';
+import { CONNECTION_STATUS, ConnectionStatus, IconComponent, Tag, ToastService } from '../ui';
+import { ViewAsOption } from '../core/auth.service';
 import { prefersReducedMotion } from '../ui/motion';
 
 /** Sidebar + top bar around every portal page. Below 1100px the sidebar is a drawer. */
@@ -28,6 +30,16 @@ export class Shell {
 
   /** realtime connection state for the top bar pill (hidden until the platform layer provides CONNECTION_STATUS) */
   protected conn = inject(CONNECTION_STATUS, { optional: true });
+
+  private toast = inject(ToastService);
+  /** an Admin can preview the app as another login; while previewing, a banner offers the way back */
+  protected viewing = computed(() => !!this.auth.user()?.viewAs);
+  protected viewAsOptions = signal<ViewAsOption[]>([]);
+  protected viewAsGroups = computed(() => {
+    const by = new Map<string, ViewAsOption[]>();
+    for (const o of this.viewAsOptions()) if (o.id !== this.auth.user()?.id) by.set(o.role, [...(by.get(o.role) ?? []), o]);
+    return [...by.entries()].map(([role, users]) => ({ role, users }));
+  });
 
   protected navOpen = signal(false);
   /** page has scrolled under the top bar */
@@ -91,6 +103,28 @@ export class Shell {
       cancelAnimationFrame(frame);
       sub.unsubscribe();
     });
+  }
+
+  /** the logins to preview, loaded once for an Admin */
+  protected loadViewAs() {
+    if (this.viewAsOptions().length || this.auth.user()?.role !== 'Admin' || this.viewing()) return;
+    this.auth.viewAsOptions().subscribe({ next: (o) => this.viewAsOptions.set(o), error: () => {} });
+  }
+
+  protected switchTo(select: HTMLSelectElement) {
+    const id = select.value;
+    select.value = '';
+    if (!id) return;
+    this.auth.viewAs(id).subscribe({
+      // a full reload so every page and store reads with the new login
+      next: (res) => location.assign(homePath(res.user.pages)),
+      error: (err) => this.toast.error(errorText(err)),
+    });
+  }
+
+  protected backToOwn() {
+    this.auth.backToOwn();
+    location.assign('/admin/settings');
   }
 
   protected toTop() {

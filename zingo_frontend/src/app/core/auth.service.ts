@@ -15,6 +15,17 @@ export interface AuthUser {
   /** pages this role may open (from the server) */
   pages?: string[];
   isRoot?: boolean;
+  /** an Admin is previewing the app as this login (read-only) */
+  viewAs?: boolean;
+}
+
+/** a login an Admin can preview the app as */
+export interface ViewAsOption {
+  id: string;
+  name: string;
+  email: string;
+  role: string;
+  distributorName: string | null;
 }
 
 interface LoginResponse {
@@ -24,6 +35,9 @@ interface LoginResponse {
 
 const TOKEN_KEY = 'zg_token';
 const USER_KEY = 'zg_user';
+/** the Admin's own session, kept while previewing another login */
+const OWN_TOKEN_KEY = 'zg_own_token';
+const OWN_USER_KEY = 'zg_own_user';
 
 @Injectable({ providedIn: 'root' })
 export class AuthService {
@@ -55,7 +69,41 @@ export class AuthService {
     );
   }
 
+  /** the logins an Admin can preview the app as */
+  viewAsOptions() {
+    return this.http.get<ViewAsOption[]>(`${environment.apiUrl}/auth/view-as`);
+  }
+
+  /** see the app as another login without signing in again (read-only); the Admin's own session is kept aside */
+  viewAs(userId: string) {
+    return this.http.post<LoginResponse>(`${environment.apiUrl}/auth/view-as/${userId}`, {}).pipe(
+      tap((res) => {
+        if (!localStorage.getItem(OWN_TOKEN_KEY)) {
+          localStorage.setItem(OWN_TOKEN_KEY, this.token ?? '');
+          localStorage.setItem(OWN_USER_KEY, localStorage.getItem(USER_KEY) ?? '');
+        }
+        localStorage.setItem(TOKEN_KEY, res.access_token);
+        localStorage.setItem(USER_KEY, JSON.stringify(res.user));
+        this.user.set(res.user);
+      }),
+    );
+  }
+
+  /** back to the Admin's own view */
+  backToOwn() {
+    const token = localStorage.getItem(OWN_TOKEN_KEY);
+    const user = localStorage.getItem(OWN_USER_KEY);
+    localStorage.removeItem(OWN_TOKEN_KEY);
+    localStorage.removeItem(OWN_USER_KEY);
+    if (!token || !user) return this.logout();
+    localStorage.setItem(TOKEN_KEY, token);
+    localStorage.setItem(USER_KEY, user);
+    this.user.set(this.loadUser());
+  }
+
   logout() {
+    localStorage.removeItem(OWN_TOKEN_KEY);
+    localStorage.removeItem(OWN_USER_KEY);
     localStorage.removeItem(TOKEN_KEY);
     localStorage.removeItem(USER_KEY);
     this.user.set(null);

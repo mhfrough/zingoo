@@ -15,12 +15,17 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
   }
 
   /** Reads the user fresh on every call, so a role change or a disabled account applies at once. */
-  async validate(payload: { sub: string }) {
+  async validate(payload: { sub: string; viewer?: string }) {
     const user = await this.users.findById(payload.sub);
     if (!user || user.status !== 'Active') throw new UnauthorizedException();
+    // a "view as" token: the Admin who opened it must still be an active Admin
+    if (payload.viewer) {
+      const admin = await this.users.findById(payload.viewer);
+      if (!admin || admin.status !== 'Active' || admin.role !== 'Admin') throw new UnauthorizedException();
+    }
     return {
       id: user.id, email: user.email, name: user.name, role: user.role, seat: user.seat,
-      distributorId: user.distributorId,
+      distributorId: user.distributorId, viewAs: payload.viewer ?? null,
     };
   }
 }

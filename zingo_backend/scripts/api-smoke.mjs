@@ -758,5 +758,61 @@ const fuChq = (await ciPost({ funding: 'Shareholder Loan', investors: [ciLine({ 
 ok('a funding whose cheque has not cleared cannot be spent -> 400', (await fuSpend({ fundedById: fuChq.id, amount: 100 })).status === 400);
 ok('a repayment on a waiting cheque -> 400', (await rpPost(fuChq.id, { date: ciDay, amount: 100, kind: 'principal' })).status === 400);
 
+// ── equity: the bank is per investor ──
+const bkEq = (await ciPost({ investors: [ciLine({ party: 'Equity Eli', amount: 1000, bankAccount: 'Cash in Hand' })] })).json?.[0];
+ok('an equity investor line keeps its own bank', bkEq?.bankAccount === 'Cash in Hand');
+ok('a bank that is not in Settings on a line -> 400', (await ciPost({ investors: [ciLine({ party: 'Equity Eli', amount: 1000, bankAccount: 'Offshore' })] })).status === 400);
+
+// ── investor accounts: investor, business owner, or both, with company and point of contact ──
+const iaBoth = await call(T.owner, 'POST', '/lookups', { list: 'PERSON', code: 'Both Bea', flags: { investor: true, owner: true }, meta: { company: 'Bea Holdings', poc: '0300-1234567', junk: 'x' } });
+ok('an investor account can be investor and business owner', iaBoth.status === 201 && iaBoth.json?.flags?.investor && iaBoth.json?.flags?.owner);
+ok('it keeps company and point of contact (and nothing else)', iaBoth.json?.meta?.company === 'Bea Holdings' && iaBoth.json?.meta?.poc === '0300-1234567' && iaBoth.json?.meta?.junk === undefined);
+ok('neither role -> 400', (await call(T.owner, 'POST', '/lookups', { list: 'PERSON', code: 'Nobody Ned', flags: { investor: false, owner: false } })).status === 400);
+ok('an account added without roles is an investor', ((await call(T.owner, 'GET', '/lookups')).json ?? []).find((l) => l.code === 'Ali Khan')?.flags?.investor === true);
+
+// ── manufacturer and distributor: point of contact, contract, terms, several uploads ──
+const pfUpload = async (name) => {
+  const fd = new FormData();
+  fd.append('file', new Blob([Buffer.from('%PDF-1.4 test')], { type: 'application/pdf' }), name);
+  const r = await fetch(BASE + '/attachments', { method: 'POST', headers: { Authorization: `Bearer ${T.owner}` }, body: fd });
+  return r.json();
+};
+const pfA = await pfUpload('contract.pdf');
+const pfB = await pfUpload('licence.pdf');
+const pfFiles = [pfA, pfB].map(({ id, name, mime, size }) => ({ id, name, mime, size }));
+const pfMan = await call(T.owner, 'POST', '/manufacturers', { name: 'Contract Co', poc: 'Hamid', contract: 'MC-7', terms: '30 days, ex-works', files: pfFiles });
+ok('a manufacturer keeps POC, contract, terms and several files', pfMan.status === 201 && pfMan.json?.poc === 'Hamid' && pfMan.json?.contract === 'MC-7' && pfMan.json?.files?.length === 2);
+const pfDist = await call(T.owner, 'POST', '/distributors', { name: 'Contract Dist', region: 'Lahore', poc: 'Zara', contract: 'DC-1', terms: 'Net 30', files: [pfFiles[0]] });
+ok('a file already on another record cannot be reused -> 400', pfDist.status === 400);
+const pfC = await pfUpload('dist.pdf');
+const pfDist2 = await call(T.owner, 'POST', '/distributors', { name: 'Contract Dist', region: 'Lahore', poc: 'Zara', contract: 'DC-1', terms: 'Net 30', files: [{ id: pfC.id, name: pfC.name, mime: pfC.mime, size: pfC.size }] });
+ok('a distributor keeps POC, contract, terms and files', pfDist2.status === 201 && pfDist2.json?.poc === 'Zara' && pfDist2.json?.files?.length === 1);
+
+// ── companies of the group ──
+const coList0 = (await call(T.owner, 'GET', '/companies')).json ?? [];
+ok('there is one primary company to start', coList0.filter((c) => c.primary).length === 1);
+const coNew = await call(T.owner, 'POST', '/companies', { name: 'Zen Exports Ltd', taxNo: '1234567-8' });
+ok('an Admin adds another company', coNew.status === 201 && coNew.json?.primary === false);
+ok('a Finance user cannot add a company -> 403', (await call(T.finance, 'POST', '/companies', { name: 'X' })).status === 403);
+const coOld = coList0.find((c) => c.primary);
+ok('the primary company cannot be deleted -> 400', (await call(T.owner, 'DELETE', `/companies/${coOld.id}`)).status === 400);
+await call(T.owner, 'PATCH', `/companies/${coNew.json.id}`, { primary: true });
+const coList1 = (await call(T.owner, 'GET', '/companies')).json ?? [];
+ok('making another company primary moves the flag', coList1.filter((c) => c.primary).map((c) => c.id).join() === coNew.json.id);
+ok('and renames the business in Settings', (await call(T.owner, 'GET', '/settings')).json?.companyName === 'Zen Exports Ltd');
+await call(T.owner, 'PATCH', `/companies/${coOld.id}`, { primary: true });
+ok('the other company can then be deleted', (await call(T.owner, 'DELETE', `/companies/${coNew.json.id}`)).status === 200);
+
+// ── view as: an Admin previews the app as another login, read-only ──
+const vaOpts = (await call(T.owner, 'GET', '/auth/view-as')).json ?? [];
+const vaDist = vaOpts.find((u) => u.role === 'Distributor');
+ok('an Admin lists the logins to view as', vaOpts.length >= 7 && !!vaDist);
+ok('a Finance user cannot view as -> 403', (await call(T.finance, 'GET', '/auth/view-as')).status === 403);
+const va = await call(T.owner, 'POST', `/auth/view-as/${vaDist.id}`);
+ok('viewing as a distributor gives their role and pages', va.status === 201 && va.json?.user?.role === 'Distributor' && va.json?.user?.viewAs === true);
+const vaT = va.json?.access_token;
+ok('the preview reads what the distributor reads', (await call(vaT, 'GET', '/portal/profile')).status === 200 && (await call(vaT, 'GET', '/products')).status === 403);
+ok('the preview cannot change anything -> 403', (await call(vaT, 'POST', '/portal/requests', {})).status === 403);
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

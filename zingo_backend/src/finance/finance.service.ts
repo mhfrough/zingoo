@@ -420,7 +420,7 @@ export class AccountingService {
     const [st, paid] = await Promise.all([this.posting.accountingState(em, a), this.paidOf(em, a.id)]);
     const due = Math.max(0, round2(Number(a.amount) - paid));
     const noun = a.kind === 'Income' ? ['Collected', 'Receivable'] : ['Paid', 'Payable'];
-    const status = a.status === 'Draft' ? 'Draft' : !st.approved ? 'Awaiting approval' : due < 0.01 ? noun[0] : due < Number(a.amount) ? 'Partially settled' : noun[1];
+    const status = a.status === 'Draft' ? 'Draft' : a.status === 'Rejected' ? 'Rejected' : !st.approved ? 'Awaiting approval' : due < 0.01 ? noun[0] : due < Number(a.amount) ? 'Partially settled' : noun[1];
     return { ...a, paid, due, status, signatures: st.signed, requiredSignatures: st.required, needsApproval: st.needs, approved: st.approved };
   }
 
@@ -568,6 +568,7 @@ export class AccountingService {
       if ((await this.paidOf(em, id)) > 0) throw new BadRequestException('A document with payments is locked to keep the audit trail.');
       const st = await this.posting.accountingState(em, a);
       if (a.kind === 'Expense' && st.approved) throw new BadRequestException('Approved expense bills are locked.');
+      if (a.status === 'Rejected') throw new BadRequestException('A rejected bill is closed. Enter a new one instead.');
       if (a.status === 'Issued' && dto.status === 'Draft') throw new BadRequestException('An issued invoice cannot go back to draft.');
       await this.checkLists(em, dto);
       const { foreignAmount, currency, fxRate, lines, discount, sellerCosts, grossAmount, billTax, billWht, allocations, ...rest } = dto;
@@ -618,6 +619,26 @@ export class AccountingService {
       if (!st.needs || st.approved) throw new BadRequestException('Nothing is waiting for a signature.');
       if (!bypassSeat && !canSign(user, seat)) throw new ForbiddenException(`Your account cannot sign as seat ${seat}.`);
       if (!st.signed.includes(seat)) await em.save(em.create(Approval, { docType: 'ACCOUNTING', docId: id, seat, userId: user.id ?? null }));
+      await this.posting.syncAccountingDoc(em, id);
+      return this.findOne(id, em);
+    });
+  }
+
+  /**
+   * An approver refuses a bill that is waiting for approval: it is closed with the reason, never posts and
+   * cannot be paid. Signatures already given stay on record.
+   */
+  reject(id: string, reason: string, user: { name?: string }) {
+    return this.db.transaction(async (em) => {
+      const a = await em.findOne(AccountingDocument, { where: { id } });
+      if (!a) throw new NotFoundException('Document not found');
+      if (a.kind !== 'Expense') throw new BadRequestException('Only a bill can be rejected.');
+      if (a.status === 'Rejected') throw new BadRequestException(`${a.refNo} is already rejected.`);
+      if (a.status === 'Draft') throw new BadRequestException('A draft is not waiting for approval; delete it instead.');
+      const st = await this.posting.accountingState(em, a);
+      if (st.approved) throw new BadRequestException(`${a.refNo} is already approved and can no longer be rejected.`);
+      Object.assign(a, { status: 'Rejected', rejectReason: reason.trim(), rejectedBy: user.name ?? null });
+      await em.save(a);
       await this.posting.syncAccountingDoc(em, id);
       return this.findOne(id, em);
     });

@@ -105,7 +105,7 @@ export class PostingService implements OnModuleInit {
   }
 
   async accountingState(em: EntityManager, a: AccountingDocument): Promise<ApprovalState> {
-    if (a.status === 'Draft') return { needs: false, signed: [], required: 0, approved: false };
+    if (a.status === 'Draft' || a.status === 'Rejected') return { needs: false, signed: [], required: 0, approved: false };
     const needs = a.kind === 'Expense';
     if (!needs) return { needs, signed: [], required: 0, approved: true };
     const [s, signed] = await Promise.all([this.settings.get(em), this.signatures(em, 'ACCOUNTING', a.id)]);

@@ -163,6 +163,8 @@ export interface AccountingDoc {
   due: number;
   /** Draft, Awaiting approval, Receivable, Collected ... (the document itself is Draft or Issued) */
   status: string;
+  /** why a bill was rejected */
+  rejectReason?: string | null;
   // income invoice details
   invoiceNo?: string;
   customerTaxId?: string;

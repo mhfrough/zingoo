@@ -209,3 +209,5 @@
 <app-income-invoice-form [(open)]="incomeOpen" [doc]="editingDoc()" [categories]="incomeCats.value()?.map(c => c.name) ?? []"
   [currencies]="currencies.value() ?? []" (saved)="reload()" />
 <app-settle-form [(open)]="settleOpen" [doc]="settling()" (saved)="reload()" />
+<app-order-reason-form [(open)]="rejectOpen" [order]="null" [heading]="'Reject ' + (rejecting()?.refNo ?? '')" actionLabel="Reject bill"
+  hint="Recorded on the bill. It will not post and cannot be paid" [run]="rejectRun" done="Bill rejected." (saved)="reload()" />

@@ -8,6 +8,8 @@ import { Btn, ConfirmService, DataTable, Field, MoneyInput, Offcanvas, RowAction
 import { FormModal } from '../ops/form-modal';
 import { OrderReasonForm } from './answer-forms';
 import { DistInvoice, FactoryApi, Shipment } from './factory.api';
+import { printVoucher } from '../../shared/print';
+import { salesInvoiceVoucher } from './vouchers';
 
 const today = () => new Date().toISOString().slice(0, 10);
 
@@ -287,10 +289,11 @@ export class InvoicesPanel {
   });
 
   protected actions = (i: DistInvoice): RowAction[] => {
-    if (!this.canManage()) return [];
-    if (i.status === 'Submitted') return [{ id: 'verify', label: 'Verify invoice', tone: 'success' }, { id: 'reject', label: 'Reject invoice', tone: 'danger' }];
-    if (i.status === 'Verified' && i.due > 0) return [{ id: 'pay', label: 'Record payment', tone: 'success' }];
-    return [];
+    const list: RowAction[] = [];
+    if (this.canManage() && i.status === 'Submitted') list.push({ id: 'verify', label: 'Verify invoice', tone: 'success' }, { id: 'reject', label: 'Reject invoice', tone: 'danger' });
+    if (this.canManage() && i.status === 'Verified' && i.due > 0) list.push({ id: 'pay', label: 'Record payment', tone: 'success' });
+    list.push({ id: 'print', label: 'Print invoice' });
+    return list;
   };
 
   protected async onAction(e: RowActionEvent<DistInvoice>) {
@@ -298,6 +301,7 @@ export class InvoicesPanel {
     this.current.set(i);
     if (e.id === 'pay') return this.payOpen.set(true);
     if (e.id === 'reject') return this.rejectOpen.set(true);
+    if (e.id === 'print') return printVoucher(salesInvoiceVoucher(i));
     if (e.id === 'verify') {
       const ok = await this.confirm.ask({
         title: `Verify ${i.refNo}?`,

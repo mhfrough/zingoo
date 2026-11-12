@@ -229,9 +229,19 @@ export class AccountingDocument extends DocEntity {
   @Column({ type: 'text', nullable: true })
   note: string | null;
 
-  /** Draft: saved, not posted, not owed yet. Issued: posted to the ledger. */
+  /**
+   * Draft: saved, not posted, not owed yet. Issued: posted to the ledger (a bill once approved).
+   * Rejected: a bill refused by an approver before it was approved; it never posts and cannot be paid.
+   */
   @Column({ type: 'varchar', length: 10, default: 'Issued' })
-  status: 'Draft' | 'Issued';
+  status: 'Draft' | 'Issued' | 'Rejected';
+
+  /** why the bill was rejected, and by whom */
+  @Column({ type: 'varchar', length: 500, nullable: true })
+  rejectReason: string | null;
+
+  @Column({ type: 'varchar', length: 120, nullable: true })
+  rejectedBy: string | null;
 
   // ───── income invoice details (the 4-step income form) ─────
   /** the number printed on the invoice (the refNo is the internal one) */

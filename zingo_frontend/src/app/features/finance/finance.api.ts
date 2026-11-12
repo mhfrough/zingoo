@@ -49,6 +49,7 @@ export class FinanceApi {
       : this.api.post<AccountingDoc>('accounting-documents', body);
   deleteDoc = (id: string) => this.api.delete(`accounting-documents/${id}`);
   signDoc = (id: string, seat: 'A' | 'B') => this.api.post<AccountingDoc>(`accounting-documents/${id}/sign`, { seat });
+  rejectDoc = (id: string, reason: string) => this.api.post<AccountingDoc>(`accounting-documents/${id}/reject`, { reason });
   settleDoc = (id: string, body: unknown) => this.api.post<AccountingDoc>(`accounting-documents/${id}/settle`, body);
 
   // ── budgets, cost centers, settings ──

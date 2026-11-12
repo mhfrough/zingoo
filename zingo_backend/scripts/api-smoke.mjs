@@ -1217,5 +1217,21 @@ ok('chain figures agree with the ledger: stock at distributors and advances', p7
 ok('partner logins cannot read the chain -> 403', (await call(T.dist, 'GET', '/reports/chain')).status === 403 && (await call(p3Maker, 'GET', '/reports/chain')).status === 403);
 ok('the Investor role can read the chain', (await call(vaNew.json?.access_token, 'GET', '/reports/chain')).status === 200);
 
+// ── P8 rejecting a bill ──
+const p8Bill = await call(T.finance, 'POST', '/accounting-documents', blBody({ party: 'Vendor Vic' }));
+ok('a rejection needs a reason -> 400', (await call(T.finance, 'POST', `/accounting-documents/${p8Bill.json.id}/reject`, { reason: '' })).status === 400);
+ok('a Viewer cannot reject -> 403', (await call(T.audit, 'POST', `/accounting-documents/${p8Bill.json.id}/reject`, { reason: 'No' })).status === 403);
+const p8Rej = await call(T.finance, 'POST', `/accounting-documents/${p8Bill.json.id}/reject`, { reason: 'Duplicate of an earlier bill' });
+ok('Finance rejects a bill waiting for approval', p8Rej.json?.status === 'Rejected' && p8Rej.json?.rejectReason === 'Duplicate of an earlier bill' && p8Rej.json?.needsApproval === false, JSON.stringify(p8Rej.json?.status));
+ok('a rejected bill cannot be signed -> 400', (await call(T.finance, 'POST', `/accounting-documents/${p8Bill.json.id}/sign`, { seat: 'A' })).status === 400);
+ok('a rejected bill cannot be paid -> 400', (await call(T.finance, 'POST', `/accounting-documents/${p8Bill.json.id}/settle`, { date: ciDay, amount: 100, method: 'Cash' })).status === 400);
+ok('a rejected bill cannot be changed -> 400', (await call(T.finance, 'PATCH', `/accounting-documents/${p8Bill.json.id}`, { note: 'x' })).status === 400);
+ok('a rejected bill posts nothing', !((await call(T.finance, 'GET', '/reports/journal?period=all')).json ?? []).some((l) => l.reference === p8Bill.json.refNo));
+ok('it is not waiting for approval any more', !((await call(T.owner, 'GET', '/reports/alerts')).json ?? []).some((a) => a.text.includes('Vendor Vic')));
+ok('rejecting twice -> 400', (await call(T.finance, 'POST', `/accounting-documents/${p8Bill.json.id}/reject`, { reason: 'Again' })).status === 400);
+ok('an approved bill cannot be rejected -> 400', (await call(T.finance, 'POST', `/accounting-documents/${bl.json.id}/reject`, { reason: 'Too late' })).status === 400);
+ok('an income invoice cannot be rejected -> 400', (await call(T.finance, 'POST', `/accounting-documents/${ivDraft.json.id}/reject`, { reason: 'No' })).status === 400);
+ok('a rejected bill can be deleted', (await call(T.finance, 'DELETE', `/accounting-documents/${p8Bill.json.id}`)).status === 200);
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

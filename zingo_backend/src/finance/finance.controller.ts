@@ -1,4 +1,5 @@
 import { Body, Controller, Delete, Get, Param, ParseUUIDPipe, Patch, Post, Request } from '@nestjs/common';
+import { ReasonDto } from '../manufacturing/production-orders.dto';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
 import { Read, Write } from '../auth/roles.decorator';
 import {
@@ -126,6 +127,13 @@ export class AccountingController {
   @Write('finance')
   sign(@Param('id', ParseUUIDPipe) id: string, @Body() dto: SignDto, @Request() req: any) {
     return this.service.sign(id, dto.seat, req.user);
+  }
+
+  @Post(':id/reject')
+  @Write('finance')
+  @ApiOperation({ summary: 'Refuse a bill waiting for approval, with a reason; it never posts and cannot be paid' })
+  reject(@Param('id', ParseUUIDPipe) id: string, @Body() dto: ReasonDto, @Request() req: any) {
+    return this.service.reject(id, dto.reason, req.user);
   }
 
   @Post(':id/settle')

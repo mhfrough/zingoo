@@ -13,6 +13,9 @@ import { AccountingDoc, CashBookRow, JournalLine, OpenItem, Settlement } from '.
 import { IncomeInvoiceForm } from './income-invoice-form';
 import { ExpenseBillForm } from './expense-bill-form';
 import { SettleForm } from './settle-form';
+import { OrderReasonForm } from '../factory/answer-forms';
+import { printVoucher } from '../../shared/print';
+import { SettingsStore } from '../../core/settings.store';
 
 /** `YYYY-MM` -> "Nov 2026" for the period selector */
 const periodLabel = (p: string) =>
@@ -39,13 +42,14 @@ interface OpenRow extends OpenItem {
   selector: 'app-accounting',
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [
-    Btn, DataTable, Kpi, PageHeader, Tag, Tabs, TabPanel, IncomeInvoiceForm, ExpenseBillForm, SettleForm,
+    Btn, DataTable, Kpi, PageHeader, Tag, Tabs, TabPanel, IncomeInvoiceForm, ExpenseBillForm, SettleForm, OrderReasonForm,
   ],
   templateUrl: './accounting.html',
   styleUrl: './accounting.css',
 })
 export class Accounting {
   private fin = inject(FinanceApi);
+  private store = inject(SettingsStore);
   private confirm = inject(ConfirmService);
   private toast = inject(ToastService);
   protected auth = inject(AuthService);
@@ -137,6 +141,7 @@ export class Accounting {
 
   // ───────────── documents ─────────────
   protected statusTone = (d: AccountingDoc): Tone => {
+    if (d.status === 'Rejected') return 'danger';
     if (!d.approved) return 'warning';
     if (d.due < 0.01) return 'success';
     return d.paid > 0 ? 'info' : 'warning';
@@ -164,20 +169,23 @@ export class Accounting {
     },
     {
       id: 'status', label: 'Status', kind: 'tag', value: (d) => d.status, tone: this.statusTone,
-      sub: (d) => (!d.approved ? `${d.signatures.length} of ${d.requiredSignatures} signatures` : d.due > 0 ? `${fmtMoney(d.due)} open` : null),
+      sub: (d) => (d.status === 'Rejected' ? (d.rejectReason ?? null) : !d.approved ? `${d.signatures.length} of ${d.requiredSignatures} signatures` : d.due > 0 ? `${fmtMoney(d.due)} open` : null),
     },
   ];
 
   protected docActions = (d: AccountingDoc): RowAction[] => {
     if (!this.canWrite()) return [];
     const acts: RowAction[] = [];
+    if (d.status === 'Rejected') return [{ id: 'print', label: 'Print bill' }, { id: 'delete', label: 'Delete', tone: 'danger' }];
     if (d.needsApproval && !d.approved) {
       acts.push(...this.seatsFor(d).map((s): RowAction => ({ id: `sign-${s}`, label: `Sign ${s}`, tone: 'success' })));
+      acts.push({ id: 'reject', label: 'Reject bill', tone: 'danger' });
     }
     if (d.approved && d.due > 0) acts.push({ id: 'settle', label: d.kind === 'Income' ? 'Collect' : 'Pay', tone: 'success' });
     if (!this.locked(d)) {
       acts.push({ id: 'edit', label: 'Edit' }, { id: 'delete', label: 'Delete', tone: 'danger' });
     }
+    acts.push({ id: 'print', label: d.kind === 'Income' ? 'Print invoice' : 'Print bill' });
     return acts;
   };
 
@@ -223,6 +231,10 @@ export class Accounting {
   protected docKind = signal<'Income' | 'Expense'>('Income');
   protected editingDoc = signal<AccountingDoc | null>(null);
   protected settleOpen = signal(false);
+  /** a bill being rejected, with the reason panel */
+  protected rejectOpen = signal(false);
+  protected rejecting = signal<AccountingDoc | null>(null);
+  protected rejectRun = (reason: string) => this.fin.rejectDoc(this.rejecting()!.id, reason);
   protected settling = signal<AccountingDoc | null>(null);
 
   protected reload() {
@@ -253,6 +265,11 @@ export class Accounting {
     const doc = e.row;
     if (e.id === 'edit') return this.openDoc(doc.kind, doc);
     if (e.id === 'settle') return this.openSettle(doc);
+    if (e.id === 'print') return this.print(doc);
+    if (e.id === 'reject') {
+      this.rejecting.set(doc);
+      return this.rejectOpen.set(true);
+    }
 
     if (e.id === 'sign-A' || e.id === 'sign-B') {
       this.fin.signDoc(doc.id, e.id === 'sign-A' ? 'A' : 'B').subscribe({
@@ -280,6 +297,33 @@ export class Accounting {
         error: (err) => this.toast.error(errorText(err)),
       });
     }
+  }
+
+  /** an income invoice (with its SKU lines) or a bill, printed or saved as PDF */
+  protected print(d: AccountingDoc) {
+    const income = d.kind === 'Income';
+    const cur = d.currency || 'PKR';
+    const lines = d.lines ?? [];
+    printVoucher({
+      title: income ? (d.status === 'Draft' ? 'Draft invoice' : 'Invoice') : 'Bill', ref: d.invoiceNo || d.refNo,
+      company: this.store.settings()?.companyName,
+      facts: [
+        ['Date', fmtDate(d.date)], [income ? 'Customer' : 'Supplier', d.party], ['Category', d.category],
+        ...(d.dueDate ? [['Due', fmtDate(d.dueDate)] as [string, string]] : []),
+        ...(income && d.orderRef ? [['Order / PO', d.orderRef] as [string, string]] : []),
+        ...(!income && d.billType ? [['Bill type', d.billType] as [string, string]] : []),
+        ['Amount', `${fmtMoney(d.amount)}${cur !== 'PKR' && d.foreignAmount ? ` (${cur} ${d.foreignAmount})` : ''}`],
+        ...(d.taxAmount ? [['Sales tax', fmtMoney(d.taxAmount)] as [string, string]] : []),
+        ...(d.whtAmount ? [['Withholding', fmtMoney(d.whtAmount)] as [string, string]] : []),
+        ['Paid', fmtMoney(d.paid)], ['Status', d.status], ...(d.rejectReason ? [['Reason', d.rejectReason] as [string, string]] : []),
+        ...(d.note ? [['Note', d.note] as [string, string]] : []),
+      ],
+      table: lines.length ? {
+        head: ['Item', 'Quantity', 'Packets', `Price / packet (${cur})`, `Amount (${cur})`],
+        rows: lines.map((l) => [`${l.sku} · ${l.name}`, `${l.qty} ${l.uom === 'Cartons' ? 'bundles' : l.uom.toLowerCase()}`, String(l.packs), String(l.sellPrice), (l.packs * l.sellPrice).toFixed(2)]),
+      } : undefined,
+      note: income ? undefined : `Approvals: ${d.signatures.length} of ${d.requiredSignatures}.`,
+    });
   }
 
   // ───────────── CSV ─────────────

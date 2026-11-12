@@ -7,6 +7,8 @@ import { Manufacturer } from '../ops/models';
 import { OrderReasonForm } from './answer-forms';
 import { FactoryApi, PaymentRequest, Position, PositionRow } from './factory.api';
 import { PayRequestForm, PaymentRequestForm } from './request-forms';
+import { printVoucher } from '../../shared/print';
+import { requestVoucher } from './vouchers';
 
 /** tone of a request's state */
 const stateTone = (r: PaymentRequest): Tone =>
@@ -110,6 +112,7 @@ export class RequestsPanel {
     }
     if (this.canDecide() && r.approved && r.due > 0) list.push({ id: 'pay', label: 'Pay', tone: 'success' });
     if (this.mode() === 'factory' && this.canRequest() && r.status === 'Submitted' && !r.signatures.length) list.push({ id: 'withdraw', label: 'Withdraw request', tone: 'danger' });
+    list.push({ id: 'print', label: 'Print request' });
     return list;
   };
 
@@ -138,6 +141,7 @@ export class RequestsPanel {
     this.current.set(r);
     if (e.id === 'pay') return this.payOpen.set(true);
     if (e.id === 'reject') return this.rejectOpen.set(true);
+    if (e.id === 'print') return printVoucher(requestVoucher(r));
     if (e.id === 'sign-A' || e.id === 'sign-B') {
       const seat = e.id === 'sign-A' ? 'A' : 'B';
       const ok = await this.confirm.ask({

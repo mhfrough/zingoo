@@ -6,6 +6,8 @@ import { Distributor, Manufacturer, Product } from '../ops/models';
 import { AcceptOrderForm, OrderReasonForm, OrderStageForm, OrderTimeline } from './answer-forms';
 import { FactoryApi, ORDER_TONE, ProductionOrder, orderState } from './factory.api';
 import { ProductionOrderForm } from './order-form';
+import { printVoucher } from '../../shared/print';
+import { orderVoucher } from './vouchers';
 
 /**
  * The production orders table with every action on it, used by both sides:
@@ -106,7 +108,7 @@ export class OrdersPanel {
     }
     if (this.canAnswer() && o.status === 'Accepted') list.push({ id: 'stage', label: 'Report progress' });
     if (company && this.canPlace() && (o.status === 'Sent' || (o.status === 'Accepted' && !o.shippedContainers))) list.push({ id: 'cancel', label: 'Cancel order', tone: 'danger' });
-    list.push({ id: 'view', label: 'View order and timeline' });
+    list.push({ id: 'view', label: 'View order and timeline' }, { id: 'print', label: 'Print order' });
     return list;
   };
 
@@ -126,6 +128,9 @@ export class OrdersPanel {
         return;
       case 'view':
         this.timelineOpen.set(true);
+        return;
+      case 'print':
+        printVoucher(orderVoucher(o));
         return;
       case 'accept':
         this.acceptOpen.set(true);

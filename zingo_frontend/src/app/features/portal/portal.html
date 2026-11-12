@@ -111,6 +111,7 @@
           [distributorId]="isDistributor() ? null : (dist() ?? null)" [loading]="salesInvoices.isLoading()"
           [error]="salesInvoices.error() ? 'The server did not answer.' : null"
           [canReport]="canReceiveDelivery()" [canManage]="canManageInvoices()" (changed)="reload()" />
+        <app-trail-panel [rows]="trail.value() ?? []" [loading]="trail.isLoading()" [showDistributor]="false" />
       </div>
     </ng-template>
 

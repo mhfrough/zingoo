@@ -21,6 +21,8 @@
   <app-invoices-panel mode="company" [invoices]="distInvoices.value() ?? []" [loading]="distInvoices.isLoading()"
     [error]="distInvoices.error() ? 'The server did not answer.' : null" [canManage]="canManageInvoices()" (changed)="reload()" />
 
+  <app-trail-panel [rows]="trail.value() ?? []" [loading]="trail.isLoading()" />
+
   @if (legacy()) {
   <div class="notice">
     <span>

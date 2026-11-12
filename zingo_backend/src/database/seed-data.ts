@@ -85,6 +85,19 @@ export const productionOrders = [
   { date: '2026-11-11', product: 'p4', containers: 1, notes: 'Draft for next month', send: false, accept: false, stages: [] as string[] },
 ];
 
+/**
+ * Scope v2: one order through the whole chain, loaded after the prototype check (illustrative figures).
+ * Order -> advance asked, approved and paid -> shipped -> received by the distributor -> one container sold,
+ * invoice verified -> part of it collected. Days count back from the day of seeding.
+ */
+export const chainSample = {
+  product: 'p3', distributor: 'd3', containers: 2, containersSold: 1, notes: 'Sample order through the whole chain',
+  stages: ['Preparation', 'In production', 'Quality check', 'Ready to ship'],
+  orderDaysAgo: 20, advanceDaysAgo: 18, advanceInvoiceNo: 'BCP-INV-101', advancePaidDaysAgo: 17,
+  shipDaysAgo: 8, vehicle: 'TLR-4521', waybill: 'BLT-7781', receiveDaysAgo: 7,
+  invoiceDaysAgo: 3, distributorInvoiceNo: 'USS-0042', collectedDaysAgo: 1, collected: 20000,
+};
+
 export const portalRequests = [
   { refNo: 'REQ-DEMO-01', date: '2026-11-09', distributor: 'd1', product: 'p2', cartons: 5, requestedDate: '2026-11-14', notes: 'Demo request for next shipment', status: 'Requested' },
 ] as const;

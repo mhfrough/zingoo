@@ -2,6 +2,7 @@ import { ChangeDetectionStrategy, Component, computed, effect, inject, signal } 
 import { FactoryApi } from '../factory/factory.api';
 import { ShipmentsPanel } from '../factory/shipments-panel';
 import { InvoicesPanel } from '../factory/invoices-panel';
+import { TrailPanel } from '../factory/trail-panel';
 import { rxResource } from '@angular/core/rxjs-interop';
 import { Observable } from 'rxjs';
 import { AuthService } from '../../core/auth.service';
@@ -38,7 +39,7 @@ const tone = (s: string): Tone => STATUS_TONE[s] ?? 'neutral';
   selector: 'app-portal',
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [
-    Btn, DataTable, Kpi, PageHeader, Tag, Tabs, TabPanel, RequestForm, ReceiptForm, AdviceForm, AcceptForm, ReasonForm, ShipmentsPanel, InvoicesPanel,
+    Btn, DataTable, Kpi, PageHeader, Tag, Tabs, TabPanel, RequestForm, ReceiptForm, AdviceForm, AcceptForm, ReasonForm, ShipmentsPanel, InvoicesPanel, TrailPanel,
   ],
   templateUrl: './portal.html',
   styleUrl: './portal.css',
@@ -73,6 +74,7 @@ export class Portal {
   /** manufacturer deliveries to this distributor and the Zen Foods stock it holds */
   protected deliveries = rxResource({ params: () => this.params(), stream: ({ params }) => this.factory.shipments({ distributorId: params.d }) });
   protected consignment = rxResource({ params: () => this.params(), stream: ({ params }) => this.factory.stock(params.d) });
+  protected trail = rxResource({ params: () => this.params(), stream: ({ params }) => this.factory.trail(params.d) });
   protected salesInvoices = rxResource({ params: () => this.params(), stream: ({ params }) => this.factory.invoices(params.d) });
   /** Admin, Finance and Distribution verify invoices and record payments */
   protected canManageInvoices = computed(() => ['Admin', 'Finance', 'Distribution'].includes(this.auth.user()?.role ?? ''));

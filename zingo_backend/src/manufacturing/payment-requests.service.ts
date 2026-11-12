@@ -82,6 +82,38 @@ export class PaymentRequestsService {
     };
   }
 
+  /**
+   * The manufacturer's account with Zen Foods, in date order: goods received (owed to it) and payments made,
+   * with a running balance. A positive balance is what Zen Foods still owes; a negative one is advance not yet
+   * covered by goods.
+   */
+  async statement(user: OrderUser, manufacturerId?: string) {
+    const em = this.db.manager;
+    const scope = user.role === 'Manufacturer' ? this.ownId(user) : manufacturerId
+      ?? (await em.find(Manufacturer, { order: { name: 'ASC' }, take: 1 }))[0]?.id;
+    if (!scope) throw new NotFoundException('Create a manufacturer first.');
+    type Entry = { date: string; kind: string; ref: string; description: string; owed: number; paid: number };
+    const goods: Entry[] = (await em.query(
+      `SELECT s."receivedDate"::text AS date, s."refNo" AS ref, o."refNo" AS "orderRef", p.sku, s."receivedContainers" AS n,
+              (s."receivedContainers" * s."bundlesPerContainer" * s."packetsPerBundle" * s.rate)::float8 AS value
+         FROM production_shipments s JOIN production_orders o ON o.id = s."orderId" JOIN products p ON p.id = s."productId"
+        WHERE s."manufacturerId" = $1 AND s.status = 'Received' AND s."receivedContainers" > 0`, [scope]))
+      .map((r: any): Entry => ({ date: r.date, kind: 'Goods received', ref: r.ref, description: `${r.n} × ${r.sku} · ${r.orderRef}`, owed: round2(r.value), paid: 0 }));
+    const pays: Entry[] = (await em.query(
+      `SELECT p.date::text AS date, p."refNo" AS ref, r."refNo" AS "reqRef", r.kind, o."refNo" AS "orderRef", p.amount::float8 AS amount
+         FROM mfr_request_payments p JOIN mfr_payment_requests r ON r.id = p."requestId" JOIN production_orders o ON o.id = r."orderId"
+        WHERE r."manufacturerId" = $1`, [scope]))
+      .map((r: any): Entry => ({ date: r.date, kind: `${r.kind} paid`, ref: r.ref, description: `${r.reqRef} · ${r.orderRef}`, owed: 0, paid: round2(r.amount) }));
+    const entries = [...goods, ...pays].sort((a, b) => a.date.localeCompare(b.date) || a.ref.localeCompare(b.ref));
+    let balance = 0;
+    const rows = entries.map((e) => ({ ...e, balance: (balance = round2(balance + e.owed - e.paid)) }));
+    return {
+      manufacturerId: scope,
+      entries: rows,
+      totals: { owed: round2(goods.reduce((n, e) => n + e.owed, 0)), paid: round2(pays.reduce((n, e) => n + e.paid, 0)), balance },
+    };
+  }
+
   // ───────────── manufacturer side (staff may act for it) ─────────────
 
   async create(user: OrderUser, dto: CreatePaymentRequestDto) {

@@ -6,15 +6,21 @@ import { Tone, fmtAmount, fmtDate, fmtMoney, fmtNumber } from '../../shared/form
 import { Btn, DataTable, EmptyState, IconComponent, Kpi, PageHeader, TableColumn, Tag } from '../../ui';
 import { Alert, Dashboard } from '../ops/models';
 import { OpsApi } from '../ops/ops.api';
+import { FactoryApi } from '../factory/factory.api';
+import { Chain } from './chain';
+import { SettingsStore } from '../../core/settings.store';
 
 type LatestOrder = Dashboard['latestOrders'][number];
 
-const ALERT_ICON = { approval: 'lock', stock: 'boxes', order: 'truck', batch: 'factory', cheque: 'banknote', return: 'clock' } as const;
+const ALERT_ICON = {
+  approval: 'lock', stock: 'boxes', order: 'truck', batch: 'factory', cheque: 'banknote', return: 'clock',
+  production: 'factory', payment: 'banknote', delivery: 'truck', sellout: 'clock', invoice: 'receipt', receivable: 'wallet',
+} as const;
 
 @Component({
   selector: 'app-overview',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [RouterLink, Btn, DataTable, EmptyState, IconComponent, Kpi, PageHeader, Tag],
+  imports: [RouterLink, Btn, DataTable, EmptyState, IconComponent, Kpi, PageHeader, Tag, Chain],
   templateUrl: './overview.html',
   styleUrl: './overview.css',
 })
@@ -23,6 +29,12 @@ export class Overview {
   protected auth = inject(AuthService);
 
   protected data = rxResource({ stream: () => this.api.dashboard() });
+  /** live figures of investor -> company -> manufacturer -> distributor -> customer */
+  private factory = inject(FactoryApi);
+  /** the earlier sales-order flow is switched on in Settings */
+  private store = inject(SettingsStore);
+  protected legacy = computed(() => !!this.store.settings()?.salesOrdersEnabled);
+  protected chain = rxResource({ stream: () => this.factory.chain() });
 
   protected d = computed(() => this.data.value());
   protected alerts = computed(() => this.d()?.alerts.slice(0, 6) ?? []);

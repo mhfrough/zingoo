@@ -5,6 +5,7 @@ import { AuthService } from '../../core/auth.service';
 import { FactoryApi } from '../factory/factory.api';
 import { ShipmentsPanel } from '../factory/shipments-panel';
 import { InvoicesPanel } from '../factory/invoices-panel';
+import { TrailPanel } from '../factory/trail-panel';
 import { errorText } from '../../shared/errors';
 import { Tone, fmtAmount, fmtDate, fmtMoney, fmtNumber } from '../../shared/format';
 import {
@@ -27,7 +28,7 @@ interface DistributorRow {
 @Component({
   selector: 'app-distribution',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [RouterLink, Btn, DataTable, Kpi, PageHeader, OrderForm, CollectionForm, DistributorForm, CreditOverrideForm, ShipmentsPanel, InvoicesPanel],
+  imports: [RouterLink, Btn, DataTable, Kpi, PageHeader, OrderForm, CollectionForm, DistributorForm, CreditOverrideForm, ShipmentsPanel, InvoicesPanel, TrailPanel],
   templateUrl: './distribution.html',
 })
 export class Distribution {
@@ -51,6 +52,7 @@ export class Distribution {
   protected shipments = rxResource({ params: () => this.tick(), stream: () => this.factory.shipments() });
   protected distStock = rxResource({ params: () => this.tick(), stream: () => this.factory.stock() });
   protected distInvoices = rxResource({ params: () => this.tick(), stream: () => this.factory.invoices() });
+  protected trail = rxResource({ params: () => this.tick(), stream: () => this.factory.trail() });
   /** Admin, Finance and Distribution verify invoices and record payments */
   protected canManageInvoices = computed(() => ['Admin', 'Finance', 'Distribution'].includes(this.auth.user()?.role ?? ''));
   /** the earlier warehouse sales-order flow, shown only when switched on in Settings */

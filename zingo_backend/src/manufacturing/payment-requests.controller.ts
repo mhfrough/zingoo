@@ -34,6 +34,14 @@ export class PaymentRequestsController {
     return this.service.position(req.user, manufacturerId || undefined);
   }
 
+  @Get('statement')
+  @Read('manufacturing', 'finance', 'factory')
+  @ApiQuery({ name: 'manufacturerId', required: false })
+  @ApiOperation({ summary: 'Goods received and payments made, with a running balance' })
+  statement(@Request() req: any, @Query('manufacturerId') manufacturerId?: string) {
+    return this.service.statement(req.user, manufacturerId || undefined);
+  }
+
   @Post()
   @Roles(...FACTORY)
   @ApiOperation({ summary: 'Ask for the advance or the balance of an accepted order' })

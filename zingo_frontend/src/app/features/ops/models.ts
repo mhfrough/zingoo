@@ -151,7 +151,7 @@ export interface StockRow {
 }
 
 export interface Alert {
-  kind: 'approval' | 'stock' | 'order' | 'batch' | 'cheque' | 'return';
+  kind: 'approval' | 'stock' | 'order' | 'batch' | 'cheque' | 'return' | 'production' | 'payment' | 'delivery' | 'sellout' | 'invoice' | 'receivable';
   page: string;
   title: string;
   text: string;

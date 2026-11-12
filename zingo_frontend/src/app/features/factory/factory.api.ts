@@ -147,6 +147,50 @@ export interface DistInvoice {
   state: string;
 }
 
+/** one delivery from shipment to cash */
+export interface TrailRow {
+  id: string;
+  refNo: string;
+  orderRef: string;
+  sku: string;
+  manufacturer: string;
+  destination: 'Distributor' | 'Warehouse';
+  distributor: string | null;
+  shipDate: string;
+  status: 'In transit' | 'Received';
+  receivedDate: string | null;
+  sellBy: string | null;
+  overdue: boolean;
+  shipped: number;
+  received: number;
+  sold: number;
+  onHand: number;
+  cost: number;
+  sales: number;
+  collected: number;
+  receivable: number;
+}
+
+/** one line of a manufacturer's statement */
+export interface StatementRow {
+  date: string;
+  kind: string;
+  ref: string;
+  description: string;
+  owed: number;
+  paid: number;
+  balance: number;
+}
+
+/** the figures of each link of the business chain */
+export interface ChainSummary {
+  investors: { capital: number; investors: number };
+  company: { cash: number };
+  manufacturers: { openOrders: number; containersOnOrder: number; valueOnOrder: number; waiting: number; inTransit: number; advances: number; owed: number };
+  distributors: { containersHeld: number; stockValue: number; overdueLots: number; toVerify: number };
+  customers: { containersSold: number; invoiced: number; collected: number; receivable: number; margin: number };
+}
+
 export interface DistributorStock {
   lots: Shipment[];
   byProduct: DistributorStockRow[];
@@ -261,6 +305,10 @@ export class FactoryApi {
   ship = (body: unknown) => this.api.post<Shipment>('production-shipments', body);
   receive = (id: string, body: unknown) => this.api.post<Shipment>(`production-shipments/${id}/receive`, body);
 
+  trail = (distributorId?: string) => this.api.get<TrailRow[]>('production-shipments/trail', { distributorId });
+  statement = (manufacturerId?: string) =>
+    this.api.get<{ manufacturerId: string; entries: StatementRow[]; totals: { owed: number; paid: number; balance: number } }>('mfr-payment-requests/statement', { manufacturerId });
+  chain = () => this.api.get<ChainSummary>('reports/chain');
   invoices = (distributorId?: string) => this.api.get<DistInvoice[]>('distributor-invoices', { distributorId });
   createInvoice = (body: unknown) => this.api.post<DistInvoice>('distributor-invoices', body);
   verifyInvoice = (id: string) => this.api.post<DistInvoice>(`distributor-invoices/${id}/verify`, {});

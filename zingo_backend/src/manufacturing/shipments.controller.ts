@@ -29,6 +29,14 @@ export class ShipmentsController {
     return this.service.stock(req.user, distributorId || undefined);
   }
 
+  @Get('trail')
+  @Read('manufacturing', 'portal', 'distribution')
+  @ApiQuery({ name: 'distributorId', required: false })
+  @ApiOperation({ summary: 'Each delivery from shipment to cash: shipped, received, sold, on hand, sales and collected' })
+  trail(@Request() req: any, @Query('distributorId') distributorId?: string) {
+    return this.service.trail(req.user, { distributorId: distributorId || undefined });
+  }
+
   @Post()
   @Roles('Admin', 'Manufacturing', 'Manufacturer')
   @ApiOperation({ summary: 'Ship containers of an accepted order' })

@@ -5,7 +5,7 @@
       <a appBtn variant="primary" icon="plus" routerLink="/admin/manufacturing" [queryParams]="{ new: 'batch' }">Production batch</a>
     </ng-container>
   }
-  @if (auth.can('distribution')) {
+  @if (auth.can('distribution') && legacy()) {
     <ng-container pageActions>
       <a appBtn icon="plus" routerLink="/admin/distribution" [queryParams]="{ new: 'order' }">Sales order</a>
     </ng-container>
@@ -34,11 +34,18 @@
       [foot]="d() ? number(d()!.pendingApprovals) + ' pending spending approvals' : ''" />
   </div>
 
-  <h2>How your three ends work together</h2>
+  <div class="card">
+    <div class="card__head">
+      <div><h2>The business chain</h2><p>Investors fund Zen Foods, which orders from manufacturers; containers go to distributors, who sell to customers</p></div>
+    </div>
+    <div class="card__body"><app-chain [data]="chain.value() ?? null" /></div>
+  </div>
+
+  <h2>Where to work</h2>
   <div class="flows">
     <a class="flow" routerLink="/admin/manufacturing">
       <span class="flow__icon"><app-icon name="factory" [size]="22" /></span>
-      <span class="flow__text"><strong>1. Manufacture</strong>Plan, quality-check and release finished bundles into the warehouse.</span>
+      <span class="flow__text"><strong>1. Order and produce</strong>Place production orders, follow the manufacturer's progress and pay its requests.</span>
       <app-icon class="flow__go" name="arrow-right" [size]="18" />
     </a>
     <a class="flow" routerLink="/admin/finance">
@@ -48,7 +55,7 @@
     </a>
     <a class="flow" routerLink="/admin/distribution">
       <span class="flow__icon" data-tone="success"><app-icon name="truck" [size]="22" /></span>
-      <span class="flow__text"><strong>3. Distribute</strong>Dispatch stock to distributors, invoice them and record collections.</span>
+      <span class="flow__text"><strong>3. Distribute and collect</strong>Receive deliveries at distributors, verify their sales invoices and collect.</span>
       <app-icon class="flow__go" name="arrow-right" [size]="18" />
     </a>
   </div>

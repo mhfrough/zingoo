@@ -88,6 +88,31 @@ export class ShipmentsService {
     return { lots, byProduct: [...byProduct.values()] };
   }
 
+  /**
+   * The trail of each delivery (a container lot): shipped, received, sold, still on hand, its cost, the sales
+   * booked on it (verified invoices) and the money collected (each invoice's payments shared over its lines).
+   */
+  async trail(user: ShipmentUser, filter: { distributorId?: string; manufacturerId?: string } = {}) {
+    const lots = await this.list(user, filter);
+    const lines: { shipmentId: string; amount: number; invAmount: number; paid: number; verified: boolean }[] = lots.length ? await this.db.query(
+      `SELECT l."shipmentId", l.amount::float8 AS amount, i.amount::float8 AS "invAmount", i.status = 'Verified' AS verified,
+              COALESCE((SELECT SUM(p.amount) FROM distributor_invoice_payments p WHERE p."invoiceId" = i.id), 0)::float8 AS paid
+         FROM distributor_invoice_lines l JOIN distributor_invoices i ON i.id = l."invoiceId"
+        WHERE i.status <> 'Rejected' AND l."shipmentId" = ANY($1)`, [lots.map((l) => l.id)]) : [];
+    return lots.map((s) => {
+      const mine = lines.filter((l) => l.shipmentId === s.id && l.verified);
+      const sales = round2(mine.reduce((n, l) => n + Number(l.amount), 0));
+      const collected = round2(mine.reduce((n, l) => n + (Number(l.invAmount) ? Number(l.amount) * Math.min(1, Number(l.paid) / Number(l.invAmount)) : 0), 0));
+      return {
+        id: s.id, refNo: s.refNo, orderRef: s.order.refNo, sku: s.product.sku, manufacturer: s.manufacturer.name,
+        destination: s.destination, distributor: s.distributor?.name ?? null, shipDate: s.shipDate, status: s.status,
+        receivedDate: s.receivedDate, sellBy: s.sellBy, overdue: s.overdue,
+        shipped: s.containers, received: s.receivedContainers ?? 0, sold: s.soldContainers, onHand: s.onHandContainers,
+        cost: s.receivedValue, sales, collected, receivable: round2(sales - collected),
+      };
+    });
+  }
+
   // ───────────── manufacturer side ─────────────
 
   async ship(user: ShipmentUser, dto: ShipDto) {

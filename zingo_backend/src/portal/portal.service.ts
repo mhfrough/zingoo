@@ -212,6 +212,15 @@ export class PortalService {
       ...credits.map((c): Entry => ({
         date: c.date, kind: 'Credit note', ref: c.refNo, description: byId.get(c.orderId)?.refNo ?? '', debit: 0, credit: Number(c.amount),
       })),
+      // consignment sales: verified sales invoices and the payments against them
+      ...(await em.query(
+        `SELECT date::text AS date, "refNo" AS ref, COALESCE("invoiceNo", '') AS no, amount::float8 AS amount
+           FROM distributor_invoices WHERE "distributorId" = $1 AND status = 'Verified'`, [distributorId]))
+        .map((r: any): Entry => ({ date: r.date, kind: 'Sales invoice', ref: r.ref, description: r.no ? `Your invoice ${r.no}` : 'Containers sold', debit: round2(r.amount), credit: 0 })),
+      ...(await em.query(
+        `SELECT p.date::text AS date, p."refNo" AS ref, i."refNo" AS inv, p.amount::float8 AS amount
+           FROM distributor_invoice_payments p JOIN distributor_invoices i ON i.id = p."invoiceId" WHERE i."distributorId" = $1`, [distributorId]))
+        .map((r: any): Entry => ({ date: r.date, kind: 'Payment', ref: r.ref, description: r.inv, debit: 0, credit: round2(r.amount) })),
     ].sort((a, b) => a.date.localeCompare(b.date) || a.kind.localeCompare(b.kind));
     let balance = 0;
     return {

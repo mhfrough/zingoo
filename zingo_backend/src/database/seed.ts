@@ -14,6 +14,9 @@ import { CollectionsService, OrdersService } from '../distribution/distribution.
 import { AccountingService, FinanceService } from '../finance/finance.service';
 import { BatchesService } from '../manufacturing/manufacturing.service';
 import { ProductionOrdersService } from '../manufacturing/production-orders.service';
+import { PaymentRequestsService } from '../manufacturing/payment-requests.service';
+import { ShipmentsService } from '../manufacturing/shipments.service';
+import { DistInvoicesService } from '../manufacturing/dist-invoices.service';
 import { PortalRequest } from '../portal/portal.entities';
 import { ReportsService } from '../reports/reports.service';
 import { Account, Category, ContainerType, Currency } from '../setup/setup.entities';
@@ -174,6 +177,35 @@ async function run() {
     console.log('\nParity with the client prototype:');
     for (const [label, ok, got, want] of checks) console.log(`  ${ok ? 'PASS' : 'FAIL'}  ${label.padEnd(20)} got ${got}  expected ${want}`);
     if (checks.some((c) => !c[1])) process.exitCode = 1;
+
+    // ── scope v2 sample: one order through the whole chain (after the prototype check, so its figures stay) ──
+    // Dates count back from the day of seeding, so no sell-by or due date has passed yet.
+    const ago = (n: number) => new Date(Date.now() - n * 86_400_000).toISOString().slice(0, 10);
+    const c = data.chainSample;
+    const sales = { id: '', name: 'Distribution Coordinator', role: 'Distribution' as const };
+    const mo = await pos.create(staff, { date: ago(c.orderDaysAgo), productId: id[c.product], containers: c.containers, notes: c.notes, send: true });
+    await pos.accept(maker, mo.id, { note: 'Confirmed' });
+    for (const stage of c.stages) await pos.stage(maker, mo.id, { stage });
+    const prs = app.get(PaymentRequestsService);
+    const pr = await prs.create(maker, { orderId: mo.id, kind: 'Advance', date: ago(c.advanceDaysAgo), invoiceNo: c.advanceInvoiceNo });
+    await prs.sign(pr.id, 'A', { id: null, seat: 'Both' });
+    if (pr.requiredSignatures > 1) await prs.sign(pr.id, 'B', { id: null, seat: 'Both' });
+    await prs.pay(pr.id, { date: ago(c.advancePaidDaysAgo), amount: pr.amount, method: 'Bank Transfer', fromAccount: 'Zen Foods Bank Account' });
+    const shs = app.get(ShipmentsService);
+    const sh = await shs.ship(maker, { orderId: mo.id, date: ago(c.shipDaysAgo), containers: c.containers, vehicle: c.vehicle, waybill: c.waybill });
+    await shs.receive(sales, sh.id, { date: ago(c.receiveDaysAgo), receivedContainers: c.containers });
+    const dis = app.get(DistInvoicesService);
+    const inv = await dis.create(sales, { date: ago(c.invoiceDaysAgo), distributorId: id[c.distributor], invoiceNo: c.distributorInvoiceNo, lines: [{ shipmentId: sh.id, containers: c.containersSold }] });
+    await dis.verify(sales, inv.id);
+    await dis.pay(inv.id, { date: ago(c.collectedDaysAgo), amount: c.collected, method: 'Bank Transfer', toAccount: 'Zen Foods Bank Account' });
+
+    const chain = await reports.chain();
+    const tb2 = await reports.trialBalance();
+    console.log('\nScope v2 sample chain:');
+    console.log(`  ${mo.refNo}: ${c.containers} containers of ${c.product === 'p3' ? 'Z20-MAS' : c.product}; advance ${pr.refNo} paid; ${sh.refNo} received; ${inv.refNo} verified`);
+    console.log(`  distributors hold ${chain.distributors.containersHeld} container(s); sales ${chain.customers.invoiced}, collected ${chain.customers.collected}`);
+    console.log(`  ${tb2.balanced ? 'PASS' : 'FAIL'}  Ledger balanced       got ${tb2.totalDebit} / ${tb2.totalCredit}`);
+    if (!tb2.balanced) process.exitCode = 1;
   } finally {
     await app.close();
   }

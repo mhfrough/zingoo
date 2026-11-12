@@ -15,6 +15,13 @@ export class ReportsController {
     return this.service.dashboard();
   }
 
+  @Get('chain')
+  @Read('overview')
+  @ApiOperation({ summary: 'Investor -> company -> manufacturer -> distributor -> customer, one figure set per link' })
+  chain() {
+    return this.service.chain();
+  }
+
   @Get('stock')
   @Read('overview', 'manufacturing')
   @ApiOperation({ summary: 'Cartons and packs in the warehouse per SKU' })

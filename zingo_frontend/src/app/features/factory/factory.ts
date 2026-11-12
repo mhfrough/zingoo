@@ -10,6 +10,7 @@ import { FactoryApi } from './factory.api';
 import { OrdersPanel } from './orders-panel';
 import { RequestsPanel } from './requests-panel';
 import { ShipmentsPanel } from './shipments-panel';
+import { MfrStatement } from './trail-panel';
 
 /**
  * Manufacturer portal. A Manufacturer login sees only its own orders: it accepts or rejects each one and reports
@@ -19,7 +20,7 @@ import { ShipmentsPanel } from './shipments-panel';
 @Component({
   selector: 'app-factory',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [FormsModule, Field, Kpi, PageHeader, Select, OrdersPanel, RequestsPanel, ShipmentsPanel],
+  imports: [FormsModule, Field, Kpi, PageHeader, Select, OrdersPanel, RequestsPanel, ShipmentsPanel, MfrStatement],
   styles: `
     .terms {
       display: grid;
@@ -93,6 +94,8 @@ import { ShipmentsPanel } from './shipments-panel';
       <app-requests-panel mode="factory" [requests]="requests.value() ?? []" [position]="position.value() ?? null"
         [loading]="requests.isLoading()" [error]="requests.error() ? 'The server did not answer.' : null"
         [manufacturer]="profile.value()?.manufacturer ?? null" [canRequest]="canAnswer()" (changed)="reload()" />
+
+      <app-mfr-statement [rows]="statement.value()?.entries ?? []" [loading]="statement.isLoading()" />
     </div>
   `,
 })
@@ -120,6 +123,10 @@ export class Factory {
   protected shipments = rxResource({
     params: () => ({ t: this.tick(), m: this.profile.value()?.manufacturer?.id }),
     stream: ({ params }) => (params.m ? this.api.shipments({ manufacturerId: params.m }) : of([])),
+  });
+  protected statement = rxResource({
+    params: () => ({ t: this.tick(), m: this.profile.value()?.manufacturer?.id }),
+    stream: ({ params }) => (params.m ? this.api.statement(params.m) : of(null)),
   });
   protected requests = rxResource({
     params: () => ({ t: this.tick(), m: this.profile.value()?.manufacturer?.id }),

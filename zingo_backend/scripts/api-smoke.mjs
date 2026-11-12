@@ -62,7 +62,8 @@ ok('/auth/me gives role, seat and pages', me.json?.role === 'Finance' && me.json
 
 // ── baseline ──
 const dash0 = (await call(T.owner, 'GET', '/reports/dashboard')).json;
-ok('dashboard cash is 1,897,000 (fresh sample data)', dash0.cash === 1897000, dash0.cash);
+// the prototype's 1,897,000, then the scope v2 sample chain: advance paid 22,550.40, 20,000 collected
+ok('dashboard cash is 1,897,000 - 22,550.40 + 20,000 (fresh sample data)', Math.abs(dash0.cash - 1894449.6) < 0.01, dash0.cash);
 const list = async (p) => (await call(T.owner, 'GET', p)).json;
 const batches = await list('/batches');
 const orders = await list('/orders');
@@ -107,7 +108,8 @@ ok('Finance overrides with a reason', (await call(T.finance, 'POST', `/orders/${
 const d203 = await call(T.sales, 'POST', `/orders/${so203.id}/dispatch`);
 ok('dispatch SO-203 -> Dispatched with a unit-cost snapshot', d203.status === 201 && d203.json.status === 'Dispatched' && d203.json.unitCost > 0, JSON.stringify(d203.json).slice(0, 120));
 const rec1 = (await call(T.owner, 'GET', '/reports/receivables')).json;
-ok('receivables are now 55,600 + 21,600 = 77,200', rec1.total === 77200, rec1.total);
+// 55,600 (prototype) + 34,000 still owed on the sample chain invoice + 21,600 dispatched above
+ok('receivables are now 55,600 + 34,000 + 21,600 = 111,200', rec1.total === 111200, rec1.total);
 ok('a dispatched order is locked -> 400', (await call(T.sales, 'PATCH', `/orders/${so203.id}`, { cartons: 1 })).status === 400);
 const so201 = byRef(orders, 'SO-201');
 ok('collecting more than is outstanding -> 400', (await call(T.sales, 'POST', '/collections', { orderId: so201.id, date: '2026-11-10', amount: 99999 })).status === 400);
@@ -1186,6 +1188,34 @@ const p6Pay = ((await call(T.finance, 'GET', '/reports/payables')).json?.rows ??
 ok('payables show what is owed to the manufacturer for goods received (18,360 - 11,016 paid)', p6Pay?.outstanding === 7344, JSON.stringify(p6Pay));
 ok('the old sales-order screens are off by default', (await call(T.owner, 'GET', '/settings')).json?.salesOrdersEnabled === false && (await call(T.dist, 'GET', '/portal/profile')).json?.salesOrdersEnabled === false);
 ok('the ledger still balances after sales', (await call(T.owner, 'GET', '/reports/trial-balance')).json?.balanced === true);
+
+// ── P7 chain dashboard, batch trail, statements, sample chain ──
+const p7Mo = ((await call(T.owner, 'GET', '/production-orders')).json ?? []).find((o) => o.notes === 'Sample order through the whole chain');
+ok('the sample chain order is delivered: 2 containers of Z20-MAS to Upper Sindh', p7Mo?.status === 'Accepted' && p7Mo?.receivedContainers === 2 && p7Mo?.product?.sku === 'Z20-MAS' && p7Mo?.distributor?.name === 'Upper Sindh Supply', JSON.stringify([p7Mo?.receivedContainers, p7Mo?.product?.sku]));
+const p7Trail = (await call(T.owner, 'GET', '/production-shipments/trail')).json ?? [];
+const p7Lot = p7Trail.find((r) => r.orderRef === p7Mo?.refNo);
+const p7Rate = ((await call(T.owner, 'GET', '/products')).json ?? []).find((p) => p.sku === 'Z20-MAS')?.rate;
+ok('its trail: 2 received, 1 sold, 1 on hand, sales at the distributor price, 20,000 collected',
+  p7Lot?.received === 2 && p7Lot?.sold === 1 && p7Lot?.onHand === 1 && p7Lot?.cost === 75168
+  && p7Lot?.collected === 20000 && Math.abs(p7Lot?.sales - 4320 * p7Rate) < 0.01, JSON.stringify(p7Lot));
+ok('a distributor sees only its own trail', ((await call(T.dist, 'GET', '/production-shipments/trail')).json ?? []).every((r) => r.distributor === 'Sindh Central Distributors'));
+ok('a manufacturer cannot read the trail -> 403', (await call(p3Maker, 'GET', '/production-shipments/trail')).status === 403);
+const p7St = (await call(p3Maker, 'GET', '/mfr-payment-requests/statement')).json;
+const p7Owed = (p7St?.entries ?? []).reduce((n, e) => n + e.owed, 0);
+const p7Paid = (p7St?.entries ?? []).reduce((n, e) => n + e.paid, 0);
+ok('the manufacturer statement: goods received and payments with a running balance',
+  p7St?.entries?.some((e) => e.kind === 'Goods received') && p7St?.entries?.some((e) => e.kind === 'Advance paid')
+  && Math.abs(p7St?.totals?.balance - (p7Owed - p7Paid)) < 0.01 && p7St?.entries?.at(-1)?.balance === p7St?.totals?.balance, JSON.stringify(p7St?.totals));
+ok('another manufacturer\'s statement is its own (empty)', ((await call(p3OtherT, 'GET', `/mfr-payment-requests/statement?manufacturerId=${p3P.manufacturerId}`)).json?.entries ?? [1]).length === 0);
+const p7Ds = (await call(T.dist, 'GET', '/portal/statement')).json;
+ok('the distributor statement includes its sales invoices and payments', p7Ds?.entries?.some((e) => e.kind === 'Sales invoice' && e.ref === p6Inv.json.refNo) && p7Ds?.entries?.some((e) => e.kind === 'Payment'));
+const p7C = (await call(T.owner, 'GET', '/reports/chain')).json;
+ok('the chain: investors, cash, manufacturers, distributors, customers',
+  p7C?.investors?.capital > 0 && typeof p7C?.company?.cash === 'number' && p7C?.distributors?.containersHeld >= 1 && p7C?.customers?.containersSold >= 2
+  && p7C?.customers?.invoiced > 0 && p7C?.customers?.collected >= 20000, JSON.stringify(p7C));
+ok('chain figures agree with the ledger: stock at distributors and advances', p7C?.distributors?.stockValue >= 0 && p7C?.manufacturers?.advances >= 0);
+ok('partner logins cannot read the chain -> 403', (await call(T.dist, 'GET', '/reports/chain')).status === 403 && (await call(p3Maker, 'GET', '/reports/chain')).status === 403);
+ok('the Investor role can read the chain', (await call(vaNew.json?.access_token, 'GET', '/reports/chain')).status === 200);
 
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

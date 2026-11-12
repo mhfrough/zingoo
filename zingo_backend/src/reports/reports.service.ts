@@ -409,6 +409,53 @@ export class ReportsService {
     ];
   }
 
+  // ───────────── the business chain ─────────────
+
+  /**
+   * One figure set per link of Investor -> Company -> Manufacturer -> Distributor -> Customer:
+   * money invested, cash held, what is on order and owed to manufacturers, stock held by distributors,
+   * and the sales they invoiced and paid.
+   */
+  async chain() {
+    const sys = { id: '', name: 'system', role: 'Admin' as const };
+    const [cash, advance, payable, distStock, capital, mos, lots, dis] = await Promise.all([
+      this.accountNet('Cash & Bank'), this.accountNet('Advance to Manufacturer'), this.accountNet('Manufacturer Payable'),
+      this.accountNet('Inventory at Distributor'),
+      this.db.query(`SELECT COALESCE(SUM(amount), 0)::float8 AS total, COUNT(DISTINCT party)::int AS investors
+                       FROM finance_entries WHERE type = 'Capital Injection' AND direction = 'in' AND "chequeStatus" IN ('', 'Cleared')`),
+      this.productionOrders.list(sys), this.shipments.list(sys), this.distInvoices.list(sys),
+    ]);
+    const open = mos.filter((o) => o.status === 'Accepted' && o.receivedContainers < o.containers);
+    const verified = dis.filter((i) => i.status === 'Verified');
+    const held = lots.filter((s) => s.status === 'Received' && s.destination === 'Distributor');
+    return {
+      investors: { capital: round2(capital[0].total), investors: Number(capital[0].investors) },
+      company: { cash: round2(cash) },
+      manufacturers: {
+        openOrders: open.length,
+        containersOnOrder: open.reduce((n, o) => n + o.containers - o.receivedContainers, 0),
+        valueOnOrder: round2(open.reduce((n, o) => n + (o.value * (o.containers - o.receivedContainers)) / o.containers, 0)),
+        waiting: mos.filter((o) => o.status === 'Sent').length,
+        inTransit: lots.filter((s) => s.status === 'In transit').reduce((n, s) => n + s.containers, 0),
+        advances: round2(advance),
+        owed: round2(-payable),
+      },
+      distributors: {
+        containersHeld: held.reduce((n, s) => n + s.onHandContainers, 0),
+        stockValue: round2(distStock),
+        overdueLots: held.filter((s) => s.overdue).length,
+        toVerify: dis.filter((i) => i.status === 'Submitted').length,
+      },
+      customers: {
+        containersSold: verified.reduce((n, i) => n + i.containers, 0),
+        invoiced: round2(verified.reduce((n, i) => n + Number(i.amount), 0)),
+        collected: round2(verified.reduce((n, i) => n + i.paid, 0)),
+        receivable: round2(verified.reduce((n, i) => n + i.due, 0)),
+        margin: round2(verified.reduce((n, i) => n + i.margin, 0)),
+      },
+    };
+  }
+
   // ───────────── dashboard ─────────────
 
   async dashboard() {

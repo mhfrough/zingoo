@@ -5,7 +5,7 @@ import { AuthService } from '../../core/auth.service';
 import { errorText } from '../../shared/errors';
 import { Tone, fmtAmount, fmtDate, fmtMoney, fmtNumber } from '../../shared/format';
 import {
-  Btn, ConfirmService, DataTable, Kpi, PageHeader, RowAction, RowActionEvent, TableColumn, ToastService,
+  Btn, ConfirmService, DataTable, Kpi, PageHeader, RowAction, RowActionEvent, TabItem, TabPanel, Tabs, TableColumn, ToastService,
 } from '../../ui';
 import { Batch, Product, StockRow } from '../ops/models';
 import { OpsApi } from '../ops/ops.api';
@@ -24,7 +24,7 @@ const STATUS_TONE: Record<string, Tone> = { Released: 'success', Planned: 'warni
 @Component({
   selector: 'app-manufacturing',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [Btn, DataTable, Kpi, PageHeader, BatchForm, ProductForm, PayManufacturerForm, OrdersPanel, RequestsPanel, ShipmentsPanel],
+  imports: [Btn, DataTable, Kpi, PageHeader, Tabs, TabPanel, BatchForm, ProductForm, PayManufacturerForm, OrdersPanel, RequestsPanel, ShipmentsPanel],
   templateUrl: './manufacturing.html',
 })
 export class Manufacturing {
@@ -55,6 +55,21 @@ export class Manufacturing {
   /** containers ordered and not yet cancelled or rejected, still being made */
   protected containersOnOrder = computed(() =>
     (this.productionOrders.value() ?? []).filter((o) => o.status === 'Sent' || o.status === 'Accepted').reduce((n, o) => n + o.containers, 0));
+  /** containers received by distributors and not yet sold */
+  protected containersHeld = computed(() => (this.distStock.value()?.byProduct ?? []).reduce((n, r) => n + r.containers, 0));
+
+  /** the page sections; the counts show what needs attention */
+  protected tab = signal('orders');
+  protected tabs = computed<TabItem[]>(() => {
+    const waitingPay = (this.mfrRequests.value() ?? []).filter((r) => r.status === 'Submitted' && (!r.approved || r.due > 0)).length;
+    const inTransit = (this.shipments.value() ?? []).filter((s) => s.status === 'In transit').length;
+    return [
+      { id: 'orders', label: 'Orders & deliveries', icon: 'factory', count: (this.ordersWaiting() + inTransit) || null },
+      { id: 'payments', label: 'Manufacturer payments', icon: 'banknote', count: waitingPay || null },
+      { id: 'products', label: 'Products', icon: 'package', count: this.unassigned() || null },
+      { id: 'warehouse', label: 'Warehouse & batches', icon: 'boxes' },
+    ];
+  });
   protected ordersWaiting = computed(() => (this.productionOrders.value() ?? []).filter((o) => o.status === 'Sent').length);
 
   protected canWrite = computed(() => this.auth.can('manufacturing'));
@@ -133,7 +148,7 @@ export class Manufacturing {
   protected batchColumns: TableColumn<Batch>[] = [
     { id: 'batch', label: 'Batch', value: (b) => b.refNo, sub: (b) => fmtDate(b.date) },
     { id: 'product', label: 'Product', value: (b) => `${b.product.name} · Rs ${b.product.pack}`, sub: (b) => b.product.sku },
-    { id: 'cartons', label: 'Cartons made', kind: 'number', value: (b) => b.producedCartons, sub: (b) => `Target ${b.targetCartons}` },
+    { id: 'cartons', label: 'Bundles made', kind: 'number', value: (b) => b.producedCartons, sub: (b) => `Target ${b.targetCartons}` },
     { id: 'qc', label: 'QC', kind: 'tag', value: (b) => b.qc, tone: (b) => QC_TONE[b.qc] ?? 'neutral', priority: 3 },
     { id: 'status', label: 'Status', kind: 'tag', value: (b) => b.status, tone: (b) => STATUS_TONE[b.status] ?? 'neutral', priority: 2 },
     { id: 'cost', label: 'Est. cost (PKR)', kind: 'money', value: (b) => b.cost, sub: (b) => b.manufacturer.name, priority: 2 },

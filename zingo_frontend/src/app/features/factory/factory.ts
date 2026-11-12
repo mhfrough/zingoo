@@ -83,7 +83,7 @@ import { MfrStatement } from './trail-panel';
         </div>
       </div>
 
-      <app-orders-panel mode="factory" [orders]="orders.value() ?? []" [loading]="orders.isLoading()"
+      <app-orders-panel mode="factory" [orders]="visibleOrders()" [loading]="orders.isLoading()"
         [error]="orders.error() ? 'The server did not answer.' : null" [stages]="profile.value()?.stages ?? []"
         [canAnswer]="canAnswer()" (changed)="reload()" />
 
@@ -136,6 +136,8 @@ export class Factory {
     params: () => ({ t: this.tick(), m: this.profile.value()?.manufacturer?.id }),
     stream: ({ params }) => (params.m ? this.api.position(params.m) : of(null)),
   });
+  /** what the manufacturer sees: never the company's drafts (staff looking at the portal see the same) */
+  protected visibleOrders = computed(() => (this.orders.value() ?? []).filter((o) => o.status !== 'Draft'));
   private manufacturers = rxResource({
     params: () => (this.isManufacturer() ? undefined : true),
     stream: () => this.ops.manufacturers(),

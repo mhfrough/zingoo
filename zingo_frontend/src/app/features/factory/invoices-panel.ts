@@ -3,7 +3,7 @@ import { FormArray, FormGroup, ReactiveFormsModule, Validators } from '@angular/
 import { toSignal } from '@angular/core/rxjs-interop';
 import { SettingsStore } from '../../core/settings.store';
 import { errorText } from '../../shared/errors';
-import { Tone, fmtAmount, fmtDate, fmtMoney, fmtNumber } from '../../shared/format';
+import { Tone, fmtAmount, fmtAmount2, fmtDate, fmtMoney, fmtNumber } from '../../shared/format';
 import { Btn, ConfirmService, DataTable, Field, MoneyInput, Offcanvas, RowAction, RowActionEvent, TableColumn, ToastService } from '../../ui';
 import { FormModal } from '../ops/form-modal';
 import { OrderReasonForm } from './answer-forms';
@@ -68,7 +68,7 @@ const today = () => new Date().toISOString().slice(0, 10);
             <div class="lot" [formGroupName]="i">
               <div>
                 <strong>{{ lots()[i].product.sku }} · {{ lots()[i].refNo }}</strong>
-                <small>{{ lots()[i].onHandContainers }} in stock · sell by {{ date(lots()[i].sellBy) }} · {{ money(lots()[i].saleRate ?? 0) }} per packet</small>
+                <small>{{ lots()[i].onHandContainers }} in stock · sell by {{ date(lots()[i].sellBy) }} · PKR {{ rate(lots()[i].saleRate ?? 0) }} per packet</small>
               </div>
               <app-field [label]="'Containers sold'">
                 <input type="number" formControlName="containers" min="0" [max]="lots()[i].onHandContainers" step="1" />
@@ -121,6 +121,8 @@ export class SalesInvoiceForm extends FormModal {
 
   protected money = fmtMoney;
   protected num = fmtNumber;
+  /** a price per packet keeps its paisa */
+  protected rate = fmtAmount2;
   protected date = (d: string | null) => (d ? fmtDate(d) : '-');
 
   protected reset() {

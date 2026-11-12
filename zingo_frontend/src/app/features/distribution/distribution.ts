@@ -9,7 +9,7 @@ import { TrailPanel } from '../factory/trail-panel';
 import { errorText } from '../../shared/errors';
 import { Tone, fmtAmount, fmtDate, fmtMoney, fmtNumber } from '../../shared/format';
 import {
-  Btn, ConfirmService, DataTable, Kpi, PageHeader, RowAction, RowActionEvent, TableColumn, ToastService,
+  Btn, ConfirmService, DataTable, Kpi, PageHeader, RowAction, RowActionEvent, TabItem, TabPanel, Tabs, TableColumn, ToastService,
 } from '../../ui';
 import { CollectionRow, Distributor, Order } from '../ops/models';
 import { OpsApi } from '../ops/ops.api';
@@ -28,7 +28,7 @@ interface DistributorRow {
 @Component({
   selector: 'app-distribution',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [RouterLink, Btn, DataTable, Kpi, PageHeader, OrderForm, CollectionForm, DistributorForm, CreditOverrideForm, ShipmentsPanel, InvoicesPanel, TrailPanel],
+  imports: [RouterLink, Btn, DataTable, Kpi, PageHeader, Tabs, TabPanel, OrderForm, CollectionForm, DistributorForm, CreditOverrideForm, ShipmentsPanel, InvoicesPanel, TrailPanel],
   templateUrl: './distribution.html',
 })
 export class Distribution {
@@ -57,6 +57,29 @@ export class Distribution {
   protected canManageInvoices = computed(() => ['Admin', 'Finance', 'Distribution'].includes(this.auth.user()?.role ?? ''));
   /** the earlier warehouse sales-order flow, shown only when switched on in Settings */
   protected legacy = computed(() => !!this.settings.value()?.salesOrdersEnabled);
+
+  // ───────────── the consignment flow at a glance ─────────────
+  private verified = computed(() => (this.distInvoices.value() ?? []).filter((i) => i.status === 'Verified'));
+  protected salesInvoiced = computed(() => this.verified().reduce((n, i) => n + i.amount, 0));
+  protected salesCollected = computed(() => this.verified().reduce((n, i) => n + i.paid, 0));
+  protected salesDue = computed(() => this.verified().reduce((n, i) => n + i.due, 0));
+  protected containersSold = computed(() => this.verified().reduce((n, i) => n + i.containers, 0));
+  protected overdueInvoices = computed(() => this.verified().filter((i) => i.overdue).length);
+  protected toVerify = computed(() => (this.distInvoices.value() ?? []).filter((i) => i.status === 'Submitted').length);
+  protected containersHeld = computed(() => (this.distStock.value()?.byProduct ?? []).reduce((n, r) => n + r.containers, 0));
+  /** the earlier sales orders are read-only while the flow is switched off */
+  protected noActions = (): RowAction[] => [];
+
+  protected tab = signal('sales');
+  protected tabs = computed<TabItem[]>(() => {
+    const toReceive = (this.shipments.value() ?? []).filter((s) => s.status === 'In transit').length;
+    return [
+      { id: 'sales', label: 'Sales invoices', icon: 'receipt', count: this.toVerify() || null },
+      { id: 'stock', label: 'Deliveries & stock', icon: 'truck', count: toReceive || null },
+      { id: 'distributors', label: 'Distributors', icon: 'users' },
+      { id: 'orders', label: this.legacy() ? 'Sales orders' : 'Earlier sales orders', icon: 'package' },
+    ];
+  });
 
   protected canWrite = computed(() => this.auth.can('distribution'));
   protected canOverride = computed(() => this.auth.can('finance'));

@@ -34,19 +34,21 @@ const LINKS: Link[] = [
   styles: `
     :host {
       display: block;
+      container-type: inline-size;
     }
 
+    /* five boxes in a row when there is room, otherwise one under the other */
     .chain {
       display: grid;
-      grid-template-columns: repeat(5, minmax(0, 1fr));
-      gap: var(--space-6);
+      grid-template-columns: minmax(0, 1fr);
+      gap: var(--space-5);
       margin: 0;
       padding: 0;
       list-style: none;
 
-      @media (max-width: 1100px) {
-        grid-template-columns: minmax(0, 1fr);
-        gap: var(--space-5);
+      @container (min-width: 70rem) {
+        grid-template-columns: repeat(5, minmax(0, 1fr));
+        gap: var(--space-8, 2.5rem);
       }
     }
 
@@ -91,17 +93,19 @@ const LINKS: Link[] = [
       }
     }
 
+    /* figures flow into columns when the box is wide (stacked layout), one column when narrow */
     .figures {
       margin: 0;
-      display: flex;
-      flex-direction: column;
-      gap: var(--space-1);
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(min(12rem, 100%), 1fr));
+      gap: var(--space-1) var(--space-6);
       font-size: var(--text-sm);
 
       & div {
         display: flex;
+        flex-wrap: wrap;
         justify-content: space-between;
-        gap: var(--space-2);
+        column-gap: var(--space-2);
       }
 
       & dt {
@@ -109,44 +113,39 @@ const LINKS: Link[] = [
       }
 
       & dd {
-        margin: 0;
+        margin: 0 0 0 auto;
         font-variant-numeric: tabular-nums;
         text-align: end;
+        white-space: nowrap;
       }
     }
 
-    /* the arrow into the next box, with its label */
+    /* the arrow into the next box: below it when stacked, beside it in a row */
     .arrow {
       position: absolute;
-      inset-inline-start: 100%;
-      inset-block-start: 50%;
-      inline-size: var(--space-6);
+      inset-inline-start: 50%;
+      inset-block-start: 100%;
+      block-size: var(--space-5);
       display: grid;
       place-items: center;
-      translate: 0 -50%;
+      translate: -50% 0;
+      rotate: 90deg;
       color: var(--text-3);
 
-      & span {
-        position: absolute;
-        inset-block-end: 100%;
-        inline-size: max-content;
-        max-inline-size: 7rem;
-        font-size: var(--text-xs);
-        text-align: center;
+      @container (min-width: 70rem) {
+        inset-inline-start: 100%;
+        inset-block-start: 50%;
+        inline-size: var(--space-8, 2.5rem);
+        block-size: auto;
+        translate: 0 -50%;
+        rotate: none;
       }
+    }
 
-      @media (max-width: 1100px) {
-        inset-inline-start: 50%;
-        inset-block-start: 100%;
-        inline-size: auto;
-        block-size: var(--space-5);
-        translate: -50% 0;
-        rotate: 90deg;
-
-        & span {
-          display: none;
-        }
-      }
+    /* what moves along the arrow, in small type under each box title */
+    .box__flow {
+      font-size: var(--text-xs);
+      color: var(--text-3);
     }
   `,
   template: `
@@ -155,6 +154,9 @@ const LINKS: Link[] = [
         <li class="link">
           <a class="box" [routerLink]="l.path" [attr.data-main]="l.key === 'company' ? '' : null">
             <span class="box__head"><app-icon [name]="l.icon" [size]="18" />{{ l.title }}</span>
+            @if (l.arrow) {
+              <span class="box__flow">{{ l.arrow }} →</span>
+            }
             <dl class="figures">
               @for (f of figures(l.key); track f[0]) {
                 <div><dt>{{ f[0] }}</dt><dd>{{ f[1] }}</dd></div>
@@ -162,7 +164,7 @@ const LINKS: Link[] = [
             </dl>
           </a>
           @if (!last) {
-            <span class="arrow" aria-hidden="true"><span>{{ l.arrow }}</span><app-icon name="arrow-right" [size]="18" /></span>
+            <span class="arrow" aria-hidden="true"><app-icon name="arrow-right" [size]="18" /></span>
           }
         </li>
       }

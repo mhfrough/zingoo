@@ -37,7 +37,7 @@ const today = () => new Date().toISOString().slice(0, 10);
             }
           </select>
         </app-field>
-        <app-field label="Cartons ordered" [required]="true" [error]="invalid('cartons') ? 'At least 1 bundle' : null">
+        <app-field label="Bundles ordered" [required]="true" [error]="invalid('cartons') ? 'At least 1 bundle' : null">
           <input type="number" formControlName="cartons" min="1" step="1" />
         </app-field>
         <app-field label="Rate per pack" hint="Filled from the SKU price; change it for this order if needed" [required]="true">

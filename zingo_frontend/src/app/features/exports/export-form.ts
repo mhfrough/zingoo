@@ -62,7 +62,7 @@ const COSTS = [
             }
           </select>
         </app-field>
-        <app-field label="Cartons in this container" [required]="true" [error]="invalid('cartons') ? 'Enter at least 1 bundle' : null">
+        <app-field label="Bundles in this container" [required]="true" [error]="invalid('cartons') ? 'Enter at least 1 bundle' : null">
           <input type="number" formControlName="cartons" min="1" step="1" />
         </app-field>
         <app-field label="Invoice currency" [required]="true">

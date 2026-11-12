@@ -12,6 +12,8 @@ export interface UserRow {
   isRoot: boolean;
   distributorId: string | null;
   distributorName: string | null;
+  manufacturerId?: string | null;
+  manufacturerName?: string | null;
 }
 
 /** Which page each role can open and which kind of change it can make. */
@@ -20,7 +22,7 @@ export interface AccessMatrix {
   writes: Record<string, string[]>;
 }
 
-export const ROLE_LIST = ['Admin', 'Manufacturing', 'Finance', 'Distribution', 'Exports', 'Viewer', 'Investor', 'Distributor'] as const;
+export const ROLE_LIST = ['Admin', 'Manufacturing', 'Finance', 'Distribution', 'Exports', 'Viewer', 'Investor', 'Distributor', 'Manufacturer'] as const;
 
 /** Every call the Users & Roles page makes. */
 @Injectable({ providedIn: 'root' })

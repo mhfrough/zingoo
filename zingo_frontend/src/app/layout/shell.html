@@ -53,7 +53,7 @@
             @for (g of viewAsGroups(); track g.role) {
               <optgroup [label]="g.role">
                 @for (u of g.users; track u.id) {
-                  <option [value]="u.id">{{ u.name }}{{ u.distributorName ? ' · ' + u.distributorName : '' }}</option>
+                  <option [value]="u.id">{{ u.name }}{{ u.distributorName ? ' · ' + u.distributorName : '' }}{{ u.manufacturerName ? ' · ' + u.manufacturerName : '' }}</option>
                 } @empty {
                   <option [value]="'role:' + g.role">+ Create {{ g.role }} account</option>
                 }

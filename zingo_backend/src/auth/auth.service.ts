@@ -1,7 +1,7 @@
 import { BadRequestException, Injectable, UnauthorizedException } from '@nestjs/common';
 import { randomBytes } from 'crypto';
 import { DataSource } from 'typeorm';
-import { Distributor } from '../catalog/catalog.entities';
+import { Distributor, Manufacturer } from '../catalog/catalog.entities';
 import { ROLES, Role } from '../common/enums';
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcrypt';
@@ -20,7 +20,7 @@ export class AuthService {
   private profile(u: User) {
     return {
       id: u.id, email: u.email, name: u.name, role: u.role, seat: u.seat,
-      distributorId: u.distributorId, isRoot: u.isRoot, pages: ROLE_PAGES[u.role],
+      distributorId: u.distributorId, manufacturerId: u.manufacturerId, isRoot: u.isRoot, pages: ROLE_PAGES[u.role],
     };
   }
 
@@ -41,7 +41,7 @@ export class AuthService {
   async viewAsOptions() {
     const users = (await this.users.list())
       .filter((u: any) => u.status === 'Active')
-      .map((u: any) => ({ id: u.id, name: u.name, email: u.email, role: u.role, distributorName: u.distributorName ?? null }));
+      .map((u: any) => ({ id: u.id, name: u.name, email: u.email, role: u.role, distributorName: u.distributorName ?? null, manufacturerName: u.manufacturerName ?? null }));
     return { users, roles: [...ROLES] };
   }
 
@@ -71,11 +71,17 @@ export class AuthService {
       if (!d) throw new BadRequestException('Add a distributor first.');
       distributorId = d.id;
     }
+    let manufacturerId: string | null = null;
+    if (role === 'Manufacturer') {
+      const m = await this.db.getRepository(Manufacturer).findOne({ where: {}, order: { name: 'ASC' } });
+      if (!m) throw new BadRequestException('Add a manufacturer first.');
+      manufacturerId = m.id;
+    }
     const slug = role.toLowerCase();
     let email = `${slug}@zingoo.local`;
     for (let n = 2; await this.users.findByEmail(email); n++) email = `${slug}${n}@zingoo.local`;
     const user = await this.users.createUser({
-      email, name: `${role} (Demo)`, role, distributorId,
+      email, name: `${role} (Demo)`, role, distributorId, manufacturerId,
       password: randomBytes(18).toString('base64url'), // nobody signs in with it; the Admin switches in, or resets it on Users
     });
     return this.viewAs(adminId, user.id);

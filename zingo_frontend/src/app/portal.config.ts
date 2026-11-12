@@ -75,6 +75,12 @@ export const NAV: NavItem[] = [
     tables: ['My orders', 'Cargo and damage', 'Payments and credit', 'Agreed SKU rates', 'Statement'],
   },
   {
+    path: 'factory-portal', page: 'factory', label: 'Manufacturer Portal', icon: 'factory', group: 'Partners', phase: 8,
+    description: 'What a manufacturer sees: orders from Zen Foods to accept or reject, and the progress it reports.',
+    forms: ['Accept order', 'Reject order', 'Report progress'],
+    tables: ['Orders from Zen Foods', 'Payment details'],
+  },
+  {
     path: 'users', label: 'Users & Roles', icon: 'users', group: 'Admin', phase: 6,
     description: 'Who can read and change what, and who holds signing seat A or B.',
     forms: ['User', 'Assign distributor account'],
@@ -104,6 +110,6 @@ export const pageKey = (n: NavItem) => n.page ?? n.path;
 export const visibleNav = (pages: string[] | undefined): NavItem[] =>
   pages ? NAV.filter((n) => pages.includes(pageKey(n))) : NAV;
 
-/** The first page a role can open (where it lands after signing in): Overview for staff, the partner portal for a distributor. */
+/** The first page a role can open (where it lands after signing in): Overview for staff, its portal for a distributor or a manufacturer. */
 export const homePath = (pages: string[] | undefined): string =>
   `/admin/${(pages ? NAV.find((n) => pages.includes(pageKey(n))) : NAV[0])?.path ?? 'overview'}`;

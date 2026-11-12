@@ -13,7 +13,7 @@ import { UserForm } from './user-form';
 import { ROLE_LIST, UserRow, UsersApi } from './users.api';
 
 const ROLE_TONE: Record<string, Tone> = {
-  Admin: 'accent', Finance: 'info', Manufacturing: 'warning', Distribution: 'success', Exports: 'success', Viewer: 'neutral', Investor: 'info', Distributor: 'neutral',
+  Admin: 'accent', Finance: 'info', Manufacturing: 'warning', Distribution: 'success', Exports: 'success', Viewer: 'neutral', Investor: 'info', Distributor: 'neutral', Manufacturer: 'neutral',
 };
 
 /** what each kind of change is called in the permission table */
@@ -53,6 +53,7 @@ export class Users {
   protected users = rxResource({ params: () => this.tick(), stream: () => this.api.list() });
   protected access = rxResource({ stream: () => this.api.access() });
   protected distributors = rxResource({ stream: () => this.ops.distributors() });
+  protected manufacturers = rxResource({ stream: () => this.ops.manufacturers() });
 
   protected canEdit = computed(() => this.auth.can('admin'));
   protected tab = signal('people');
@@ -72,7 +73,7 @@ export class Users {
   // ───────────── people ─────────────
   protected columns: TableColumn<UserRow>[] = [
     { id: 'name', label: 'Name', value: (u) => u.name, sub: (u) => u.email },
-    { id: 'role', label: 'Role', kind: 'tag', value: (u) => u.role, tone: (u): Tone => ROLE_TONE[u.role] ?? 'neutral', sub: (u) => u.distributorName },
+    { id: 'role', label: 'Role', kind: 'tag', value: (u) => u.role, tone: (u): Tone => ROLE_TONE[u.role] ?? 'neutral', sub: (u) => u.distributorName ?? u.manufacturerName ?? null },
     { id: 'seat', label: 'Signing seat', priority: 2, value: (u) => (u.seat === 'None' ? '-' : u.seat === 'Both' ? 'Seat A and B' : `Seat ${u.seat}`) },
     {
       id: 'status', label: 'Status', kind: 'tag', value: (u) => (u.isRoot ? `${u.status} · root` : u.status),

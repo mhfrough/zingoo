@@ -942,5 +942,72 @@ const p2DUp = await call(T.owner, 'PATCH', `/distributors/${p2D.id}`, { region: 
 ok('areas are trimmed, without blanks, repeats or the main city', JSON.stringify(p2DUp.json?.areas) === JSON.stringify(['Kotri', 'Jamshoro']), JSON.stringify(p2DUp.json?.areas));
 ok('more than 100 areas -> 400', (await call(T.owner, 'PATCH', `/distributors/${p2D.id}`, { areas: Array.from({ length: 101 }, (_, i) => `Area ${i}`) })).status === 400);
 
+// ── P3 production orders and the manufacturer portal ──
+const p3Maker = await login('manufacturer@demo.local');
+ok('the demo manufacturer can sign in', !!p3Maker);
+const p3Me = (await call(p3Maker, 'GET', '/auth/me')).json;
+ok('a Manufacturer login lands on the factory portal only', p3Me?.role === 'Manufacturer' && JSON.stringify(p3Me?.pages) === JSON.stringify(['factory']) && !!p3Me?.manufacturerId, JSON.stringify(p3Me));
+ok('a Manufacturer login cannot read staff data -> 403',
+  (await call(p3Maker, 'GET', '/products')).status === 403 && (await call(p3Maker, 'GET', '/reports/dashboard')).status === 403 && (await call(p3Maker, 'GET', '/portal/orders')).status === 403);
+ok('a Distributor login cannot read production orders -> 403', (await call(T.dist, 'GET', '/production-orders')).status === 403);
+const p3Seeded = (await call(T.owner, 'GET', '/production-orders')).json ?? [];
+ok('sample orders: one in production, one draft', p3Seeded.some((o) => o.status === 'Accepted' && o.stage === 'In production') && p3Seeded.some((o) => o.status === 'Draft'), JSON.stringify(p3Seeded.map((o) => [o.refNo, o.status, o.stage])));
+ok('the manufacturer never sees drafts', ((await call(p3Maker, 'GET', '/production-orders')).json ?? []).every((o) => o.status !== 'Draft'));
+const p3Prods = (await call(T.owner, 'GET', '/products')).json ?? [];
+const p3P = p3Prods.find((p) => p.sku === 'Z10-KET');
+const p3Day = new Date().toISOString().slice(0, 10);
+const p3New = await call(T.factory, 'POST', '/production-orders', { date: p3Day, productId: p3P.id, containers: 3 });
+const p3o = p3New.json;
+ok('an order takes manufacturer, distributor, packaging, rate and advance from the set-up',
+  p3New.status === 201 && p3o.status === 'Draft' && p3o.manufacturerId === p3P.manufacturerId && p3o.distributorId === p3P.distributorId
+  && p3o.bundles === 3 * p3P.bundlesPerContainer && p3o.packets === 3 * p3P.bundlesPerContainer * p3P.packsPerCarton
+  && p3o.rate === p3P.manufacturerRate && p3o.advancePct === 30 && /^MO-\d{3}$/.test(p3o.refNo), JSON.stringify(p3o));
+ok('value = packets x rate, advance = 30% of it', p3o.value === Math.round(p3o.packets * p3o.rate * 100) / 100 && p3o.advanceAmount === Math.round(p3o.value * 30) / 100);
+ok('a delivery date before the order date -> 400', (await call(T.factory, 'POST', '/production-orders', { date: p3Day, productId: p3P.id, containers: 1, dueDate: '2000-01-01' })).status === 400);
+ok('zero containers -> 400', (await call(T.factory, 'POST', '/production-orders', { date: p3Day, productId: p3P.id, containers: 0 })).status === 400);
+ok('the warehouse needs no distributor', (await call(T.factory, 'POST', '/production-orders', { date: p3Day, productId: p3P.id, containers: 1, destination: 'Warehouse' })).json?.distributorId === null);
+ok('Finance cannot place production orders -> 403', (await call(T.finance, 'POST', '/production-orders', { date: p3Day, productId: p3P.id, containers: 1 })).status === 403);
+ok('a manufacturer cannot place orders -> 403', (await call(p3Maker, 'POST', '/production-orders', { date: p3Day, productId: p3P.id, containers: 1 })).status === 403);
+ok('a draft can be changed', (await call(T.factory, 'PATCH', `/production-orders/${p3o.id}`, { containers: 4 })).json?.containers === 4);
+ok('the manufacturer cannot answer a draft -> 404/400', [400, 404].includes((await call(p3Maker, 'POST', `/production-orders/${p3o.id}/accept`, {})).status));
+ok('send a draft', (await call(T.factory, 'POST', `/production-orders/${p3o.id}/send`)).json?.status === 'Sent');
+ok('a sent order cannot be changed -> 400', (await call(T.factory, 'PATCH', `/production-orders/${p3o.id}`, { containers: 5 })).status === 400);
+ok('a sent order cannot be deleted -> 400', (await call(T.factory, 'DELETE', `/production-orders/${p3o.id}`)).status === 400);
+const p3Al = (await call(T.owner, 'GET', '/reports/alerts')).json ?? [];
+ok('the company is alerted while the manufacturer has not answered', p3Al.some((a) => a.kind === 'production' && a.title.includes(p3o.refNo)));
+ok('progress before accepting -> 400', (await call(p3Maker, 'POST', `/production-orders/${p3o.id}/stage`, { stage: 'Preparation' })).status === 400);
+ok('a ready date before the order date -> 400', (await call(p3Maker, 'POST', `/production-orders/${p3o.id}/accept`, { readyDate: '2000-01-01' })).status === 400);
+const p3Acc = await call(p3Maker, 'POST', `/production-orders/${p3o.id}/accept`, { note: 'Will start Monday' });
+ok('the manufacturer accepts from its portal', p3Acc.json?.status === 'Accepted' && p3Acc.json?.events?.some((e) => e.event === 'Accepted' && e.side === 'Manufacturer'), JSON.stringify(p3Acc.json?.events));
+ok('accepting twice -> 400', (await call(p3Maker, 'POST', `/production-orders/${p3o.id}/accept`, {})).status === 400);
+ok('a stage not in Settings -> 400', (await call(p3Maker, 'POST', `/production-orders/${p3o.id}/stage`, { stage: 'Teleporting' })).status === 400);
+ok('report a stage', (await call(p3Maker, 'POST', `/production-orders/${p3o.id}/stage`, { stage: 'In production', note: 'Line 2' })).json?.stage === 'In production');
+ok('stages only move forward -> 400', (await call(p3Maker, 'POST', `/production-orders/${p3o.id}/stage`, { stage: 'Preparation' })).status === 400);
+ok('staff may report for the manufacturer', (await call(T.factory, 'POST', `/production-orders/${p3o.id}/stage`, { stage: 'Quality check' })).json?.events?.some((e) => e.event === 'Quality check' && e.side === 'Company'));
+ok('Finance cannot report progress -> 403', (await call(T.finance, 'POST', `/production-orders/${p3o.id}/stage`, { stage: 'Ready to ship' })).status === 403);
+// another manufacturer cannot touch this one's orders
+const p3Other = await call(T.owner, 'POST', '/manufacturers', { name: `P3 Other Maker ${Date.now() % 100000}` });
+const p3OtherUser = await call(T.owner, 'POST', '/users', { name: 'Other Maker', email: `maker${Date.now() % 100000}@example.test`, password: 'P3-password-1', role: 'Manufacturer', manufacturerId: p3Other.json?.id });
+ok('a Manufacturer login needs its manufacturer -> 400', (await call(T.owner, 'POST', '/users', { name: 'No Maker', email: `nomaker${Date.now() % 100000}@example.test`, password: 'P3-password-1', role: 'Manufacturer' })).status === 400);
+const p3OtherT = await (async () => (await call(null, 'POST', '/auth/login', { email: p3OtherUser.json?.email, password: 'P3-password-1' })).json?.access_token)();
+ok('another manufacturer sees none of these orders', p3OtherT && ((await call(p3OtherT, 'GET', '/production-orders')).json ?? []).length === 0);
+ok('and cannot answer them -> 403', (await call(p3OtherT, 'POST', `/production-orders/${p3o.id}/stage`, { stage: 'Ready to ship' })).status === 403);
+ok('its portal profile is its own', (await call(p3OtherT, 'GET', `/production-orders/profile?manufacturerId=${p3P.manufacturerId}`)).json?.manufacturer?.id === p3Other.json?.id);
+// reject and cancel
+const p3R = (await call(T.factory, 'POST', '/production-orders', { date: p3Day, productId: p3P.id, containers: 1, send: true })).json;
+ok('send straight away', p3R?.status === 'Sent');
+ok('a rejection needs a reason -> 400', (await call(p3Maker, 'POST', `/production-orders/${p3R.id}/reject`, { reason: '' })).status === 400);
+ok('the manufacturer rejects with a reason', (await call(p3Maker, 'POST', `/production-orders/${p3R.id}/reject`, { reason: 'Line busy until January' })).json?.status === 'Rejected');
+ok('the company is alerted about the rejection', ((await call(T.owner, 'GET', '/reports/alerts')).json ?? []).some((a) => a.title.includes(`Order rejected · ${p3R.refNo}`)));
+ok('a rejected order cannot be cancelled -> 400', (await call(T.factory, 'POST', `/production-orders/${p3R.id}/cancel`, { reason: 'x' })).status === 400);
+ok('the company cancels an accepted order with a reason', (await call(T.factory, 'POST', `/production-orders/${p3o.id}/cancel`, { reason: 'Plan changed' })).json?.status === 'Cancelled');
+ok('nothing can be reported on a cancelled order -> 400', (await call(p3Maker, 'POST', `/production-orders/${p3o.id}/stage`, { stage: 'Ready to ship' })).status === 400);
+const p3Prof = (await call(p3Maker, 'GET', '/production-orders/profile')).json;
+ok('the portal profile shows the manufacturer, its counts and the stages', p3Prof?.manufacturer?.name === 'Brand Choice Pakistan' && p3Prof?.stages?.[0] === 'Preparation' && typeof p3Prof?.waiting === 'number', JSON.stringify(p3Prof));
+ok('production stages are a Settings list', ((await call(T.owner, 'GET', '/lookups')).json ?? []).some((l) => l.list === 'ORDER_STAGE'));
+ok('Admin can switch to a Manufacturer login', (await call(T.owner, 'POST', '/auth/switch-role/Manufacturer')).json?.user?.role === 'Manufacturer');
+const p3Draft = p3Seeded.find((o) => o.status === 'Draft');
+ok('a draft can be deleted', (await call(T.factory, 'DELETE', `/production-orders/${p3Draft.id}`)).status === 200);
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

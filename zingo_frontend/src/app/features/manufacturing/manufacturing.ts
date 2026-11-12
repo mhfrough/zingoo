@@ -12,6 +12,9 @@ import { OpsApi } from '../ops/ops.api';
 import { BatchForm } from './batch-form';
 import { PayManufacturerForm } from './pay-manufacturer-form';
 import { ProductForm } from './product-form';
+import { FactoryApi } from '../factory/factory.api';
+import { OrdersPanel } from '../factory/orders-panel';
+import { SettingsStore } from '../../core/settings.store';
 
 const QC_TONE: Record<string, Tone> = { Passed: 'success', Pending: 'warning', Failed: 'danger' };
 const STATUS_TONE: Record<string, Tone> = { Released: 'success', Planned: 'warning' };
@@ -19,7 +22,7 @@ const STATUS_TONE: Record<string, Tone> = { Released: 'success', Planned: 'warni
 @Component({
   selector: 'app-manufacturing',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [Btn, DataTable, Kpi, PageHeader, BatchForm, ProductForm, PayManufacturerForm],
+  imports: [Btn, DataTable, Kpi, PageHeader, BatchForm, ProductForm, PayManufacturerForm, OrdersPanel],
   templateUrl: './manufacturing.html',
 })
 export class Manufacturing {
@@ -38,6 +41,15 @@ export class Manufacturing {
   protected products = rxResource({ params: () => this.tick(), stream: () => this.api.products() });
   protected manufacturers = rxResource({ params: () => this.tick(), stream: () => this.api.manufacturers() });
   protected distributors = rxResource({ params: () => this.tick(), stream: () => this.api.distributors() });
+  private factory = inject(FactoryApi);
+  private store = inject(SettingsStore);
+  protected productionOrders = rxResource({ params: () => this.tick(), stream: () => this.factory.orders() });
+  /** the production steps a manufacturer reports (Settings list) */
+  protected stages = computed(() => this.store.options('ORDER_STAGE'));
+  /** containers ordered and not yet cancelled or rejected, still being made */
+  protected containersOnOrder = computed(() =>
+    (this.productionOrders.value() ?? []).filter((o) => o.status === 'Sent' || o.status === 'Accepted').reduce((n, o) => n + o.containers, 0));
+  protected ordersWaiting = computed(() => (this.productionOrders.value() ?? []).filter((o) => o.status === 'Sent').length);
 
   protected canWrite = computed(() => this.auth.can('manufacturing'));
   protected loading = computed(() => this.stock.isLoading() || this.batches.isLoading());

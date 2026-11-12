@@ -10,7 +10,7 @@ import { AuthService } from './auth.service';
 /** The editable pick-lists on Settings & Data. */
 export type LookupList =
   | 'PAY_METHOD' | 'INCOTERM' | 'CAPITAL_SOURCE' | 'STREAM_TYPE' | 'PERSON'
-  | 'LOAN_TENURE' | 'REPAY_PLAN' | 'REPAY_FREQUENCY' | 'ADVANCE_PURPOSE' | 'SETTLEMENT_METHOD' | 'BANK_ACCOUNT' | 'DELIVERY_STATUS' | 'BILL_TYPE' | 'BILL_TREATMENT' | 'APPROVER' | 'FLAVOUR' | 'PACKET_SIZE' | 'BANK';
+  | 'LOAN_TENURE' | 'REPAY_PLAN' | 'REPAY_FREQUENCY' | 'ADVANCE_PURPOSE' | 'SETTLEMENT_METHOD' | 'BANK_ACCOUNT' | 'DELIVERY_STATUS' | 'BILL_TYPE' | 'BILL_TREATMENT' | 'APPROVER' | 'FLAVOUR' | 'PACKET_SIZE' | 'BANK' | 'ORDER_STAGE';
 
 /** One entry of an editable pick-list (payment methods, Incoterms, capital sources, stream types, people). */
 export interface Lookup {
@@ -41,7 +41,7 @@ export class SettingsStore {
   /** a distributor login has no access to the company settings, so nothing is loaded for it (its portal sends what it needs) */
   private params = computed(() => {
     const u = this.auth.user();
-    return u && u.role !== 'Distributor' ? { user: u.id, tick: this.tick() } : undefined;
+    return u && u.role !== 'Distributor' && u.role !== 'Manufacturer' ? { user: u.id, tick: this.tick() } : undefined;
   });
 
   readonly settingsRes = rxResource({ params: () => this.params(), stream: () => this.api.get<Settings>('settings') });

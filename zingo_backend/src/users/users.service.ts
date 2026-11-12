@@ -61,19 +61,24 @@ export class UsersService implements OnApplicationBootstrap {
   }
 
   async list() {
-    const rows = await this.repo.find({ relations: ['distributor'], order: { name: 'ASC' } });
-    return rows.map((u) => ({ ...this.view(u), distributorName: u.distributor?.name ?? null, distributor: undefined }));
+    const rows = await this.repo.find({ relations: ['distributor', 'manufacturer'], order: { name: 'ASC' } });
+    return rows.map((u) => ({
+      ...this.view(u), distributorName: u.distributor?.name ?? null, manufacturerName: u.manufacturer?.name ?? null,
+      distributor: undefined, manufacturer: undefined,
+    }));
   }
 
   /** a login made from the users screen */
-  async add(dto: { name: string; email: string; password: string; role: Role; seat?: Seat; distributorId?: string }) {
+  async add(dto: { name: string; email: string; password: string; role: Role; seat?: Seat; distributorId?: string; manufacturerId?: string }) {
     const email = dto.email.trim().toLowerCase();
     if (await this.findByEmail(email)) throw new ConflictException('A user with this email already exists.');
     if (dto.role === 'Distributor' && !dto.distributorId) throw new BadRequestException('Choose which distributor this login belongs to.');
+    if (dto.role === 'Manufacturer' && !dto.manufacturerId) throw new BadRequestException('Choose which manufacturer this login belongs to.');
     const u = await this.createUser({
       email, name: dto.name.trim(), password: dto.password, role: dto.role,
       seat: dto.role === 'Admin' || dto.role === 'Finance' ? dto.seat : 'None',
       distributorId: dto.role === 'Distributor' ? dto.distributorId : null,
+      manufacturerId: dto.role === 'Manufacturer' ? dto.manufacturerId : null,
     });
     return this.view(u);
   }
@@ -82,7 +87,7 @@ export class UsersService implements OnApplicationBootstrap {
    * Change a login. The root account keeps its role, seat and active status, nobody can switch off or demote
    * their own account here, and at least one active Admin always remains.
    */
-  async edit(id: string, patch: { name?: string; role?: Role; seat?: Seat; status?: 'Active' | 'Disabled'; distributorId?: string | null }, actorId: string) {
+  async edit(id: string, patch: { name?: string; role?: Role; seat?: Seat; status?: 'Active' | 'Disabled'; distributorId?: string | null; manufacturerId?: string | null }, actorId: string) {
     const u = await this.repo.findOne({ where: { id } });
     if (!u) throw new NotFoundException('User not found');
     const role = patch.role ?? u.role;
@@ -100,12 +105,16 @@ export class UsersService implements OnApplicationBootstrap {
     if (role === 'Distributor' && !(patch.distributorId ?? u.distributorId)) {
       throw new BadRequestException('Choose which distributor this login belongs to.');
     }
+    if (role === 'Manufacturer' && !(patch.manufacturerId ?? u.manufacturerId)) {
+      throw new BadRequestException('Choose which manufacturer this login belongs to.');
+    }
     Object.assign(u, {
       ...(patch.name !== undefined ? { name: patch.name.trim() } : {}),
       role,
       status,
       seat: role === 'Admin' || role === 'Finance' ? (patch.seat ?? u.seat) : 'None',
       distributorId: role === 'Distributor' ? (patch.distributorId ?? u.distributorId) : null,
+      manufacturerId: role === 'Manufacturer' ? (patch.manufacturerId ?? u.manufacturerId) : null,
     });
     return this.view(await this.repo.save(u));
   }
@@ -119,7 +128,7 @@ export class UsersService implements OnApplicationBootstrap {
   }
 
   async createUser(data: {
-    email: string; name: string; password: string; role: Role; seat?: Seat; distributorId?: string | null;
+    email: string; name: string; password: string; role: Role; seat?: Seat; distributorId?: string | null; manufacturerId?: string | null;
   }) {
     const password = await bcrypt.hash(data.password, 10);
     return this.repo.save(

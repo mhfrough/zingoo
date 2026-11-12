@@ -42,6 +42,7 @@ export const users = [
   { name: 'Read-only Reviewer', email: 'audit@example.test', role: 'Viewer', seat: 'None' },
   { name: 'Investor (Demo)', email: 'investor@example.test', role: 'Investor', seat: 'None' },
   { name: 'Hyderabad Distributor (Demo)', email: 'distributor@demo.local', role: 'Distributor', seat: 'None', distributor: 'd1' },
+  { name: 'Brand Choice (Demo)', email: 'manufacturer@demo.local', role: 'Manufacturer', seat: 'None', manufacturer: 'm1' },
 ] as const;
 
 export const batches = [
@@ -74,6 +75,15 @@ export const accounting = [
   { refNo: 'ACC-DEMO-01', date: '2026-11-08', kind: 'Income', category: 'Other Sales', foreignAmount: 25000, party: 'Illustrative wholesale customer', dueDate: '2026-11-28', note: 'Example unpaid non-distributor invoice', signed: [] },
   { refNo: 'ACC-DEMO-02', date: '2026-11-08', kind: 'Expense', category: 'Utilities', foreignAmount: 16000, party: 'Example electricity supplier', dueDate: '2026-11-19', note: 'Sample payable / not a production batch cost', signed: ['A'] },
 ] as const;
+
+/**
+ * Production orders (scope v2, illustrative): one accepted and in production, one still a draft.
+ * No due date and nothing waiting for an answer, so the prototype's alert count stays the same.
+ */
+export const productionOrders = [
+  { date: '2026-11-10', product: 'p1', containers: 2, notes: 'Illustrative order', send: true, accept: true, stages: ['Preparation', 'In production'] },
+  { date: '2026-11-11', product: 'p4', containers: 1, notes: 'Draft for next month', send: false, accept: false, stages: [] as string[] },
+];
 
 export const portalRequests = [
   { refNo: 'REQ-DEMO-01', date: '2026-11-09', distributor: 'd1', product: 'p2', cartons: 5, requestedDate: '2026-11-14', notes: 'Demo request for next shipment', status: 'Requested' },

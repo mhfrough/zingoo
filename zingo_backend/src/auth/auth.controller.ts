@@ -3,8 +3,8 @@ import { ApiOperation, ApiTags } from '@nestjs/swagger';
 import { AuthService } from './auth.service';
 import { LoginDto } from './login.dto';
 import { Public } from './public.decorator';
-import { Write } from './roles.decorator';
-import { Role } from '../common/enums';
+import { Roles, Write } from './roles.decorator';
+import { ROLES, Role } from '../common/enums';
 
 @ApiTags('auth')
 @Controller('auth')
@@ -40,7 +40,8 @@ export class AuthController {
   }
 
   @Get('me')
-  @ApiOperation({ summary: 'Logged-in user' })
+  @Roles(...ROLES)
+  @ApiOperation({ summary: 'Logged-in user (any role, partner logins too)' })
   me(@Request() req: any) {
     return this.auth.me(req.user.id);
   }

@@ -1,7 +1,7 @@
 import { Column, Entity, JoinColumn, ManyToOne } from 'typeorm';
 import { AppEntity } from '../common/app.entity';
 import { Role, Seat } from '../common/enums';
-import { Distributor } from '../catalog/catalog.entities';
+import { Distributor, Manufacturer } from '../catalog/catalog.entities';
 
 /** Someone who can log in. `seat` says which approval signature they can give. */
 @Entity('users')
@@ -36,4 +36,12 @@ export class User extends AppEntity {
 
   @Column({ type: 'uuid', nullable: true })
   distributorId: string | null;
+
+  /** only for role Manufacturer: which manufacturer this login belongs to */
+  @ManyToOne(() => Manufacturer, { nullable: true, onDelete: 'SET NULL' })
+  @JoinColumn({ name: 'manufacturerId' })
+  manufacturer: Manufacturer | null;
+
+  @Column({ type: 'uuid', nullable: true })
+  manufacturerId: string | null;
 }

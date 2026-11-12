@@ -3,10 +3,11 @@ import { Reflector } from '@nestjs/core';
 import { Role } from '../common/enums';
 import { IS_PUBLIC } from './public.decorator';
 import { ROLES_KEY } from './roles.decorator';
+import { PARTNER_ROLES } from './access';
 
 /**
  * Runs after JwtAuthGuard. A route with @Roles/@Read/@Write is limited to those roles.
- * A route without any of them is open to every internal role but closed to distributors.
+ * A route without any of them is open to every internal role but closed to partner logins (distributors, manufacturers).
  */
 @Injectable()
 export class RolesGuard implements CanActivate {
@@ -20,7 +21,7 @@ export class RolesGuard implements CanActivate {
     if (!user) return false;
 
     const allowed = this.reflector.getAllAndOverride<Role[] | undefined>(ROLES_KEY, targets);
-    const ok = allowed ? allowed.includes(user.role) : user.role !== 'Distributor';
+    const ok = allowed ? allowed.includes(user.role) : !PARTNER_ROLES.includes(user.role);
     if (!ok) throw new ForbiddenException('Your role does not allow this.');
     return true;
   }

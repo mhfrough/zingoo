@@ -58,5 +58,5 @@
   </app-tabs>
 </div>
 
-<app-user-form [(open)]="userOpen" [user]="editing()" [distributors]="distributors.value() ?? []" (saved)="reload()" />
+<app-user-form [(open)]="userOpen" [user]="editing()" [distributors]="distributors.value() ?? []" [manufacturers]="manufacturers.value() ?? []" (saved)="reload()" />
 <app-password-form [(open)]="passwordOpen" [user]="target()" />

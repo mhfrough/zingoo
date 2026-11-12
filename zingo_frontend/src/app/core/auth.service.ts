@@ -17,6 +17,9 @@ export interface AuthUser {
   isRoot?: boolean;
   /** an Admin switched into this login (their own session is kept to switch back) */
   viewAs?: boolean;
+  /** a Distributor login: its distributor; a Manufacturer login: its manufacturer */
+  distributorId?: string | null;
+  manufacturerId?: string | null;
 }
 
 /** a login an Admin can preview the app as */
@@ -26,6 +29,7 @@ export interface ViewAsOption {
   email: string;
   role: string;
   distributorName: string | null;
+  manufacturerName?: string | null;
 }
 
 interface LoginResponse {

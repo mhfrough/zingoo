@@ -16,6 +16,7 @@ const BUILT: Record<string, () => Promise<unknown>> = {
   settings: () => import('./features/settings/settings').then((m) => m.Settings),
   users: () => import('./features/users/users').then((m) => m.Users),
   'partner-portal': () => import('./features/portal/portal').then((m) => m.Portal),
+  'factory-portal': () => import('./features/factory/factory').then((m) => m.Factory),
 };
 
 export const routes: Routes = [

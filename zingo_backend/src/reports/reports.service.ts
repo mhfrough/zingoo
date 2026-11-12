@@ -7,6 +7,7 @@ import { OrdersService } from '../distribution/distribution.service';
 import { ExportsService } from '../exports/exports.service';
 import { AccountingService, FinanceService } from '../finance/finance.service';
 import { BatchesService } from '../manufacturing/manufacturing.service';
+import { ProductionOrdersService } from '../manufacturing/production-orders.service';
 import { SettingsService } from '../setup/setup.service';
 
 /** Period filter: 'all' or 'YYYY-MM'. */
@@ -39,6 +40,7 @@ export class ReportsService {
     private readonly finance: FinanceService,
     private readonly accounting: AccountingService,
     private readonly exportsSvc: ExportsService,
+    private readonly productionOrders: ProductionOrdersService,
   ) {}
 
   /** net balance (debit - credit) of one ledger account */
@@ -303,8 +305,9 @@ export class ReportsService {
   }
 
   async alerts() {
-    const [docs, entries, stock, orders, batches] = await Promise.all([
+    const [docs, entries, stock, orders, batches, mos] = await Promise.all([
       this.accounting.list(), this.finance.list(), this.stock(), this.orders.list(), this.batches.list(),
+      this.productionOrders.list({ id: '', name: 'system', role: 'Admin' }),
     ]);
     const s = await this.settings.get();
     return [
@@ -334,6 +337,19 @@ export class ReportsService {
       ...orders.filter((o) => o.status === 'Draft').map((o) => ({
         kind: 'order', page: 'distribution', title: `Undispatched order · ${o.refNo}`,
         text: `${o.cartons} bundles for ${o.distributor.name}`,
+      })),
+      // production orders: waiting for the manufacturer, refused by it, or late
+      ...mos.filter((o) => o.status === 'Sent').map((o) => ({
+        kind: 'production', page: 'manufacturing', title: `Waiting for ${o.manufacturer.name} · ${o.refNo}`,
+        text: `${o.containers} container${o.containers > 1 ? 's' : ''} of ${o.product.sku} · not accepted yet`,
+      })),
+      ...mos.filter((o) => o.status === 'Rejected').map((o) => ({
+        kind: 'production', page: 'manufacturing', title: `Order rejected · ${o.refNo}`,
+        text: `${o.manufacturer.name}: ${o.reason ?? 'no reason given'}`,
+      })),
+      ...mos.filter((o) => o.overdue).map((o) => ({
+        kind: 'production', page: 'manufacturing', title: `Production late · ${o.refNo}`,
+        text: `Due ${o.dueDate} · ${o.stage ?? 'no progress reported'}`,
       })),
       ...batches.filter((b) => b.status === 'Planned').map((b) => ({
         kind: 'batch', page: 'manufacturing', title: `Batch awaiting release · ${b.refNo}`,

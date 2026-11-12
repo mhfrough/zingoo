@@ -13,6 +13,7 @@ import { Distributor, Manufacturer, Product } from '../catalog/catalog.entities'
 import { CollectionsService, OrdersService } from '../distribution/distribution.service';
 import { AccountingService, FinanceService } from '../finance/finance.service';
 import { BatchesService } from '../manufacturing/manufacturing.service';
+import { ProductionOrdersService } from '../manufacturing/production-orders.service';
 import { PortalRequest } from '../portal/portal.entities';
 import { ReportsService } from '../reports/reports.service';
 import { Account, Category, ContainerType, Currency } from '../setup/setup.entities';
@@ -69,7 +70,18 @@ async function run() {
       await app.get(UsersService).createUser({
         email: u.email, name: u.name, password, role: u.role, seat: u.seat,
         distributorId: 'distributor' in u ? id[u.distributor] : null,
+        manufacturerId: 'manufacturer' in u ? id[u.manufacturer] : null,
       });
+    }
+
+    // ── production orders: placed by the company, answered by the manufacturer ──
+    const pos = app.get(ProductionOrdersService);
+    const staff = { id: '', name: 'Production Supervisor', role: 'Manufacturing' as const };
+    const maker = { id: '', name: 'Brand Choice (Demo)', role: 'Manufacturer' as const, manufacturerId: id['m1'] };
+    for (const o of data.productionOrders) {
+      const row = await pos.create(staff, { date: o.date, productId: id[o.product], containers: o.containers, notes: o.notes, send: o.send });
+      if (o.accept) await pos.accept(maker, row.id, { note: 'Confirmed' });
+      for (const stage of o.stages) await pos.stage(maker, row.id, { stage });
     }
 
     // ── manufacturing: batches, released ones go into stock ──

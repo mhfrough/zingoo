@@ -3,7 +3,7 @@ import { toSignal } from '@angular/core/rxjs-interop';
 import { ReactiveFormsModule, Validators } from '@angular/forms';
 import { Btn, Field, Offcanvas } from '../../ui';
 import { FormModal } from '../ops/form-modal';
-import { Distributor } from '../ops/models';
+import { Distributor, Manufacturer } from '../ops/models';
 import { ROLE_LIST, UserRow, UsersApi } from './users.api';
 
 /**
@@ -50,6 +50,16 @@ import { ROLE_LIST, UserRow, UsersApi } from './users.api';
             </select>
           </app-field>
         }
+        @if (isManufacturer()) {
+          <app-field label="Manufacturer" [required]="true" [error]="invalid('manufacturerId') ? 'Choose the manufacturer' : null">
+            <select formControlName="manufacturerId">
+              <option value="">Choose a manufacturer</option>
+              @for (m of manufacturers(); track m.id) {
+                <option [value]="m.id">{{ m.name }}</option>
+              }
+            </select>
+          </app-field>
+        }
         @if (user()) {
           <app-field label="Status" [hint]="locked() ? 'The root account cannot be switched off' : ''">
             <select formControlName="status">
@@ -75,6 +85,7 @@ import { ROLE_LIST, UserRow, UsersApi } from './users.api';
 export class UserForm extends FormModal {
   readonly user = input<UserRow | null>(null);
   readonly distributors = input<Distributor[]>([]);
+  readonly manufacturers = input<Manufacturer[]>([]);
   readonly formId = 'form-user';
   protected roles = ROLE_LIST;
   private usersApi = inject(UsersApi);
@@ -85,6 +96,7 @@ export class UserForm extends FormModal {
     role: ['Viewer'],
     seat: ['None'],
     distributorId: [''],
+    manufacturerId: [''],
     status: ['Active'],
     password: ['', [Validators.required, Validators.minLength(8)]],
   });
@@ -92,13 +104,14 @@ export class UserForm extends FormModal {
   private value = toSignal(this.form.valueChanges, { initialValue: this.form.getRawValue() });
   protected canSign = computed(() => ['Admin', 'Finance'].includes(this.value().role ?? ''));
   protected isDistributor = computed(() => this.value().role === 'Distributor');
+  protected isManufacturer = computed(() => this.value().role === 'Manufacturer');
   protected locked = computed(() => !!this.user()?.isRoot);
 
   protected reset() {
     const u = this.user();
     this.form.reset({
       name: u?.name ?? '', email: u?.email ?? '', role: u?.role ?? 'Viewer', seat: u?.seat ?? 'None',
-      distributorId: u?.distributorId ?? '', status: u?.status ?? 'Active', password: '',
+      distributorId: u?.distributorId ?? '', manufacturerId: u?.manufacturerId ?? '', status: u?.status ?? 'Active', password: '',
     });
     const editing = !!u;
     // an existing login keeps its email; a password is only asked for when adding
@@ -120,9 +133,13 @@ export class UserForm extends FormModal {
     const u = this.user();
     const seat = this.canSign() ? v.seat : 'None';
     const distributorId = this.isDistributor() ? v.distributorId : null;
+    const manufacturerId = this.isManufacturer() ? v.manufacturerId : null;
     return u
-      ? this.usersApi.update(u.id, { name: v.name, ...(u.isRoot ? {} : { role: v.role, status: v.status }), seat, distributorId })
-      : this.usersApi.create({ name: v.name, email: v.email, password: v.password, role: v.role, seat, ...(distributorId ? { distributorId } : {}) });
+      ? this.usersApi.update(u.id, { name: v.name, ...(u.isRoot ? {} : { role: v.role, status: v.status }), seat, distributorId, manufacturerId })
+      : this.usersApi.create({
+        name: v.name, email: v.email, password: v.password, role: v.role, seat,
+        ...(distributorId ? { distributorId } : {}), ...(manufacturerId ? { manufacturerId } : {}),
+      });
   }
 
   protected successMessage() {

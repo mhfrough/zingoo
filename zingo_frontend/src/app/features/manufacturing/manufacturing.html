@@ -12,9 +12,15 @@
   <div class="grid-auto">
     <app-kpi label="Finished bundles produced" [value]="fmtNumber(producedCartons())" icon="package" tone="accent" foot="Released production only" />
     <app-kpi label="Warehouse available" [value]="fmtNumber(stockCartons())" icon="boxes" tone="success" foot="After distributor dispatches" />
-    <app-kpi label="Batches in planning" [value]="fmtNumber(plannedCount())" icon="clock" tone="warning" foot="QC and release required" />
+    <app-kpi label="Containers on order" [value]="fmtNumber(containersOnOrder())" icon="clock" tone="warning"
+      [foot]="ordersWaiting() ? ordersWaiting() + ' waiting for the manufacturer' : 'Sent or in production'" />
     <app-kpi label="Pack equivalent" [value]="fmtNumber(stockPacks())" icon="coins" tone="info" foot="Finished packs in stock" />
   </div>
+
+  <app-orders-panel mode="company" [orders]="productionOrders.value() ?? []" [loading]="productionOrders.isLoading()"
+    [error]="productionOrders.error() ? 'The server did not answer.' : null" [products]="products.value() ?? []"
+    [manufacturers]="manufacturers.value() ?? []" [distributors]="distributors.value() ?? []" [stages]="stages()"
+    [canPlace]="canWrite()" [canAnswer]="canWrite()" (changed)="reload()" />
 
   <div class="notice">
     <span>

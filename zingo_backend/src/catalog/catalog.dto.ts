@@ -1,5 +1,14 @@
 import { PartialType } from '@nestjs/swagger';
-import { IsBoolean, IsIn, IsInt, IsNotEmpty, IsNumber, IsOptional, IsString, Min } from 'class-validator';
+import { Type } from 'class-transformer';
+import { ArrayMaxSize, IsArray, IsBoolean, IsIn, IsInt, IsNotEmpty, IsNumber, IsOptional, IsString, IsUUID, MaxLength, Min, ValidateNested } from 'class-validator';
+
+/** an uploaded file on a partner (from POST /attachments) */
+export class PartnerFileDto {
+  @IsUUID() id: string;
+  @IsString() @MaxLength(250) name: string;
+  @IsString() @MaxLength(100) mime: string;
+  @IsInt() @Min(0) size: number;
+}
 
 export class CreateProductDto {
   @IsString() @IsNotEmpty() sku: string;
@@ -22,6 +31,10 @@ export class CreateManufacturerDto {
   @IsOptional() @IsInt() @Min(0) paymentDays?: number;
   @IsOptional() @IsString() currency?: string;
   @IsOptional() @IsString() contact?: string;
+  @IsOptional() @IsString() @MaxLength(150) poc?: string;
+  @IsOptional() @IsString() @MaxLength(150) contract?: string;
+  @IsOptional() @IsString() @MaxLength(5000) terms?: string;
+  @IsOptional() @IsArray() @ArrayMaxSize(20) @ValidateNested({ each: true }) @Type(() => PartnerFileDto) files?: PartnerFileDto[];
 }
 export class UpdateManufacturerDto extends PartialType(CreateManufacturerDto) {}
 
@@ -34,5 +47,9 @@ export class CreateDistributorDto {
   @IsOptional() @IsIn([15, 30, 45, 60, 90]) paymentDays?: number;
   @IsOptional() @IsNumber() @Min(0) creditLimit?: number;
   @IsOptional() @IsNumber() @Min(0) advancePct?: number;
+  @IsOptional() @IsString() @MaxLength(150) poc?: string;
+  @IsOptional() @IsString() @MaxLength(150) contract?: string;
+  @IsOptional() @IsString() @MaxLength(5000) terms?: string;
+  @IsOptional() @IsArray() @ArrayMaxSize(20) @ValidateNested({ each: true }) @Type(() => PartnerFileDto) files?: PartnerFileDto[];
 }
 export class UpdateDistributorDto extends PartialType(CreateDistributorDto) {}

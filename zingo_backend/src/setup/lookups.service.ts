@@ -13,13 +13,16 @@ export type LookupList = (typeof LOOKUP_LISTS)[number];
 
 /** what each list calls its entries in messages */
 const LIST_LABEL: Record<LookupList, string> = {
-  PAY_METHOD: 'payment method', INCOTERM: 'Incoterm', CAPITAL_SOURCE: 'capital source', STREAM_TYPE: 'stream type', PERSON: 'person',
+  PAY_METHOD: 'payment method', INCOTERM: 'Incoterm', CAPITAL_SOURCE: 'capital source', STREAM_TYPE: 'stream type', PERSON: 'investor account',
   LOAN_TENURE: 'loan tenure', REPAY_PLAN: 'repayment plan', REPAY_FREQUENCY: 'repayment frequency', ADVANCE_PURPOSE: 'advance purpose',
   SETTLEMENT_METHOD: 'settlement method', BANK_ACCOUNT: 'bank or cash account',
 };
 
 /** The cost lines an Incoterm can put on the seller. Bank charges and other costs are always the seller's. */
 export const INCOTERM_FLAGS = ['origin', 'ocean', 'insurance', 'destination', 'duty'] as const;
+
+/** The free-text fields each list can carry (an investor account: company and point of contact). */
+const LIST_META: Partial<Record<LookupList, readonly string[]>> = { PERSON: ['company', 'poc'] };
 
 /** The yes / no switches each list can carry: Incoterm cost lines, loan or equity, depreciable or not. */
 const LIST_FLAGS: Record<LookupList, readonly string[]> = {
@@ -28,7 +31,8 @@ const LIST_FLAGS: Record<LookupList, readonly string[]> = {
   // liability: money to pay back; advance: temporary funding (purpose, settlement and direction instead of loan terms)
   CAPITAL_SOURCE: ['liability', 'advance'],
   STREAM_TYPE: ['depreciable'],
-  PERSON: [],
+  // an investor account is an investor, a business owner, or both
+  PERSON: ['investor', 'owner'],
   LOAN_TENURE: [], REPAY_PLAN: [], REPAY_FREQUENCY: [], ADVANCE_PURPOSE: [], SETTLEMENT_METHOD: [], BANK_ACCOUNT: [],
 };
 
@@ -68,23 +72,30 @@ export class LookupsService implements OnApplicationBootstrap {
     const olds = (await this.repo.find({ where: { list: 'CAPITAL_SOURCE' } })).filter((r) => r.flags?.['advance'] === undefined);
     for (const r of olds) r.flags = { ...r.flags, advance: r.code === 'Partner Advance' };
     if (olds.length) await this.repo.save(olds);
+    // people made before investor accounts had roles are investors
+    const people = (await this.repo.find({ where: { list: 'PERSON' } })).filter((r) => r.flags?.['investor'] === undefined);
+    for (const r of people) r.flags = { investor: true, owner: !!r.flags?.['owner'] };
+    if (people.length) await this.repo.save(people);
   }
 
   list(list?: string) {
     return this.repo.find({ where: list ? { list } : {}, order: { list: 'ASC', sortOrder: 'ASC', code: 'ASC' } });
   }
 
-  async create(dto: { list: LookupList; code: string; description?: string; flags?: Record<string, boolean> }) {
+  async create(dto: { list: LookupList; code: string; description?: string; flags?: Record<string, boolean>; meta?: Record<string, string> }) {
     const code = dto.code.trim();
     if (!code) throw new BadRequestException('Enter a name.');
+    // an investor account added without roles is an investor
+    const flags = this.cleanFlags(dto.list, dto.list === 'PERSON' && !dto.flags ? { investor: true } : dto.flags);
+    this.checkRoles(dto.list, flags);
     if (await this.repo.findOne({ where: { list: dto.list, code } })) throw new ConflictException('This entry already exists.');
     const last = await this.repo.find({ where: { list: dto.list }, order: { sortOrder: 'DESC' }, take: 1 });
     return this.repo.save(this.repo.create({
-      list: dto.list, code, description: dto.description ?? '', flags: this.cleanFlags(dto.list, dto.flags), sortOrder: (last[0]?.sortOrder ?? -1) + 1,
+      list: dto.list, code, description: dto.description ?? '', flags, meta: this.cleanMeta(dto.list, dto.meta), sortOrder: (last[0]?.sortOrder ?? -1) + 1,
     }));
   }
 
-  async update(id: string, patch: { description?: string; flags?: Record<string, boolean>; active?: boolean }) {
+  async update(id: string, patch: { description?: string; flags?: Record<string, boolean>; meta?: Record<string, string>; active?: boolean }) {
     const row = await this.repo.findOne({ where: { id } });
     if (!row) throw new NotFoundException('Entry not found');
     // a list the business picks from needs one active entry; the people list may be emptied
@@ -92,7 +103,11 @@ export class LookupsService implements OnApplicationBootstrap {
       throw new BadRequestException('Keep at least one active entry in this list.');
     }
     if (patch.description !== undefined) row.description = patch.description;
-    if (patch.flags) row.flags = this.cleanFlags(row.list as LookupList, patch.flags);
+    if (patch.flags) {
+      row.flags = this.cleanFlags(row.list as LookupList, patch.flags);
+      this.checkRoles(row.list as LookupList, row.flags);
+    }
+    if (patch.meta) row.meta = this.cleanMeta(row.list as LookupList, patch.meta);
     if (patch.active !== undefined) row.active = patch.active;
     return this.repo.save(row);
   }
@@ -139,6 +154,16 @@ export class LookupsService implements OnApplicationBootstrap {
     const repo = em ? em.getRepository(Lookup) : this.repo;
     const rows = await repo.find({ where: { list: 'INCOTERM' } });
     return Object.fromEntries(rows.map((r) => [r.code, r.flags]));
+  }
+
+  /** an investor account is an investor, a business owner, or both: never neither */
+  private checkRoles(list: LookupList, flags: Record<string, boolean>) {
+    if (list === 'PERSON' && !flags['investor'] && !flags['owner']) throw new BadRequestException('Tick investor, business owner, or both.');
+  }
+
+  /** only the text fields the list knows, trimmed and kept short */
+  private cleanMeta(list: LookupList, meta?: Record<string, string>) {
+    return Object.fromEntries((LIST_META[list] ?? []).map((k) => [k, String(meta?.[k] ?? '').trim().slice(0, 150)]));
   }
 
   /** only the flag names the list knows, always as booleans */

@@ -3,6 +3,14 @@ import { AppEntity } from '../common/app.entity';
 import { numeric } from '../common/numeric.transformer';
 
 /** A SKU: one flavour in one pack tier (Rs 10 or Rs 20). */
+/** an uploaded file kept on a manufacturer or a distributor */
+export interface PartnerFile {
+  id: string;
+  name: string;
+  mime: string;
+  size: number;
+}
+
 @Entity('products')
 export class Product extends AppEntity {
   @Column({ type: 'varchar', length: 40, unique: true })
@@ -60,6 +68,22 @@ export class Manufacturer extends AppEntity {
 
   @Column({ type: 'varchar', length: 200, nullable: true })
   contact: string | null;
+
+  /** point of contact: the person to speak to */
+  @Column({ type: 'varchar', length: 150, nullable: true })
+  poc: string | null;
+
+  /** the contract: its number or title */
+  @Column({ type: 'varchar', length: 150, nullable: true })
+  contract: string | null;
+
+  /** the agreed terms, in words */
+  @Column({ type: 'text', nullable: true })
+  terms: string | null;
+
+  /** uploaded files: the signed contract, licences, pictures (details only, the content is an attachment) */
+  @Column({ type: 'jsonb', default: () => "'[]'" })
+  files: PartnerFile[];
 }
 
 @Entity('distributors')
@@ -89,7 +113,24 @@ export class Distributor extends AppEntity {
   /** advance the distributor is asked to pay, % of the order */
   @Column({ type: 'decimal', precision: 5, scale: 2, default: 0, transformer: numeric })
   advancePct: number;
+
+  /** point of contact: the person to speak to */
+  @Column({ type: 'varchar', length: 150, nullable: true })
+  poc: string | null;
+
+  /** the contract: its number or title */
+  @Column({ type: 'varchar', length: 150, nullable: true })
+  contract: string | null;
+
+  /** the agreed terms, in words */
+  @Column({ type: 'text', nullable: true })
+  terms: string | null;
+
+  /** uploaded files: the signed contract, licences, pictures (details only, the content is an attachment) */
+  @Column({ type: 'jsonb', default: () => "'[]'" })
+  files: PartnerFile[];
 }
+
 
 /** Price per pack agreed with one distributor for one SKU (overrides Product.rate). */
 @Entity('distributor_rates')

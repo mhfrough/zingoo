@@ -9,6 +9,10 @@ import { Distributor, Manufacturer } from '../ops/models';
 import { OpsApi } from '../ops/ops.api';
 import { ManufacturerForm } from './manufacturer-form';
 
+/** "Contract ZF-12 · 3 files" */
+const contractText = (p: { contract?: string | null; files?: unknown[] }) =>
+  [p.contract && `Contract ${p.contract}`, p.files?.length && `${p.files.length} file${p.files.length > 1 ? 's' : ''}`].filter(Boolean).join(' · ') || null;
+
 /** The companies the business deals with: contract manufacturers and distributors. */
 @Component({
   selector: 'app-settings-partners',
@@ -60,6 +64,7 @@ export class SettingsPartners {
 
   protected manufacturerColumns: TableColumn<Manufacturer>[] = [
     { id: 'name', label: 'Manufacturer', value: (m) => m.name, sub: (m) => m.contact },
+    { id: 'poc', label: 'Point of contact', priority: 2, value: (m) => m.poc || null, sub: (m) => contractText(m) },
     { id: 'days', label: 'Pays in', kind: 'number', align: 'end', value: (m) => m.paymentDays, sub: () => 'days' },
     { id: 'cur', label: 'Currency', value: (m) => m.currency, priority: 3 },
   ];
@@ -67,7 +72,7 @@ export class SettingsPartners {
 
   protected distributorColumns: TableColumn<Distributor>[] = [
     { id: 'name', label: 'Distributor', value: (d) => d.name, sub: (d) => d.region },
-    { id: 'contact', label: 'Contact', value: (d) => d.contact, sub: (d) => d.address, priority: 3 },
+    { id: 'contact', label: 'Contact', value: (d) => d.poc || d.contact, sub: (d) => contractText(d) ?? d.address, priority: 3 },
     { id: 'days', label: 'Payment terms', kind: 'number', align: 'end', priority: 2, value: (d) => d.paymentDays, sub: () => 'days' },
     { id: 'limit', label: 'Credit limit (PKR)', kind: 'money', value: (d) => d.creditLimit, sub: (d) => (d.advancePct ? `${d.advancePct}% advance` : null) },
   ];

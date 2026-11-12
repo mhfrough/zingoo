@@ -102,14 +102,14 @@ const LINES = ['origin', 'ocean', 'insurance', 'destination', 'duty'];
 
       <div class="card" data-flush>
         <div class="card__head">
-          <div><h2>People</h2><p>Shareholders and partners who can put money in. Each one gets a separate account. Manufacturers and distributors are added under Partners</p></div>
+          <div><h2>Investor accounts</h2><p>Investors and business owners (or both). Each one gets a separate account. Manufacturers and distributors are added under Partners</p></div>
           @if (canEdit()) {
-            <button appBtn size="sm" icon="plus" (click)="openLookup('PERSON')">Add person</button>
+            <button appBtn size="sm" icon="plus" (click)="openLookup('PERSON')">Add investor account</button>
           }
         </div>
         <div class="card__body">
           <app-data-table [columns]="personColumns" [rows]="people()" [actions]="lookupActions" [searchable]="false"
-            [loading]="store.lookupsRes.isLoading()" emptyTitle="No people yet" emptyText="Add the shareholders and partners who invest."
+            [loading]="store.lookupsRes.isLoading()" emptyTitle="No investor accounts yet" emptyText="Add the investors and business owners."
             (action)="onLookupAction($event)" />
         </div>
       </div>
@@ -210,8 +210,9 @@ export class SettingsLists {
   ];
 
   protected personColumns: TableColumn<Lookup>[] = [
-    { id: 'code', label: 'Person', value: (l) => l.code },
-    { id: 'role', label: 'Role or contact', priority: 2, value: (l) => l.description || null },
+    { id: 'code', label: 'Name', value: (l) => l.code, sub: (l) => l.meta?.['company'] || null },
+    { id: 'role', label: 'Role', priority: 2, value: (l) => [l.flags['investor'] && 'Investor', l.flags['owner'] && 'Business owner'].filter(Boolean).join(' · ') || '—' },
+    { id: 'poc', label: 'Point of contact', priority: 3, value: (l) => l.meta?.['poc'] || null, sub: (l) => l.description || null },
     { id: 'status', label: 'Status', kind: 'tag', value: (l) => (l.active ? 'Active' : 'Switched off'), tone: this.statusTone },
   ];
 

@@ -1,3 +1,4 @@
+import { AttachmentMeta } from '../../core/attachments.api';
 /** Shapes returned by the API (zingo_backend). Only the fields the pages use. */
 
 export interface Product {
@@ -23,6 +24,11 @@ export interface Manufacturer {
   paymentDays: number;
   currency: string;
   contact: string | null;
+  /** point of contact */
+  poc?: string | null;
+  contract?: string | null;
+  terms?: string | null;
+  files?: AttachmentMeta[];
 }
 
 export interface Distributor {
@@ -35,6 +41,11 @@ export interface Distributor {
   paymentDays: number;
   creditLimit: number;
   advancePct: number;
+  /** point of contact */
+  poc?: string | null;
+  contract?: string | null;
+  terms?: string | null;
+  files?: AttachmentMeta[];
 }
 
 export interface Batch {

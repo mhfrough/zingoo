@@ -62,12 +62,14 @@ export class CreateLookupDto {
   @IsString() @IsNotEmpty() @MaxLength(40) code: string;
   @IsOptional() @IsString() @MaxLength(250) description?: string;
   @IsOptional() @IsObject() flags?: Record<string, boolean>;
+  @IsOptional() @IsObject() meta?: Record<string, string>;
 }
 
 /** The code never changes; the text, the seller's cost lines and the on/off switch can. */
 export class UpdateLookupDto {
   @IsOptional() @IsString() @MaxLength(250) description?: string;
   @IsOptional() @IsObject() flags?: Record<string, boolean>;
+  @IsOptional() @IsObject() meta?: Record<string, string>;
   @IsOptional() @IsBoolean() active?: boolean;
 }
 

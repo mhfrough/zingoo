@@ -21,7 +21,7 @@ const LIST_TEXT: Record<LookupList, { word: string; use: string; code: string; m
   INCOTERM: { word: 'Incoterm', use: 'Which cost lines the seller carries drives the export costing.', code: 'Code', meaning: 'Meaning' },
   CAPITAL_SOURCE: { word: 'capital source', use: 'Offered on every capital injection as its type of funding. A loan or advance is booked as money to pay back, equity as owner capital.', code: 'Name', meaning: 'Meaning' },
   STREAM_TYPE: { word: 'stream type', use: 'The type of an investment stream. A depreciable type carries a depreciation rate.', code: 'Name', meaning: 'Meaning' },
-  PERSON: { word: 'person', use: 'A shareholder or partner who can put money in. Each person gets a separate account in the books.', code: 'Name', meaning: 'Role or contact' },
+  PERSON: { word: 'investor account', use: 'An investor, a business owner, or both. Each one gets a separate account in the books.', code: 'Name', meaning: 'Notes' },
   LOAN_TENURE: { word: 'loan tenure', use: 'Offered on every loan.', code: 'Name', meaning: 'Meaning' },
   REPAY_PLAN: { word: 'repayment plan', use: 'Offered on every loan.', code: 'Name', meaning: 'Meaning' },
   REPAY_FREQUENCY: { word: 'repayment frequency', use: 'Offered on a loan that is repaid in installments.', code: 'Name', meaning: 'Meaning' },
@@ -65,6 +65,17 @@ const LIST_TEXT: Record<LookupList, { word: string; use: string; code: string; m
           @if (liability()) {
             <label class="check field--wide"><input type="checkbox" formControlName="advance" /> An advance (temporary funding): asks for purpose, settlement method and direction instead of loan terms</label>
           }
+        }
+        @if (list() === 'PERSON') {
+          <app-field label="Company"><input type="text" formControlName="company" maxlength="150" /></app-field>
+          <app-field label="Point of contact" hint="Who to speak to: name, phone or email"><input type="text" formControlName="poc" maxlength="150" /></app-field>
+          <div class="field field--wide" role="group" aria-label="Role">
+            <span class="field__label">Role <span aria-hidden="true">*</span></span>
+            <div class="seller-lines">
+              <label class="check"><input type="checkbox" formControlName="investor" /> Investor</label>
+              <label class="check"><input type="checkbox" formControlName="owner" /> Business owner</label>
+            </div>
+          </div>
         }
         @if (list() === 'STREAM_TYPE') {
           <label class="check field--wide"><input type="checkbox" formControlName="depreciable" /> Loses value over time (the stream carries a depreciation rate)</label>
@@ -116,6 +127,10 @@ export class LookupForm extends FormModal {
     liability: [false],
     advance: [false],
     depreciable: [false],
+    investor: [true],
+    owner: [false],
+    company: [''],
+    poc: [''],
   });
 
   private liabilityOn = toSignal(this.form.controls.liability.valueChanges, { initialValue: false });
@@ -128,6 +143,8 @@ export class LookupForm extends FormModal {
       origin: !!e?.flags?.['origin'], ocean: !!e?.flags?.['ocean'], insurance: !!e?.flags?.['insurance'],
       destination: !!e?.flags?.['destination'], duty: !!e?.flags?.['duty'],
       liability: !!e?.flags?.['liability'], advance: !!e?.flags?.['advance'], depreciable: !!e?.flags?.['depreciable'],
+      investor: e ? !!e.flags?.['investor'] : true, owner: !!e?.flags?.['owner'],
+      company: e?.meta?.['company'] ?? '', poc: e?.meta?.['poc'] ?? '',
     });
     if (e) this.form.controls.code.disable({ emitEvent: false });
     else this.form.controls.code.enable({ emitEvent: false });
@@ -140,11 +157,22 @@ export class LookupForm extends FormModal {
       list === 'INCOTERM' ? { origin: v.origin, ocean: v.ocean, insurance: v.insurance, destination: v.destination, duty: v.duty }
       : list === 'CAPITAL_SOURCE' ? { liability: v.liability, advance: v.liability && v.advance }
       : list === 'STREAM_TYPE' ? { depreciable: v.depreciable }
+      : list === 'PERSON' ? { investor: v.investor, owner: v.owner }
       : {};
+    const meta = list === 'PERSON' ? { company: v.company, poc: v.poc } : undefined;
     const e = this.entry();
     return e
-      ? this.settingsApi.updateLookup(e.id, { description: v.description, flags, active: v.active === 'true' })
-      : this.settingsApi.addLookup({ list: this.list(), code: v.code, description: v.description, flags });
+      ? this.settingsApi.updateLookup(e.id, { description: v.description, flags, meta, active: v.active === 'true' })
+      : this.settingsApi.addLookup({ list: this.list(), code: v.code, description: v.description, flags, meta });
+  }
+
+  protected override submit() {
+    const v = this.form.getRawValue();
+    if ((this.entry()?.list ?? this.list()) === 'PERSON' && !v.investor && !v.owner) {
+      this.error.set('Tick investor, business owner, or both.');
+      return;
+    }
+    super.submit();
   }
 
   protected successMessage() {

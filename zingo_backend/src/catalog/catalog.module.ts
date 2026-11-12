@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
+import { AttachmentsModule } from '../attachments/attachments.module';
 import { Distributor, DistributorRate, Manufacturer, Product } from './catalog.entities';
 import { RatesService } from './rates.service';
 import { DistributorRatesController, DistributorsController, ManufacturersController, ProductsController } from './catalog.controller';
@@ -7,7 +8,7 @@ import { DistributorsService, ManufacturersService, ProductsService } from './ca
 import { StockService } from './stock.service';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([Product, Manufacturer, Distributor, DistributorRate])],
+  imports: [TypeOrmModule.forFeature([Product, Manufacturer, Distributor, DistributorRate]), AttachmentsModule],
   controllers: [ProductsController, ManufacturersController, DistributorsController, DistributorRatesController],
   providers: [ProductsService, ManufacturersService, DistributorsService, StockService, RatesService],
   exports: [StockService, ProductsService, ManufacturersService, DistributorsService, RatesService],

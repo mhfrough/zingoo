@@ -150,6 +150,10 @@ export class Lookup extends AppEntity {
   @Column({ type: 'jsonb', default: () => "'{}'" })
   flags: Record<string, boolean>;
 
+  /** extra text of the list: an investor account keeps { company, poc } (point of contact) */
+  @Column({ type: 'jsonb', default: () => "'{}'" })
+  meta: Record<string, string>;
+
   @Column({ default: true })
   active: boolean;
 

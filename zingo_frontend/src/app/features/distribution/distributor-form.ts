@@ -1,6 +1,7 @@
+import { AttachmentMeta } from '../../core/attachments.api';
 import { ChangeDetectionStrategy, Component, input } from '@angular/core';
 import { ReactiveFormsModule, Validators } from '@angular/forms';
-import { Btn, Field, Offcanvas, MoneyInput } from '../../ui';
+import { Btn, Field, Offcanvas, MoneyInput, FilesInput } from '../../ui';
 import { FormModal } from '../ops/form-modal';
 import { Distributor } from '../ops/models';
 
@@ -8,7 +9,18 @@ import { Distributor } from '../ops/models';
 @Component({
   selector: 'app-distributor-form',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [MoneyInput, ReactiveFormsModule, Offcanvas, Field, Btn],
+  imports: [FilesInput, MoneyInput, ReactiveFormsModule, Offcanvas, Field, Btn],
+  styles: `
+    .form-section {
+      grid-column: 1 / -1;
+      margin: var(--space-2) 0 0;
+      font-size: var(--text-xs);
+      font-weight: var(--weight-semibold);
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      color: var(--text-3);
+    }
+  `,
   template: `
     <app-offcanvas #oc [(open)]="open" [title]="distributor() ? 'Edit distributor' : 'Add distributor'"
                subtitle="Company details and trading terms." size="lg" [dirty]="form.dirty">
@@ -38,6 +50,11 @@ import { Distributor } from '../ops/models';
         <app-field label="Advance guide (%)" hint="Share of an order the distributor is asked to pay up front">
           <input type="number" formControlName="advancePct" min="0" max="100" step="1" />
         </app-field>
+        <h4 class="form-section">Contract</h4>
+        <app-field label="Point of contact" hint="Who to speak to: name, phone or email"><input type="text" formControlName="poc" maxlength="150" /></app-field>
+        <app-field label="Contract" hint="Contract number or title"><input type="text" formControlName="contract" maxlength="150" /></app-field>
+        <app-field label="Terms" [wide]="true"><textarea formControlName="terms" maxlength="5000" placeholder="What was agreed: rates, payment, delivery, exclusivity"></textarea></app-field>
+        <app-field label="Uploads" [wide]="true" hint="Signed contract, licences, pictures. Several files at once"><app-files-input formControlName="files" label="Upload files" /></app-field>
       </form>
       <ng-container offcanvasFooter>
         <button appBtn type="button" (click)="oc.requestClose()">Cancel</button>
@@ -63,13 +80,18 @@ export class DistributorForm extends FormModal {
     paymentDays: [30],
     creditLimit: [0, Validators.min(0)],
     advancePct: [0, [Validators.min(0), Validators.max(100)]],
+    poc: [''],
+    contract: [''],
+    terms: [''],
+    files: [[] as AttachmentMeta[]],
   });
 
   protected reset() {
     const d = this.distributor();
     this.form.reset(d
-      ? { name: d.name, region: d.region, contact: d.contact ?? '', address: d.address ?? '', taxNo: d.taxNo ?? '', paymentDays: d.paymentDays, creditLimit: Number(d.creditLimit), advancePct: Number(d.advancePct) }
-      : { name: '', region: '', contact: '', address: '', taxNo: '', paymentDays: 30, creditLimit: 0, advancePct: 0 });
+      ? { name: d.name, region: d.region, contact: d.contact ?? '', address: d.address ?? '', taxNo: d.taxNo ?? '', paymentDays: d.paymentDays, creditLimit: Number(d.creditLimit), advancePct: Number(d.advancePct),
+          poc: d.poc ?? '', contract: d.contract ?? '', terms: d.terms ?? '', files: d.files ?? [] }
+      : { name: '', region: '', contact: '', address: '', taxNo: '', paymentDays: 30, creditLimit: 0, advancePct: 0, poc: '', contract: '', terms: '', files: [] });
   }
 
   protected request() {

@@ -20,6 +20,8 @@ export interface Lookup {
   description: string;
   /** Incoterm cost lines, capital source { liability }, stream type { depreciable } */
   flags: Record<string, boolean>;
+  /** an investor account: { company, poc } */
+  meta?: Record<string, string>;
   active: boolean;
   sortOrder: number;
 }

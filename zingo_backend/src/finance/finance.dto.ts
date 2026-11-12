@@ -38,6 +38,8 @@ export class CapitalLineDto {
   /** a payment method from Settings; a cheque needs chequeNo and clearanceDate */
   @IsOptional() @IsString() @MaxLength(30) paymentSource?: string;
   @IsOptional() @IsString() @MaxLength(100) paymentReference?: string;
+  /** the bank or cash account (Settings) this investor's money came into; wins over the injection's bankAccount */
+  @IsOptional() @IsString() @MaxLength(60) bankAccount?: string;
   @IsOptional() @IsString() @MaxLength(150) paymentAgainst?: string;
   @IsOptional() @IsString() @MaxLength(100) paidBy?: string;
   @IsOptional() @IsString() @MaxLength(100) receivedBy?: string;

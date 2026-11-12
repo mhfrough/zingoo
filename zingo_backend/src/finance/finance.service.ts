@@ -155,6 +155,8 @@ export class FinanceService {
     const amount = round2(l.amount);
     const source = (l.paymentSource ?? '').trim();
     if (source) await this.lookups.assertActive('PAY_METHOD', source, em);
+    const bank = (l.bankAccount ?? '').trim();
+    if (bank) await this.lookups.assertActive('BANK_ACCOUNT', bank, em);
 
     // a cheque is not cash until it clears
     let chequeNo = '';
@@ -199,6 +201,7 @@ export class FinanceService {
         paidBy: (l.paidBy ?? '').trim(), receivedBy: (l.receivedBy ?? '').trim(),
         issueDate: l.issueDate ?? null, expectedReturnDate: l.expectedReturnDate ?? null,
         chequeNo, clearanceDate, chequeStatus, proofId: l.proofId ?? null, agreementId: l.agreementId ?? null,
+        ...(bank ? { bankAccount: bank } : {}),
       },
     };
   }
@@ -223,7 +226,7 @@ export class FinanceService {
         accounts.add(key);
         const { entry, streams } = await this.capitalLine(em, line, funding);
         const refNo = await nextRef(em, FinanceEntry, prefix, 3);
-        const f = await em.save(em.create(FinanceEntry, { ...entry, ...terms, refNo, type: 'Capital Injection', groupId, note }));
+        const f = await em.save(em.create(FinanceEntry, { ...terms, ...entry, refNo, type: 'Capital Injection', groupId, note }));
         await em.save(streams.map((x) => em.create(FinanceEntryStream, { ...x, entryId: f.id })));
         for (const fileId of [entry.proofId, entry.agreementId]) {
           if (!fileId || attached.has(fileId)) continue;

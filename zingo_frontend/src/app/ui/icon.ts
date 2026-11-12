@@ -2,7 +2,7 @@ import { ChangeDetectionStrategy, Component, ViewEncapsulation, computed, input 
 import {
   Banknote, Bell, BookOpen, Boxes, Building2, Calendar, Check, ChevronDown, ChevronRight, CircleAlert,
   CircleCheck, Clock, Coins, Container, Download, Ellipsis, Eye, Factory, FileSpreadsheet, FileText,
-  Globe, Handshake, Inbox, Info, Landmark, LayoutDashboard, Lock, LogOut, Menu, Package, Palette,
+  Globe, HandCoins, Handshake, Inbox, Info, Landmark, LayoutDashboard, Lock, LogOut, Menu, Package, Palette,
   Pencil, PiggyBank, Plus, Receipt, RotateCcw, Scale, Search, Send, Settings, ShieldCheck, Trash2,
   TrendingUp, TriangleAlert, Truck, Upload, Users, Wallet, X, ArrowRight,
   ArrowUp, Bold, ChevronUp, ChevronsUpDown, CircleX, Eraser, EyeOff, Italic, KeyRound, Link, List,
@@ -22,7 +22,7 @@ const ICONS = {
   boxes: Boxes, building: Building2, calendar: Calendar, check: Check, 'check-circle': CircleCheck,
   'chevron-down': ChevronDown, 'chevron-right': ChevronRight, 'circle-alert': CircleAlert, clock: Clock,
   coins: Coins, container: Container, dashboard: LayoutDashboard, download: Download, edit: Pencil,
-  eye: Eye, factory: Factory, file: FileText, globe: Globe, handshake: Handshake, inbox: Inbox,
+  eye: Eye, factory: Factory, file: FileText, globe: Globe, 'hand-coins': HandCoins, handshake: Handshake, inbox: Inbox,
   info: Info, landmark: Landmark, lock: Lock, logout: LogOut, menu: Menu, more: Ellipsis,
   package: Package, palette: Palette, 'piggy-bank': PiggyBank, plus: Plus, receipt: Receipt,
   scale: Scale, search: Search, send: Send, settings: Settings, 'shield-check': ShieldCheck,

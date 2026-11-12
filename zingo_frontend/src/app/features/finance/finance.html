@@ -13,7 +13,7 @@
 
 <div class="stack">
   <div class="grid-auto">
-    <app-kpi label="Capital invested" [value]="money(capital())" icon="piggy-bank" tone="accent"
+    <app-kpi label="Capital invested" [value]="money(capital())" icon="hand-coins" tone="accent"
       [foot]="'of ' + money(settings.value()?.capitalTarget ?? 0) + ' target' + (chequeAmount() ? ' · ' + money(chequeAmount()) + ' in cheques not cleared' : '')" />
     <app-kpi label="Cash & bank balance" [value]="money(flows.value()?.net ?? 0)" icon="wallet" tone="success"
       foot="Receipts minus approved spending" />

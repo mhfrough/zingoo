@@ -35,6 +35,7 @@ const investorGroup = (fb: NonNullableFormBuilder, stream: string) =>
     date: [today(), Validators.required],
     paymentSource: ['Bank Transfer'],
     paymentReference: [''],
+    bankAccount: [''],
     paymentAgainst: [''],
     paidBy: [''],
     receivedBy: [''],
@@ -365,6 +366,16 @@ type StreamForm = ReturnType<typeof streamGroup>;
 
                 <h4 class="investor__section">Payment details</h4>
                 <app-field label="Payment reference"><input type="text" formControlName="paymentReference" placeholder="Transfer or receipt no." /></app-field>
+                @if (kind() === 'equity') {
+                  <app-field label="Bank" hint="From Settings">
+                    <select formControlName="bankAccount">
+                      <option value="">Choose</option>
+                      @for (t of bankAccounts(); track t) {
+                        <option [value]="t">{{ t }}</option>
+                      }
+                    </select>
+                  </app-field>
+                }
                 <app-field label="Payment against"><input type="text" formControlName="paymentAgainst" placeholder="Agreement or invoice no." /></app-field>
                 <app-field label="Payment issued on"><input type="date" formControlName="issueDate" /></app-field>
                 <app-field label="Paid by"><input type="text" formControlName="paidBy" /></app-field>
@@ -396,7 +407,9 @@ type StreamForm = ReturnType<typeof streamGroup>;
           <span class="sum sum--line">Total {{ money(summary().allocated) }}</span>
         }
 
-        <h4 class="investor__section">{{ kind() === 'loan' ? 'Loan terms' : kind() === 'advance' ? 'Advance terms' : 'Bank account' }}</h4>
+        @if (kind() !== 'equity') {
+          <h4 class="investor__section">{{ kind() === 'loan' ? 'Loan terms' : 'Advance terms' }}</h4>
+        }
         @if (kind() === 'loan') {
           <app-field label="Loan tenure">
             <select formControlName="tenure">
@@ -453,14 +466,16 @@ type StreamForm = ReturnType<typeof streamGroup>;
           </app-field>
           <app-field label="Linked invoice / PO" hint="Optional"><input type="text" formControlName="linkedReference" placeholder="Invoice, PO or activity" /></app-field>
         }
-        <app-field [label]="paidOut() ? 'Paying account' : 'Receiving account'" hint="Which bank or cash account. From Settings">
-          <select formControlName="bankAccount">
-            <option value="">Choose</option>
-            @for (t of bankAccounts(); track t) {
-              <option [value]="t">{{ t }}</option>
-            }
-          </select>
-        </app-field>
+        @if (kind() !== 'equity') {
+          <app-field [label]="paidOut() ? 'Paying account' : 'Receiving account'" hint="Which bank or cash account. From Settings">
+            <select formControlName="bankAccount">
+              <option value="">Choose</option>
+              @for (t of bankAccounts(); track t) {
+                <option [value]="t">{{ t }}</option>
+              }
+            </select>
+          </app-field>
+        }
 
         <app-field label="Terms" [wide]="true"><textarea formControlName="note" placeholder="Optional. Return, profit share, repayment"></textarea></app-field>
         <app-field label="Agreement" [wide]="true" hint="Optional. One agreement serves every investor">
@@ -764,14 +779,14 @@ export class CapitalInjectionForm extends FormModal {
     return this.fin.saveCapital({
       funding: v.funding,
       ...terms,
-      bankAccount: v.bankAccount,
+      bankAccount: kind === 'equity' ? '' : v.bankAccount,
       note: v.note.trim() || undefined,
       investors: v.investors.map((i) => {
         const cheque = isChequeMethod(i.paymentSource);
         const at = i.account.indexOf(':');
         return {
           partyType: i.account.slice(0, at) as InvestorType, partyId: i.account.slice(at + 1), amount: i.amount, date: i.date, paymentSource: i.paymentSource,
-          paymentReference: i.paymentReference, paymentAgainst: i.paymentAgainst, paidBy: i.paidBy, receivedBy: i.receivedBy,
+          paymentReference: i.paymentReference, bankAccount: kind === 'equity' ? i.bankAccount || undefined : undefined, paymentAgainst: i.paymentAgainst, paidBy: i.paidBy, receivedBy: i.receivedBy,
           issueDate: i.issueDate || undefined, expectedReturnDate: i.expectedReturnDate || undefined,
           chequeNo: cheque ? i.chequeNo : undefined, clearanceDate: cheque ? i.clearanceDate : undefined,
           proofId: i.proof?.id, agreementId: v.agreement?.id,

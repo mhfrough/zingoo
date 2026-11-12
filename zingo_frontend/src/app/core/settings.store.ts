@@ -10,7 +10,7 @@ import { AuthService } from './auth.service';
 /** The editable pick-lists on Settings & Data. */
 export type LookupList =
   | 'PAY_METHOD' | 'INCOTERM' | 'CAPITAL_SOURCE' | 'STREAM_TYPE' | 'PERSON'
-  | 'LOAN_TENURE' | 'REPAY_PLAN' | 'REPAY_FREQUENCY' | 'ADVANCE_PURPOSE' | 'SETTLEMENT_METHOD' | 'BANK_ACCOUNT' | 'DELIVERY_STATUS' | 'BILL_TYPE' | 'BILL_TREATMENT' | 'APPROVER' | 'FLAVOUR' | 'PACKET_SIZE';
+  | 'LOAN_TENURE' | 'REPAY_PLAN' | 'REPAY_FREQUENCY' | 'ADVANCE_PURPOSE' | 'SETTLEMENT_METHOD' | 'BANK_ACCOUNT' | 'DELIVERY_STATUS' | 'BILL_TYPE' | 'BILL_TREATMENT' | 'APPROVER' | 'FLAVOUR' | 'PACKET_SIZE' | 'BANK';
 
 /** One entry of an editable pick-list (payment methods, Incoterms, capital sources, stream types, people). */
 export interface Lookup {

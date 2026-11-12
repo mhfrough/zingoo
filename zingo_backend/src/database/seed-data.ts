@@ -5,7 +5,14 @@
  */
 
 export const manufacturers = [
-  { key: 'm1', name: 'Brand Choice Pakistan', paymentDays: 30, currency: 'PKR', contact: 'Production partner' },
+  {
+    key: 'm1', name: 'Brand Choice Pakistan', paymentDays: 30, advancePct: 30, currency: 'PKR', contact: 'Production partner',
+    // sample account details, not real ones
+    bankAccounts: [
+      { bank: 'Meezan Bank', title: 'Brand Choice Pakistan', account: 'PK00SAMPLE0000000001', branch: 'Sample branch', isDefault: true },
+      { bank: 'HBL', title: 'Brand Choice Pakistan', account: 'PK00SAMPLE0000000002', isDefault: false },
+    ],
+  },
 ];
 
 const productDefaults = { packsPerCarton: 432, bundlesPerContainer: 10, manufacturer: 'm1', packagingRate: 0.35, printingRate: 0.15, inboundRate: 0.1, currency: 'PKR', active: true };
@@ -18,9 +25,9 @@ export const products = [
 ];
 
 export const distributors = [
-  { key: 'd1', name: 'Sindh Central Distributors', region: 'Hyderabad', contact: 'Demo contact', address: 'Hyderabad, Sindh, Pakistan', taxNo: '', paymentDays: 30, creditLimit: 300000, advancePct: 10, selloutDays: 30 },
-  { key: 'd2', name: 'South Route Partners', region: 'Karachi', contact: 'Demo contact', address: 'Karachi, Sindh, Pakistan', taxNo: '', paymentDays: 45, creditLimit: 250000, advancePct: 15, selloutDays: 40 },
-  { key: 'd3', name: 'Upper Sindh Supply', region: 'Sukkur', contact: 'Demo contact', address: 'Sukkur, Sindh, Pakistan', taxNo: '', paymentDays: 60, creditLimit: 200000, advancePct: 10, selloutDays: 30 },
+  { key: 'd1', name: 'Sindh Central Distributors', region: 'Hyderabad', province: 'Sindh', areas: ['Tando Allahyar', 'Matiari'], contact: 'Demo contact', address: 'Hyderabad, Sindh, Pakistan', taxNo: '', paymentDays: 30, creditLimit: 300000, advancePct: 10, selloutDays: 30 },
+  { key: 'd2', name: 'South Route Partners', region: 'Karachi', province: 'Sindh', areas: [], contact: 'Demo contact', address: 'Karachi, Sindh, Pakistan', taxNo: '', paymentDays: 45, creditLimit: 250000, advancePct: 15, selloutDays: 40 },
+  { key: 'd3', name: 'Upper Sindh Supply', region: 'Sukkur', province: 'Sindh', areas: ['Rohri', 'Shikarpur'], contact: 'Demo contact', address: 'Sukkur, Sindh, Pakistan', taxNo: '', paymentDays: 60, creditLimit: 200000, advancePct: 10, selloutDays: 30 },
 ];
 
 /** users: the client's 7 roles plus one demo distributor login */

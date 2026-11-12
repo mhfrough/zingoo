@@ -330,3 +330,5 @@ Suggestion: the production order has a destination, **assigned distributor** (de
 | P6 Distributor sales | distributor marks a batch distributed and sends its invoice; company verifies; income and receivable post; payments against it; stock left; sell-out deadline alerts; domestic sales orders retired |
 | P7 Reports + data | manufacturer and distributor statements, batch trail (sent / distributed / invoiced / collected), chain dashboard, new sample data, parity and API checks rewritten |
 | P8 Leftovers | polish, realtime, income invoice steps 03-04, bill Rejected, print invoice, paused loan / advance rework, investor returns |
+
+Status: **P1 done** (2026-11-12, 0a428eb): products with flavour, packet size, packets per bundle, bundles per container, assigned manufacturer and distributor, sell-out days; "carton" reads "bundle" on screen. **P2 done** (2026-11-12): Settings list Banks; manufacturer advance % (Settings default 30) and bank accounts (one default; a bank switched off stays on accounts that have it); distributor province, main city and other areas from `public/data/pk-places.json` (`PlacesService`). API checks 446.

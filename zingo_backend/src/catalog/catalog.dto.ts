@@ -10,6 +10,16 @@ export class PartnerFileDto {
   @IsInt() @Min(0) size: number;
 }
 
+/** one bank account of a manufacturer */
+export class PartnerBankAccountDto {
+  @IsString() @IsNotEmpty() @MaxLength(80) bank: string;
+  @IsString() @IsNotEmpty() @MaxLength(150) title: string;
+  /** account number or IBAN */
+  @IsString() @IsNotEmpty() @MaxLength(40) account: string;
+  @IsOptional() @IsString() @MaxLength(150) branch?: string;
+  @IsBoolean() isDefault: boolean;
+}
+
 export class CreateProductDto {
   @IsString() @IsNotEmpty() sku: string;
   @IsString() @IsNotEmpty() name: string;
@@ -37,7 +47,10 @@ export class UpdateProductDto extends PartialType(CreateProductDto) {}
 
 export class CreateManufacturerDto {
   @IsString() @IsNotEmpty() name: string;
-  @IsOptional() @IsInt() @Min(0) paymentDays?: number;
+  @IsOptional() @IsInt() @Min(0) @Max(365) paymentDays?: number;
+  /** advance on each order, % of its value */
+  @IsOptional() @IsNumber() @Min(0) @Max(100) advancePct?: number;
+  @IsOptional() @IsArray() @ArrayMaxSize(10) @ValidateNested({ each: true }) @Type(() => PartnerBankAccountDto) bankAccounts?: PartnerBankAccountDto[];
   @IsOptional() @IsString() currency?: string;
   @IsOptional() @IsString() contact?: string;
   @IsOptional() @IsString() @MaxLength(150) poc?: string;
@@ -49,7 +62,11 @@ export class UpdateManufacturerDto extends PartialType(CreateManufacturerDto) {}
 
 export class CreateDistributorDto {
   @IsString() @IsNotEmpty() name: string;
-  @IsString() @IsNotEmpty() region: string;
+  /** main city */
+  @IsString() @IsNotEmpty() @MaxLength(80) region: string;
+  @IsOptional() @IsString() @MaxLength(60) province?: string | null;
+  /** other cities or areas covered */
+  @IsOptional() @IsArray() @ArrayMaxSize(100) @IsString({ each: true }) @MaxLength(80, { each: true }) areas?: string[];
   @IsOptional() @IsString() contact?: string;
   @IsOptional() @IsString() address?: string;
   @IsOptional() @IsString() taxNo?: string;

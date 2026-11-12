@@ -33,6 +33,7 @@ const LIST_TEXT: Record<LookupList, { word: string; use: string; code: string; m
   DELIVERY_STATUS: { word: 'delivery status', use: 'Offered on every income invoice: where the goods are (dispatched, delivered, accepted ...).', code: 'Name', meaning: 'Meaning' },
   FLAVOUR: { word: 'flavour', use: 'Offered on every product / SKU.', code: 'Name', meaning: 'Meaning' },
   PACKET_SIZE: { word: 'packet size', use: 'Offered on every product / SKU (weight or price tier).', code: 'Name', meaning: 'Meaning' },
+  BANK: { word: 'bank', use: 'Offered on every manufacturer bank account. Payment invoices go to that bank.', code: 'Name', meaning: 'Meaning' },
   BANK_ACCOUNT: { word: 'bank or cash account', use: 'The account that took or paid the money. It is recorded on the entry; the books keep one Cash & Bank account.', code: 'Name', meaning: 'Details' },
 };
 

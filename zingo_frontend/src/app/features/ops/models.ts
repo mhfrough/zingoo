@@ -34,10 +34,24 @@ export interface Product {
   effectiveSelloutDays?: number | null;
 }
 
+/** one bank account of a manufacturer */
+export interface PartnerBankAccount {
+  bank: string;
+  title: string;
+  /** account number or IBAN */
+  account: string;
+  branch?: string;
+  isDefault: boolean;
+}
+
 export interface Manufacturer {
   id: string;
   name: string;
+  /** days to pay the balance after delivery */
   paymentDays: number;
+  /** advance on each order, % of its value */
+  advancePct?: number;
+  bankAccounts?: PartnerBankAccount[];
   currency: string;
   contact: string | null;
   /** point of contact */
@@ -50,7 +64,11 @@ export interface Manufacturer {
 export interface Distributor {
   id: string;
   name: string;
+  /** main city */
   region: string;
+  province?: string | null;
+  /** other cities or areas covered */
+  areas?: string[];
   contact: string | null;
   address: string | null;
   taxNo: string | null;
@@ -161,6 +179,8 @@ export interface Settings {
   bundlesPerContainer?: number;
   /** sell-out days, default for a new distributor */
   defaultSelloutDays?: number;
+  /** manufacturer advance %, default for a new manufacturer */
+  defaultAdvancePct?: number;
   lowStockCartons: number;
   paymentCycles: number[];
   defaultPaymentCycle: number;

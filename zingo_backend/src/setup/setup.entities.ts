@@ -32,6 +32,10 @@ export class Setting {
   @Column({ type: 'int', default: 10 })
   bundlesPerContainer: number;
 
+  /** advance paid to a manufacturer on an order, % (default for a new manufacturer) */
+  @Column({ type: 'decimal', precision: 5, scale: 2, default: 30, transformer: numeric })
+  defaultAdvancePct: number;
+
   /** days a distributor has to sell a container out, the default for a new distributor */
   @Column({ type: 'int', default: 30 })
   defaultSelloutDays: number;

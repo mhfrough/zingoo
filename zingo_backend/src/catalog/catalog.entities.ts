@@ -95,14 +95,36 @@ export class Product extends AppEntity {
   active: boolean;
 }
 
-/** The production partner(s) that make the cartons. */
+/** one bank account of a manufacturer: where its payment invoices ask to be paid */
+export interface PartnerBankAccount {
+  /** bank name, from the Settings list BANK */
+  bank: string;
+  /** account title (holder name) */
+  title: string;
+  /** account number or IBAN */
+  account: string;
+  branch?: string;
+  /** the account used when the manufacturer does not pick one */
+  isDefault: boolean;
+}
+
+/** The production partner(s) that make the goods. */
 @Entity('manufacturers')
 export class Manufacturer extends AppEntity {
   @Column({ type: 'varchar', length: 150 })
   name: string;
 
+  /** days allowed to pay the balance after delivery */
   @Column({ type: 'int', default: 30 })
   paymentDays: number;
+
+  /** advance paid when an order is placed, % of the order value */
+  @Column({ type: 'decimal', precision: 5, scale: 2, default: 0, transformer: numeric })
+  advancePct: number;
+
+  /** the manufacturer's bank accounts; one is the default */
+  @Column({ type: 'jsonb', default: () => "'[]'" })
+  bankAccounts: PartnerBankAccount[];
 
   @Column({ type: 'varchar', length: 3, default: 'PKR' })
   currency: string;
@@ -132,8 +154,17 @@ export class Distributor extends AppEntity {
   @Column({ type: 'varchar', length: 150 })
   name: string;
 
+  /** main city (the column keeps its first name) */
   @Column({ type: 'varchar', length: 80 })
   region: string;
+
+  /** province or territory of the main city */
+  @Column({ type: 'varchar', length: 60, nullable: true })
+  province: string | null;
+
+  /** the other cities or areas the distributor covers */
+  @Column({ type: 'jsonb', default: () => "'[]'" })
+  areas: string[];
 
   @Column({ type: 'varchar', length: 200, nullable: true })
   contact: string | null;

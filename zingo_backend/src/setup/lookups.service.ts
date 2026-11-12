@@ -5,7 +5,7 @@ import { CAPITAL_SOURCE_DEFAULTS, INCOTERM_DEFAULTS, PAYMENT_METHODS, SIMPLE_LIS
 import { Lookup } from './setup.entities';
 
 /** The simple pick-lists of the loan and advance forms: just a name (and a note), no switches. */
-export const SIMPLE_LISTS = ['LOAN_TENURE', 'REPAY_PLAN', 'REPAY_FREQUENCY', 'ADVANCE_PURPOSE', 'SETTLEMENT_METHOD', 'BANK_ACCOUNT', 'DELIVERY_STATUS', 'BILL_TYPE', 'BILL_TREATMENT', 'APPROVER', 'FLAVOUR', 'PACKET_SIZE'] as const;
+export const SIMPLE_LISTS = ['LOAN_TENURE', 'REPAY_PLAN', 'REPAY_FREQUENCY', 'ADVANCE_PURPOSE', 'SETTLEMENT_METHOD', 'BANK_ACCOUNT', 'DELIVERY_STATUS', 'BILL_TYPE', 'BILL_TREATMENT', 'APPROVER', 'FLAVOUR', 'PACKET_SIZE', 'BANK'] as const;
 
 /** The pick-lists the client can edit on Settings & Data. */
 export const LOOKUP_LISTS = ['PAY_METHOD', 'INCOTERM', 'CAPITAL_SOURCE', 'STREAM_TYPE', 'PERSON', ...SIMPLE_LISTS] as const;
@@ -16,7 +16,7 @@ const LIST_LABEL: Record<LookupList, string> = {
   PAY_METHOD: 'payment method', INCOTERM: 'Incoterm', CAPITAL_SOURCE: 'capital source', STREAM_TYPE: 'stream type', PERSON: 'investor account',
   LOAN_TENURE: 'loan tenure', REPAY_PLAN: 'repayment plan', REPAY_FREQUENCY: 'repayment frequency', ADVANCE_PURPOSE: 'advance purpose',
   SETTLEMENT_METHOD: 'settlement method', BANK_ACCOUNT: 'bank or cash account', DELIVERY_STATUS: 'delivery status', BILL_TYPE: 'bill type', BILL_TREATMENT: 'accounting treatment', APPROVER: 'approver',
-  FLAVOUR: 'flavour', PACKET_SIZE: 'packet size',
+  FLAVOUR: 'flavour', PACKET_SIZE: 'packet size', BANK: 'bank',
 };
 
 /** The cost lines an Incoterm can put on the seller. Bank charges and other costs are always the seller's. */
@@ -34,7 +34,7 @@ const LIST_FLAGS: Record<LookupList, readonly string[]> = {
   STREAM_TYPE: ['depreciable'],
   // an investor account is an investor, a business owner, or both
   PERSON: ['investor', 'owner'],
-  LOAN_TENURE: [], REPAY_PLAN: [], REPAY_FREQUENCY: [], ADVANCE_PURPOSE: [], SETTLEMENT_METHOD: [], BANK_ACCOUNT: [], DELIVERY_STATUS: [], BILL_TYPE: [], BILL_TREATMENT: [], APPROVER: [], FLAVOUR: [], PACKET_SIZE: [],
+  LOAN_TENURE: [], REPAY_PLAN: [], REPAY_FREQUENCY: [], ADVANCE_PURPOSE: [], SETTLEMENT_METHOD: [], BANK_ACCOUNT: [], DELIVERY_STATUS: [], BILL_TYPE: [], BILL_TREATMENT: [], APPROVER: [], FLAVOUR: [], PACKET_SIZE: [], BANK: [],
 };
 
 /**

@@ -909,5 +909,38 @@ const p1D = (await call(T.owner, 'GET', '/distributors')).json?.[0];
 ok('a distributor has its own sell-out days', typeof p1D?.selloutDays === 'number');
 ok('distributor sell-out days over 365 -> 400', (await call(T.owner, 'PATCH', `/distributors/${p1D.id}`, { selloutDays: 400 })).status === 400);
 
+// ── P2 partner terms: banks list, manufacturer bank accounts and advance %, distributor area ──
+const p2Lk = (await call(T.owner, 'GET', '/lookups')).json ?? [];
+ok('banks are a Settings list', p2Lk.some((l) => l.list === 'BANK' && l.code === 'Meezan Bank'));
+const p2Set = (await call(T.owner, 'GET', '/settings')).json;
+ok('Settings hold the default manufacturer advance %', p2Set?.defaultAdvancePct === 30, JSON.stringify(p2Set?.defaultAdvancePct));
+const p2M = ((await call(T.owner, 'GET', '/manufacturers')).json ?? []).find((m) => m.name === 'Brand Choice Pakistan');
+ok('the sample manufacturer asks 30% advance and has two bank accounts, one default',
+  p2M?.advancePct === 30 && p2M?.bankAccounts?.length === 2 && p2M.bankAccounts.filter((b) => b.isDefault).length === 1, JSON.stringify(p2M));
+const p2Bank = (o = {}) => ({ bank: 'HBL', title: 'Test Foods', account: 'pk00 test 0000 0001', isDefault: false, ...o });
+const p2New = await call(T.owner, 'POST', '/manufacturers', { name: `P2 Maker ${Date.now() % 100000}`, advancePct: 25, paymentDays: 15, bankAccounts: [p2Bank()] });
+ok('a new manufacturer with one bank account: it becomes the default, account cleaned',
+  p2New.status === 201 && p2New.json?.bankAccounts?.[0]?.isDefault === true && p2New.json?.bankAccounts?.[0]?.account === 'PK00TEST00000001', JSON.stringify(p2New.json));
+ok('a bank not in Settings -> 400', (await call(T.owner, 'PATCH', `/manufacturers/${p2New.json?.id}`, { bankAccounts: [p2Bank({ bank: 'Bank of Atlantis' })] })).status === 400);
+ok('two default accounts -> 400', (await call(T.owner, 'PATCH', `/manufacturers/${p2New.json?.id}`, { bankAccounts: [p2Bank({ isDefault: true }), p2Bank({ bank: 'UBL', isDefault: true })] })).status === 400);
+ok('the same account twice -> 400', (await call(T.owner, 'PATCH', `/manufacturers/${p2New.json?.id}`, { bankAccounts: [p2Bank(), p2Bank()] })).status === 400);
+ok('an account without a number -> 400', (await call(T.owner, 'PATCH', `/manufacturers/${p2New.json?.id}`, { bankAccounts: [p2Bank({ account: '' })] })).status === 400);
+ok('advance over 100% -> 400', (await call(T.owner, 'PATCH', `/manufacturers/${p2New.json?.id}`, { advancePct: 120 })).status === 400);
+const p2Swap = await call(T.owner, 'PATCH', `/manufacturers/${p2New.json?.id}`, { bankAccounts: [p2Bank(), p2Bank({ bank: 'UBL', account: 'X2', isDefault: true })] });
+ok('the default can move to another account', p2Swap.status === 200 && p2Swap.json?.bankAccounts?.find((b) => b.isDefault)?.bank === 'UBL', JSON.stringify(p2Swap.json));
+const p2BankRow = p2Lk.find((l) => l.list === 'BANK' && l.code === 'UBL');
+await call(T.owner, 'PATCH', `/lookups/${p2BankRow.id}`, { active: false });
+ok('a bank switched off in Settings stays on an account that already has it',
+  (await call(T.owner, 'PATCH', `/manufacturers/${p2New.json?.id}`, { advancePct: 20, bankAccounts: p2Swap.json.bankAccounts })).status === 200);
+ok('but cannot be added to a new account -> 400',
+  (await call(T.owner, 'POST', '/manufacturers', { name: `P2 Other ${Date.now() % 100000}`, bankAccounts: [p2Bank({ bank: 'UBL' })] })).status === 400);
+await call(T.owner, 'PATCH', `/lookups/${p2BankRow.id}`, { active: true });
+ok('only Admin edits manufacturers -> 403', (await call(T.finance, 'PATCH', `/manufacturers/${p2New.json?.id}`, { advancePct: 10 })).status === 403);
+const p2D = ((await call(T.owner, 'GET', '/distributors')).json ?? []).find((d) => d.region === 'Hyderabad');
+ok('a distributor has a province and the other areas it covers', p2D?.province === 'Sindh' && p2D?.areas?.includes('Matiari'), JSON.stringify(p2D));
+const p2DUp = await call(T.owner, 'PATCH', `/distributors/${p2D.id}`, { region: 'Hyderabad', areas: [' Kotri ', 'kotri', '', 'Hyderabad', 'Jamshoro'] });
+ok('areas are trimmed, without blanks, repeats or the main city', JSON.stringify(p2DUp.json?.areas) === JSON.stringify(['Kotri', 'Jamshoro']), JSON.stringify(p2DUp.json?.areas));
+ok('more than 100 areas -> 400', (await call(T.owner, 'PATCH', `/distributors/${p2D.id}`, { areas: Array.from({ length: 101 }, (_, i) => `Area ${i}`) })).status === 400);
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

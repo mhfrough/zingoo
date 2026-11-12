@@ -186,6 +186,7 @@ export class SettingsLists {
     { list: 'REPAY_FREQUENCY', title: 'Repayment frequency', sub: 'For a loan paid in installments', add: 'Add frequency' },
     { list: 'ADVANCE_PURPOSE', title: 'Advance purpose', sub: 'Why a partner advances money', add: 'Add purpose' },
     { list: 'SETTLEMENT_METHOD', title: 'Settlement method', sub: 'How an advance is expected to be settled', add: 'Add method' },
+    { list: 'BANK', title: 'Banks', sub: 'Banks a manufacturer can be paid at', add: 'Add bank' },
     { list: 'BANK_ACCOUNT', title: 'Bank and cash accounts', sub: 'Which account took or paid the money. A label on each entry', add: 'Add account' },
     { list: 'DELIVERY_STATUS', title: 'Delivery statuses', sub: 'Dispatch and acceptance of an income invoice', add: 'Add status' },
     { list: 'BILL_TYPE', title: 'Bill types', sub: 'The first choice on every bill / expense', add: 'Add bill type' },

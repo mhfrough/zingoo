@@ -13,6 +13,13 @@ import { ManufacturerForm } from './manufacturer-form';
 const contractText = (p: { contract?: string | null; files?: unknown[] }) =>
   [p.contract && `Contract ${p.contract}`, p.files?.length && `${p.files.length} file${p.files.length > 1 ? 's' : ''}`].filter(Boolean).join(' · ') || null;
 
+/** the bank account a manufacturer is paid at unless it picks another */
+const defaultBank = (m: Manufacturer) => m.bankAccounts?.find((b) => b.isDefault) ?? m.bankAccounts?.[0];
+
+/** "Hyderabad, Sindh · +2 areas" */
+const areaText = (d: Distributor) =>
+  [[d.region, d.province].filter(Boolean).join(', '), d.areas?.length ? `+${d.areas.length} area${d.areas.length > 1 ? 's' : ''}` : null].filter(Boolean).join(' · ');
+
 /** The companies the business deals with: contract manufacturers and distributors. */
 @Component({
   selector: 'app-settings-partners',
@@ -71,13 +78,20 @@ export class SettingsPartners {
   protected manufacturerColumns: TableColumn<Manufacturer>[] = [
     { id: 'name', label: 'Manufacturer', value: (m) => m.name, sub: (m) => m.contact },
     { id: 'poc', label: 'Point of contact', priority: 2, value: (m) => m.poc || null, sub: (m) => contractText(m) },
-    { id: 'days', label: 'Pays in', kind: 'number', align: 'end', value: (m) => m.paymentDays, sub: () => 'days' },
+    {
+      id: 'terms', label: 'Payment terms', value: (m) => `${Number(m.advancePct ?? 0)}% advance`,
+      sub: (m) => `Balance in ${m.paymentDays} days`,
+    },
+    {
+      id: 'bank', label: 'Default bank', priority: 2, value: (m) => defaultBank(m)?.bank ?? 'No bank account',
+      sub: (m) => { const b = defaultBank(m); return b ? `${b.account}${(m.bankAccounts?.length ?? 0) > 1 ? ` · ${m.bankAccounts!.length} accounts` : ''}` : null; },
+    },
     { id: 'cur', label: 'Currency', value: (m) => m.currency, priority: 3 },
   ];
   protected manufacturerActions = (): RowAction[] => !this.canManufacturers() ? [] : [{ id: 'edit', label: 'Edit' }];
 
   protected distributorColumns: TableColumn<Distributor>[] = [
-    { id: 'name', label: 'Distributor', value: (d) => d.name, sub: (d) => d.region },
+    { id: 'name', label: 'Distributor', value: (d) => d.name, sub: (d) => areaText(d) },
     { id: 'contact', label: 'Contact', value: (d) => d.poc || d.contact, sub: (d) => contractText(d) ?? d.address, priority: 3 },
     { id: 'days', label: 'Payment terms', kind: 'number', align: 'end', priority: 2, value: (d) => d.paymentDays, sub: (d) => `days · sell-out ${d.selloutDays ?? 30} days` },
     { id: 'limit', label: 'Credit limit (PKR)', kind: 'money', value: (d) => d.creditLimit, sub: (d) => (d.advancePct ? `${d.advancePct}% advance` : null) },

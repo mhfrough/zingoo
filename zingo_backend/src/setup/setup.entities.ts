@@ -36,6 +36,13 @@ export class Setting {
   @Column({ type: 'decimal', precision: 5, scale: 2, default: 30, transformer: numeric })
   defaultAdvancePct: number;
 
+  /**
+   * The earlier flow: sales orders dispatched from the warehouse and invoiced at dispatch. Off = its screens are
+   * hidden (the records stay); distributors now hold stock on consignment and invoice what they sell.
+   */
+  @Column({ default: false })
+  salesOrdersEnabled: boolean;
+
   /** days a distributor has to sell a container out, the default for a new distributor */
   @Column({ type: 'int', default: 30 })
   defaultSelloutDays: number;

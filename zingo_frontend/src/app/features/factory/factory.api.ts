@@ -82,8 +82,12 @@ export interface Shipment {
   packets: number;
   value: number;
   receivedValue: number;
+  /** containers already on a distributor invoice (not rejected) */
+  soldContainers: number;
   onHandContainers: number;
   onHandValue: number;
+  /** what the distributor is charged per packet (agreed rate, else the product's) */
+  saleRate: number | null;
   daysLeft: number | null;
   overdue: boolean;
 }
@@ -100,6 +104,47 @@ export interface DistributorStockRow {
   value: number;
   nextSellBy: string | null;
   overdue: boolean;
+}
+
+/** containers of one delivery on a distributor invoice */
+export interface DistInvoiceLine {
+  id: string;
+  shipmentId: string;
+  productId: string;
+  product: Product;
+  containers: number;
+  packets: number;
+  rate: number;
+  costRate: number;
+  amount: number;
+}
+
+/** A distributor's sales invoice for containers it distributed. */
+export interface DistInvoice {
+  id: string;
+  refNo: string;
+  date: string;
+  distributorId: string;
+  distributor: Distributor;
+  invoiceNo: string | null;
+  amount: number;
+  cost: number;
+  margin: number;
+  dueDate: string;
+  status: 'Submitted' | 'Verified' | 'Rejected';
+  note: string | null;
+  reason: string | null;
+  submittedBy: string;
+  verifiedBy: string | null;
+  lines: DistInvoiceLine[];
+  payments: { id: string; refNo: string; date: string; amount: number; method: string }[];
+  paid: number;
+  due: number;
+  containers: number;
+  packets: number;
+  overdue: boolean;
+  /** "Waiting verification", "Open", "Part paid", "Paid", "Overdue", "Rejected" */
+  state: string;
 }
 
 export interface DistributorStock {
@@ -215,6 +260,12 @@ export class FactoryApi {
   stock = (distributorId?: string) => this.api.get<DistributorStock>('production-shipments/stock', { distributorId });
   ship = (body: unknown) => this.api.post<Shipment>('production-shipments', body);
   receive = (id: string, body: unknown) => this.api.post<Shipment>(`production-shipments/${id}/receive`, body);
+
+  invoices = (distributorId?: string) => this.api.get<DistInvoice[]>('distributor-invoices', { distributorId });
+  createInvoice = (body: unknown) => this.api.post<DistInvoice>('distributor-invoices', body);
+  verifyInvoice = (id: string) => this.api.post<DistInvoice>(`distributor-invoices/${id}/verify`, {});
+  rejectInvoice = (id: string, reason: string) => this.api.post<DistInvoice>(`distributor-invoices/${id}/reject`, { reason });
+  payInvoice = (id: string, body: unknown) => this.api.post<DistInvoice>(`distributor-invoices/${id}/pay`, body);
 }
 
 /** the tone of a status tag */

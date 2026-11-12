@@ -115,6 +115,7 @@ export class PortalService {
       advancesHeld: round2(held.v),
       creditHeld: round2(credit.v),
       numberFormat: s.numberFormat,
+      salesOrdersEnabled: !!s.salesOrdersEnabled,
       paymentMethods: methods.filter((m) => m.active).map((m) => m.code),
       paymentCycles: s.paymentCycles,
     };

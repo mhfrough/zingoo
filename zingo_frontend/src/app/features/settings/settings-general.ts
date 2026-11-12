@@ -78,6 +78,9 @@ const numbers = (text: string) => text.split(/[,\s]+/).filter(Boolean).map(Numbe
           <app-field label="Packets per bundle" hint="Default for a new SKU" [required]="true"><input type="number" formControlName="packsPerCarton" min="1" step="1" /></app-field>
           <app-field label="Bundles per container" hint="Default for a new SKU. A container is one batch for a distributor" [required]="true"><input type="number" formControlName="bundlesPerContainer" min="1" step="1" /></app-field>
           <app-field label="Sell-out days" hint="Default for a new distributor" [required]="true"><input type="number" formControlName="defaultSelloutDays" min="1" max="365" step="1" /></app-field>
+          <app-field label="Sales orders from the warehouse" hint="The earlier flow. Off: distributors hold stock on consignment and invoice what they sell">
+            <select formControlName="salesOrdersEnabled"><option value="false">Hidden</option><option value="true">Shown</option></select>
+          </app-field>
           <app-field label="Manufacturer advance (%)" hint="Default for a new manufacturer" [required]="true"><input type="number" formControlName="defaultAdvancePct" min="0" max="100" step="1" /></app-field>
           <app-field label="Low-stock alert below" hint="Cartons per SKU"><input type="number" formControlName="lowStockCartons" min="0" step="1" /></app-field>
           <app-field label="Default container">
@@ -158,6 +161,7 @@ export class SettingsGeneral {
     bundlesPerContainer: [10, [Validators.required, Validators.min(1)]],
     defaultSelloutDays: [30, [Validators.required, Validators.min(1), Validators.max(365)]],
     defaultAdvancePct: [30, [Validators.required, Validators.min(0), Validators.max(100)]],
+    salesOrdersEnabled: ['false'],
     lowStockCartons: [0, Validators.min(0)],
     containerSize: [''],
     defaultIncoterm: [''],
@@ -190,7 +194,7 @@ export class SettingsGeneral {
       companyName: s.companyName, fiscalMonth: String(s.fiscalMonth), numberFormat: s.numberFormat,
       approvalThreshold: Number(s.approvalThreshold), signatoryA: s.signatoryA, signatoryB: s.signatoryB,
       capitalTarget: Number(s.capitalTarget), profitAllocationPerPack: Number(s.profitAllocationPerPack), salesTaxRate: Number(s.salesTaxRate),
-      packsPerCarton: s.packsPerCarton, bundlesPerContainer: s.bundlesPerContainer ?? 10, defaultSelloutDays: s.defaultSelloutDays ?? 30, defaultAdvancePct: Number(s.defaultAdvancePct ?? 30), lowStockCartons: s.lowStockCartons, containerSize: s.containerSize, defaultIncoterm: s.defaultIncoterm,
+      packsPerCarton: s.packsPerCarton, bundlesPerContainer: s.bundlesPerContainer ?? 10, defaultSelloutDays: s.defaultSelloutDays ?? 30, defaultAdvancePct: Number(s.defaultAdvancePct ?? 30), salesOrdersEnabled: String(!!s.salesOrdersEnabled), lowStockCartons: s.lowStockCartons, containerSize: s.containerSize, defaultIncoterm: s.defaultIncoterm,
       paymentCycles: s.paymentCycles.join(', '), defaultPaymentCycle: s.defaultPaymentCycle, agingBuckets: (s.agingBuckets ?? [30, 60, 90]).join(', '),
       docPrefixes: { sales: s.docPrefixes['sales'] ?? '', batch: s.docPrefixes['batch'] ?? '', finance: s.docPrefixes['finance'] ?? '', accounting: s.docPrefixes['accounting'] ?? '', export: s.docPrefixes['export'] ?? '' },
     });
@@ -228,7 +232,7 @@ export class SettingsGeneral {
       companyName: v.companyName, fiscalMonth: Number(v.fiscalMonth), numberFormat: v.numberFormat,
       approvalThreshold: Number(v.approvalThreshold), signatoryA: v.signatoryA, signatoryB: v.signatoryB,
       capitalTarget: Number(v.capitalTarget), profitAllocationPerPack: Number(v.profitAllocationPerPack), salesTaxRate: Number(v.salesTaxRate),
-      packsPerCarton: Number(v.packsPerCarton), bundlesPerContainer: Number(v.bundlesPerContainer), defaultSelloutDays: Number(v.defaultSelloutDays), defaultAdvancePct: Number(v.defaultAdvancePct), lowStockCartons: Number(v.lowStockCartons), containerSize: v.containerSize, defaultIncoterm: v.defaultIncoterm,
+      packsPerCarton: Number(v.packsPerCarton), bundlesPerContainer: Number(v.bundlesPerContainer), defaultSelloutDays: Number(v.defaultSelloutDays), defaultAdvancePct: Number(v.defaultAdvancePct), salesOrdersEnabled: v.salesOrdersEnabled === 'true', lowStockCartons: Number(v.lowStockCartons), containerSize: v.containerSize, defaultIncoterm: v.defaultIncoterm,
       paymentCycles: cycles, defaultPaymentCycle: Number(v.defaultPaymentCycle), agingBuckets: numbers(v.agingBuckets), docPrefixes: v.docPrefixes,
     }).subscribe({
       next: () => {

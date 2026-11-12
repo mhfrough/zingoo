@@ -57,13 +57,14 @@ export class ShipmentsService {
     const rows = await this.db.manager.find(ProductionShipment, {
       where, relations: ['order', 'product', 'manufacturer', 'distributor'], order: { shipDate: 'DESC', refNo: 'DESC' },
     });
-    return rows.map((s) => this.shape(s));
+    const [sold, rates] = await Promise.all([this.soldMap(this.db.manager), this.rateMap(this.db.manager)]);
+    return rows.map((s) => this.shape(s, sold[s.id] ?? 0, rates));
   }
 
   /**
    * Stock held by distributors (consignment), lot by lot (one received shipment is one lot) and per product:
-   * containers, bundles, packets and value at cost, with the sell-by date. Nothing is sold yet in this phase,
-   * so on hand = received.
+   * containers, bundles, packets and value at cost, with the sell-by date. On hand = received - already invoiced
+   * (an invoice waiting for verification already takes its containers; a rejected one gives them back).
    */
   async stock(user: ShipmentUser, distributorId?: string) {
     const scope = user.role === 'Distributor' ? this.own(user.distributorId, 'distributor') : distributorId;
@@ -164,7 +165,21 @@ export class ShipmentsService {
 
   private async one(em: EntityManager, id: string) {
     const s = await em.findOne(ProductionShipment, { where: { id }, relations: ['order', 'product', 'manufacturer', 'distributor'] });
-    return this.shape(s!);
+    return this.shape(s!, (await this.soldMap(em))[id] ?? 0, await this.rateMap(em));
+  }
+
+  /** containers of each delivery already on a distributor invoice that was not rejected */
+  private async soldMap(em: EntityManager): Promise<Record<string, number>> {
+    const rows: { shipmentId: string; n: number }[] = await em.query(
+      `SELECT l."shipmentId", SUM(l.containers)::int AS n FROM distributor_invoice_lines l
+         JOIN distributor_invoices i ON i.id = l."invoiceId" WHERE i.status <> 'Rejected' GROUP BY l."shipmentId"`);
+    return Object.fromEntries(rows.map((r) => [r.shipmentId, Number(r.n)]));
+  }
+
+  /** agreed distributor prices per packet, keyed "distributorId|productId" */
+  private async rateMap(em: EntityManager): Promise<Record<string, number>> {
+    const rows: { d: string; p: string; rate: number }[] = await em.query(`SELECT "distributorId" AS d, "productId" AS p, rate::float8 AS rate FROM distributor_rates`);
+    return Object.fromEntries(rows.map((r) => [`${r.d}|${r.p}`, Number(r.rate)]));
   }
 
   private async event(em: EntityManager, orderId: string, user: ShipmentUser, event: string, note: string | null) {
@@ -175,10 +190,10 @@ export class ShipmentsService {
   }
 
   /** quantities and value of what was sent and what arrived; what is still on hand and whether it is past its sell-by date */
-  private shape(s: ProductionShipment) {
+  private shape(s: ProductionShipment, soldContainers = 0, rates: Record<string, number> = {}) {
     const perContainer = s.bundlesPerContainer * s.packetsPerBundle;
     const received = s.receivedContainers ?? 0;
-    const onHandContainers = s.status === 'Received' ? received : 0;
+    const onHandContainers = s.status === 'Received' ? Math.max(0, received - soldContainers) : 0;
     const onHandValue = round2(onHandContainers * perContainer * Number(s.rate));
     const daysLeft = s.sellBy ? Math.round((Date.parse(s.sellBy) - Date.parse(today())) / 86_400_000) : null;
     return {
@@ -186,8 +201,11 @@ export class ShipmentsService {
       packets: s.containers * perContainer,
       value: round2(s.containers * perContainer * Number(s.rate)),
       receivedValue: round2(received * perContainer * Number(s.rate)),
+      soldContainers,
       onHandContainers,
       onHandValue,
+      /** what the distributor is charged per packet: its agreed rate, else the product's */
+      saleRate: s.distributorId ? rates[`${s.distributorId}|${s.productId}`] ?? Number(s.product?.rate ?? 0) : null,
       daysLeft,
       overdue: daysLeft !== null && daysLeft < 0 && onHandContainers > 0,
     };

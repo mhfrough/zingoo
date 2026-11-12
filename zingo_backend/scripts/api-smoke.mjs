@@ -1130,5 +1130,62 @@ ok('it posts warehouse Inventory / Manufacturer Payable', ((await call(T.finance
 ok('a Manufacturer login cannot read distributor stock -> 403', (await call(p3Maker, 'GET', '/production-shipments/stock')).status === 403);
 ok('the ledger still balances after shipments', (await call(T.owner, 'GET', '/reports/trial-balance')).json?.balanced === true);
 
+// ── P6 distributor sales invoices: report sales, verify (income), collect, stock left ──
+const p6Day = new Date().toISOString().slice(0, 10);
+const p6Lot = ((await call(T.dist, 'GET', '/production-shipments')).json ?? []).find((s) => s.id === p5S1.json.id);
+ok('the delivery shows 1 container on hand and the distributor price', p6Lot?.onHandContainers === 1 && p6Lot?.soldContainers === 0 && p6Lot?.saleRate > 0, JSON.stringify([p6Lot?.onHandContainers, p6Lot?.saleRate]));
+const p6Body = (o = {}) => ({ date: p6Day, invoiceNo: 'SCD-501', lines: [{ shipmentId: p6Lot.id, containers: 1 }], ...o });
+ok('more containers than in stock -> 400', (await call(T.dist, 'POST', '/distributor-invoices', p6Body({ lines: [{ shipmentId: p6Lot.id, containers: 2 }] }))).status === 400);
+ok('no lines -> 400', (await call(T.dist, 'POST', '/distributor-invoices', p6Body({ lines: [] }))).status === 400);
+ok('a future date -> 400', (await call(T.dist, 'POST', '/distributor-invoices', p6Body({ date: '2999-01-01' }))).status === 400);
+ok('a date before the delivery arrived -> 400', (await call(T.dist, 'POST', '/distributor-invoices', p6Body({ date: '2000-01-01' }))).status === 400);
+ok('a delivery still on the road cannot be invoiced -> 400', (await call(T.sales, 'POST', '/distributor-invoices', p6Body({ distributorId: p5Mo.distributorId, lines: [{ shipmentId: p5WS.id, containers: 1 }] }))).status === 400);
+ok('a manufacturer cannot invoice -> 403', (await call(p3Maker, 'POST', '/distributor-invoices', p6Body())).status === 403);
+ok('Finance cannot report sales -> 403', (await call(T.finance, 'POST', '/distributor-invoices', p6Body({ distributorId: p5Mo.distributorId }))).status === 403);
+const p6Inv = await call(T.dist, 'POST', '/distributor-invoices', p6Body());
+const p6Amount = Math.round(4320 * p6Lot.saleRate * 100) / 100;
+const p6Due = new Date(Date.parse(`${p6Day}T00:00:00Z`) + 30 * 86_400_000).toISOString().slice(0, 10);
+ok('the distributor reports 1 container sold: income at its price, cost at the manufacturer\'s, due after its 30 days',
+  p6Inv.status === 201 && p6Inv.json?.status === 'Submitted' && p6Inv.json?.amount === p6Amount && p6Inv.json?.cost === 18360
+  && p6Inv.json?.dueDate === p6Due && /^DI-\d{3}$/.test(p6Inv.json?.refNo) && p6Inv.json?.state === 'Waiting verification', JSON.stringify(p6Inv.json));
+ok('the container stops counting as its stock at once', ((await call(T.dist, 'GET', '/production-shipments')).json ?? []).find((s) => s.id === p6Lot.id)?.onHandContainers === 0);
+ok('it cannot be sold twice -> 400', (await call(T.dist, 'POST', '/distributor-invoices', p6Body())).status === 400);
+ok('nothing posts before verification', !((await call(T.finance, 'GET', '/reports/journal?period=all')).json ?? []).some((l) => l.reference === p6Inv.json.refNo));
+ok('the company is asked to verify it', ((await call(T.owner, 'GET', '/reports/alerts')).json ?? []).some((a) => a.kind === 'invoice' && a.title.includes(p6Inv.json.refNo)));
+ok('a distributor cannot verify its own invoice -> 403', (await call(T.dist, 'POST', `/distributor-invoices/${p6Inv.json.id}/verify`)).status === 403);
+ok('no payment before verification -> 400', (await call(T.finance, 'POST', `/distributor-invoices/${p6Inv.json.id}/pay`, { date: p6Day, amount: 1, method: 'Cash' })).status === 400);
+const p6Ar0 = (await call(T.owner, 'GET', '/reports/dashboard')).json?.openReceivables;
+const p6V = await call(T.finance, 'POST', `/distributor-invoices/${p6Inv.json.id}/verify`);
+ok('Finance verifies it', p6V.json?.status === 'Verified' && p6V.json?.state === 'Open' && p6V.json?.due === p6Amount);
+const p6J = ((await call(T.finance, 'GET', '/reports/journal?period=all')).json ?? []).filter((l) => l.reference === p6Inv.json.refNo);
+ok('income posts: Receivable / Sales Revenue, and Cost of Goods Sold / Inventory at Distributor',
+  p6J.some((l) => l.account === 'Accounts Receivable' && l.debit === p6Amount) && p6J.some((l) => l.account === 'Sales Revenue' && l.credit === p6Amount)
+  && p6J.some((l) => l.account === 'Cost of Goods Sold' && l.debit === 18360) && p6J.some((l) => l.account === 'Inventory at Distributor' && l.credit === 18360), JSON.stringify(p6J));
+ok('open receivables go up by the invoice', Math.abs(((await call(T.owner, 'GET', '/reports/dashboard')).json?.openReceivables) - (p6Ar0 + p6Amount)) < 0.01);
+ok('the receivables list shows it', ((await call(T.finance, 'GET', '/reports/receivables')).json?.rows ?? []).some((r) => r.reference === p6Inv.json.refNo && r.outstanding === p6Amount));
+ok('verifying twice -> 400', (await call(T.finance, 'POST', `/distributor-invoices/${p6Inv.json.id}/verify`)).status === 400);
+ok('paying more than due -> 400', (await call(T.finance, 'POST', `/distributor-invoices/${p6Inv.json.id}/pay`, { date: p6Day, amount: p6Amount + 1, method: 'Cash' })).status === 400);
+const p6P1 = await call(T.sales, 'POST', `/distributor-invoices/${p6Inv.json.id}/pay`, { date: p6Day, amount: 10000, method: 'Bank Transfer', toAccount: 'Zen Foods Bank Account', reference: 'IBFT-77' });
+ok('Distribution records a part payment', p6P1.json?.state === 'Part paid' && p6P1.json?.paid === 10000);
+ok('it posts Cash & Bank / Receivable', ((await call(T.finance, 'GET', '/reports/journal?period=all')).json ?? []).some((l) => l.reference === p6P1.json?.payments?.[0]?.refNo && l.account === 'Cash & Bank' && l.debit === 10000));
+ok('the rest is paid', (await call(T.finance, 'POST', `/distributor-invoices/${p6Inv.json.id}/pay`, { date: p6Day, amount: Math.round((p6Amount - 10000) * 100) / 100, method: 'Cash' })).json?.state === 'Paid');
+ok('nothing left to pay -> 400', (await call(T.finance, 'POST', `/distributor-invoices/${p6Inv.json.id}/pay`, { date: p6Day, amount: 1, method: 'Cash' })).status === 400);
+// a rejected invoice gives the containers back
+const p6O = (await call(T.factory, 'POST', '/production-orders', { date: p6Day, productId: p5Mo.productId, containers: 1, send: true })).json;
+await call(p3Maker, 'POST', `/production-orders/${p6O.id}/accept`, {});
+const p6S = (await call(p3Maker, 'POST', '/production-shipments', { orderId: p6O.id, date: p6Day, containers: 1 })).json;
+await call(T.dist, 'POST', `/production-shipments/${p6S.id}/receive`, { date: p6Day, receivedContainers: 1 });
+const p6Inv2 = (await call(T.sales, 'POST', '/distributor-invoices', { date: p6Day, distributorId: p5Mo.distributorId, lines: [{ shipmentId: p6S.id, containers: 1 }] })).json;
+ok('staff may report sales for a distributor', p6Inv2?.status === 'Submitted' && p6Inv2?.submittedBy === 'Distribution Coordinator', JSON.stringify(p6Inv2?.submittedBy));
+ok('a rejection needs a reason -> 400', (await call(T.finance, 'POST', `/distributor-invoices/${p6Inv2.id}/reject`, { reason: '' })).status === 400);
+ok('Finance rejects it', (await call(T.finance, 'POST', `/distributor-invoices/${p6Inv2.id}/reject`, { reason: 'Wrong count' })).json?.status === 'Rejected');
+ok('its container counts as stock again', ((await call(T.dist, 'GET', '/production-shipments')).json ?? []).find((s) => s.id === p6S.id)?.onHandContainers === 1);
+ok('a rejected invoice cannot be verified -> 400', (await call(T.finance, 'POST', `/distributor-invoices/${p6Inv2.id}/verify`)).status === 400);
+ok('the distributor only sees its own invoices', ((await call(T.dist, 'GET', '/distributor-invoices')).json ?? []).every((i) => i.distributorId === p5Mo.distributorId));
+const p6Pay = ((await call(T.finance, 'GET', '/reports/payables')).json?.rows ?? []).find((r) => r.reference === p5Mo.refNo);
+ok('payables show what is owed to the manufacturer for goods received (18,360 - 11,016 paid)', p6Pay?.outstanding === 7344, JSON.stringify(p6Pay));
+ok('the old sales-order screens are off by default', (await call(T.owner, 'GET', '/settings')).json?.salesOrdersEnabled === false && (await call(T.dist, 'GET', '/portal/profile')).json?.salesOrdersEnabled === false);
+ok('the ledger still balances after sales', (await call(T.owner, 'GET', '/reports/trial-balance')).json?.balanced === true);
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

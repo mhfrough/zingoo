@@ -1,6 +1,7 @@
 import { ChangeDetectionStrategy, Component, computed, effect, inject, signal } from '@angular/core';
 import { FactoryApi } from '../factory/factory.api';
 import { ShipmentsPanel } from '../factory/shipments-panel';
+import { InvoicesPanel } from '../factory/invoices-panel';
 import { rxResource } from '@angular/core/rxjs-interop';
 import { Observable } from 'rxjs';
 import { AuthService } from '../../core/auth.service';
@@ -37,7 +38,7 @@ const tone = (s: string): Tone => STATUS_TONE[s] ?? 'neutral';
   selector: 'app-portal',
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [
-    Btn, DataTable, Kpi, PageHeader, Tag, Tabs, TabPanel, RequestForm, ReceiptForm, AdviceForm, AcceptForm, ReasonForm, ShipmentsPanel,
+    Btn, DataTable, Kpi, PageHeader, Tag, Tabs, TabPanel, RequestForm, ReceiptForm, AdviceForm, AcceptForm, ReasonForm, ShipmentsPanel, InvoicesPanel,
   ],
   templateUrl: './portal.html',
   styleUrl: './portal.css',
@@ -72,6 +73,11 @@ export class Portal {
   /** manufacturer deliveries to this distributor and the Zen Foods stock it holds */
   protected deliveries = rxResource({ params: () => this.params(), stream: ({ params }) => this.factory.shipments({ distributorId: params.d }) });
   protected consignment = rxResource({ params: () => this.params(), stream: ({ params }) => this.factory.stock(params.d) });
+  protected salesInvoices = rxResource({ params: () => this.params(), stream: ({ params }) => this.factory.invoices(params.d) });
+  /** Admin, Finance and Distribution verify invoices and record payments */
+  protected canManageInvoices = computed(() => ['Admin', 'Finance', 'Distribution'].includes(this.auth.user()?.role ?? ''));
+  /** the earlier stock-request flow (requests become warehouse sales orders) */
+  protected legacy = computed(() => !!this.profile.value()?.salesOrdersEnabled);
   protected toConfirm = computed(() => (this.deliveries.value() ?? []).filter((s) => s.status === 'In transit').length);
   /** the distributor itself, or Admin / Distribution for it */
   protected canReceiveDelivery = computed(() => this.isDistributor() || ['Admin', 'Distribution'].includes(this.auth.user()?.role ?? ''));

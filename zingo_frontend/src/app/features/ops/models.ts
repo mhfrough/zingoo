@@ -181,6 +181,8 @@ export interface Settings {
   defaultSelloutDays?: number;
   /** manufacturer advance %, default for a new manufacturer */
   defaultAdvancePct?: number;
+  /** the earlier sales-order flow (warehouse dispatch, invoice at dispatch) is shown */
+  salesOrdersEnabled?: boolean;
   lowStockCartons: number;
   paymentCycles: number[];
   defaultPaymentCycle: number;

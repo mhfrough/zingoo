@@ -10,6 +10,7 @@ import { BatchesService } from '../manufacturing/manufacturing.service';
 import { ProductionOrdersService } from '../manufacturing/production-orders.service';
 import { PaymentRequestsService } from '../manufacturing/payment-requests.service';
 import { ShipmentsService } from '../manufacturing/shipments.service';
+import { DistInvoicesService } from '../manufacturing/dist-invoices.service';
 import { SettingsService } from '../setup/setup.service';
 
 /** Period filter: 'all' or 'YYYY-MM'. */
@@ -45,6 +46,7 @@ export class ReportsService {
     private readonly productionOrders: ProductionOrdersService,
     private readonly paymentRequests: PaymentRequestsService,
     private readonly shipments: ShipmentsService,
+    private readonly distInvoices: DistInvoicesService,
   ) {}
 
   /** net balance (debit - credit) of one ledger account */
@@ -257,8 +259,13 @@ export class ReportsService {
   // ───────────── money owed ─────────────
 
   async receivables() {
-    const [orders, docs, shipments] = await Promise.all([this.orders.list(), this.accounting.list(), this.exportsSvc.list()]);
+    const [orders, docs, shipments, dis] = await Promise.all([
+      this.orders.list(), this.accounting.list(), this.exportsSvc.list(), this.distInvoices.list({ id: '', name: 'system', role: 'Admin' }),
+    ]);
     const rows = [
+      ...dis.filter((i) => i.status === 'Verified' && i.due > 0.01).map((i) => ({
+        reference: i.refNo, type: 'Distributor sales', party: i.distributor.name, date: i.date, dueDate: i.dueDate, outstanding: i.due,
+      })),
       ...shipments.filter((e) => e.status === 'Shipped' && e.due > 0.01).map((e) => ({
         reference: e.refNo, type: `Export · ${e.currency}`, party: e.buyer,
         date: e.shipDate ?? e.date, dueDate: e.shipDate ?? e.date, outstanding: round2(e.due * Number(e.fxRate)),
@@ -287,6 +294,16 @@ export class ReportsService {
       ...batches.filter((b) => b.status === 'Released' && b.due > 0.01).map((b) => ({
         reference: b.refNo, type: 'Manufacturer', party: b.manufacturer.name, dueDate: b.date, outstanding: b.due,
       })),
+      // production orders: goods received and not yet covered by what was paid on the order
+      ...(await this.db.query(`
+        SELECT o."refNo" AS reference, m.name AS party, MAX(s."receivedDate")::text AS "dueDate",
+               (SUM(s."receivedContainers" * s."bundlesPerContainer" * s."packetsPerBundle" * s.rate)
+                - LEAST(SUM(s."receivedContainers" * s."bundlesPerContainer" * s."packetsPerBundle" * s.rate),
+                        COALESCE((SELECT SUM(p.amount) FROM mfr_request_payments p JOIN mfr_payment_requests r ON r.id = p."requestId" WHERE r."orderId" = o.id), 0)))::float8 AS outstanding
+          FROM production_shipments s JOIN production_orders o ON o.id = s."orderId" JOIN manufacturers m ON m.id = o."manufacturerId"
+         WHERE s.status = 'Received' GROUP BY o.id, o."refNo", m.name`) as { reference: string; party: string; dueDate: string; outstanding: number }[])
+        .filter((r) => Number(r.outstanding) > 0.01)
+        .map((r) => ({ ...r, type: 'Manufacturer', outstanding: round2(Number(r.outstanding)) })),
     ].sort((a, b) => String(a.dueDate).localeCompare(String(b.dueDate)));
     return { total: round2(rows.reduce((s, r) => s + r.outstanding, 0)), rows };
   }
@@ -309,11 +326,12 @@ export class ReportsService {
   }
 
   async alerts() {
-    const [docs, entries, stock, orders, batches, mos, prs, shs] = await Promise.all([
+    const [docs, entries, stock, orders, batches, mos, prs, shs, dis] = await Promise.all([
       this.accounting.list(), this.finance.list(), this.stock(), this.orders.list(), this.batches.list(),
       this.productionOrders.list({ id: '', name: 'system', role: 'Admin' }),
       this.paymentRequests.list({ id: '', name: 'system', role: 'Admin' }),
       this.shipments.list({ id: '', name: 'system', role: 'Admin' }),
+      this.distInvoices.list({ id: '', name: 'system', role: 'Admin' }),
     ]);
     const s = await this.settings.get();
     return [
@@ -352,6 +370,15 @@ export class ReportsService {
       ...orders.filter((o) => o.status === 'Draft').map((o) => ({
         kind: 'order', page: 'distribution', title: `Undispatched order · ${o.refNo}`,
         text: `${o.cartons} bundles for ${o.distributor.name}`,
+      })),
+      // distributor sales invoices: to verify, and overdue
+      ...dis.filter((i) => i.status === 'Submitted').map((i) => ({
+        kind: 'invoice', page: 'distribution', title: `Sales invoice to verify · ${i.refNo}`,
+        text: `${i.distributor.name}: ${i.containers} container${i.containers > 1 ? 's' : ''} sold · PKR ${i.amount}`,
+      })),
+      ...dis.filter((i) => i.overdue).map((i) => ({
+        kind: 'receivable', page: 'distribution', title: `Overdue · ${i.refNo}`,
+        text: `${i.distributor.name} owes PKR ${i.due} · due ${i.dueDate}`,
       })),
       // shipments on the road, and distributor stock past its sell-by date
       ...shs.filter((s) => s.status === 'In transit').map((s) => ({

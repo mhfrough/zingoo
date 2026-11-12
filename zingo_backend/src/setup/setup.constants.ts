@@ -10,6 +10,7 @@ export const DEFAULT_SETTINGS = {
   bundlesPerContainer: 10,
   defaultSelloutDays: 30,
   defaultAdvancePct: 30,
+  salesOrdersEnabled: false,
   approvalThreshold: 50000,
   signatoryA: 'Signatory A (Arittek)',
   signatoryB: 'Signatory B (BCP)',
@@ -20,7 +21,7 @@ export const DEFAULT_SETTINGS = {
   profitAllocationPerPack: 0,
   paymentCycles: [15, 30, 45, 60],
   defaultPaymentCycle: 30,
-  docPrefixes: { sales: 'SO', batch: 'B', finance: 'FIN', accounting: 'ACC', export: 'EXP', production: 'MO', mfrRequest: 'PR', mfrPayment: 'MPY', shipment: 'SH' },
+  docPrefixes: { sales: 'SO', batch: 'B', finance: 'FIN', accounting: 'ACC', export: 'EXP', production: 'MO', mfrRequest: 'PR', mfrPayment: 'MPY', shipment: 'SH', distInvoice: 'DI', distReceipt: 'DRC' },
   agingBuckets: [30, 60, 90],
 };
 

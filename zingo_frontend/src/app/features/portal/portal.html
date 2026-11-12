@@ -1,7 +1,9 @@
 <app-page-header eyebrow="Zingoo · Zen Foods" title="Distributor partner portal"
   description="Order requests, deliveries and claims, payments, prices and your statement in one place.">
   <ng-container pageActions>
-    <button appBtn variant="primary" icon="plus" (click)="requestOpen.set(true)">Request stock</button>
+    @if (legacy()) {
+      <button appBtn variant="primary" icon="plus" (click)="requestOpen.set(true)">Request stock</button>
+    }
     <button appBtn icon="download" (click)="downloadStatement()">Statement CSV</button>
   </ng-container>
 </app-page-header>
@@ -105,6 +107,10 @@
         <app-shipments-panel mode="distributor" [shipments]="deliveries.value() ?? []" [stock]="consignment.value() ?? null"
           [loading]="deliveries.isLoading()" [error]="deliveries.error() ? 'The server did not answer.' : null"
           [canReceive]="canReceiveDelivery()" (changed)="reload()" />
+        <app-invoices-panel mode="distributor" [invoices]="salesInvoices.value() ?? []" [shipments]="deliveries.value() ?? []"
+          [distributorId]="isDistributor() ? null : (dist() ?? null)" [loading]="salesInvoices.isLoading()"
+          [error]="salesInvoices.error() ? 'The server did not answer.' : null"
+          [canReport]="canReceiveDelivery()" [canManage]="canManageInvoices()" (changed)="reload()" />
       </div>
     </ng-template>
 

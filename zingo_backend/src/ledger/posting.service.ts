@@ -12,6 +12,7 @@ import { AccountingDocument, AccountingSettlement, Approval, FinanceEntry, Fundi
 import { ManufacturerPayment, ProductionBatch } from '../manufacturing/manufacturing.entities';
 import { MfrPaymentRequest, MfrRequestPayment } from '../manufacturing/payment-requests.entities';
 import { ProductionShipment } from '../manufacturing/shipments.entities';
+import { DistributorInvoice, DistributorInvoicePayment } from '../manufacturing/dist-invoices.entities';
 import { Setting } from '../setup/setup.entities';
 import { SettingsService } from '../setup/setup.service';
 import { JournalVoucher } from './ledger.entities';
@@ -176,6 +177,30 @@ export class PostingService implements OnModuleInit {
     const ref = reqs[0]?.order?.refNo ?? '';
     await this.ledger.replace(em, 'MFR_ADV_APPLY', orderId,
       date ? this.pair(date, 'Manufacturing', ref, `Advance set against goods received · ${ref}`, ACC.MFR_PAYABLE, ACC.MFR_ADVANCE, applied) : []);
+  }
+
+  /**
+   * A verified distributor sales invoice: the consignment stock is sold. Receivable / Sales Revenue at the
+   * distributor's rate, and Cost of Goods Sold / Inventory at Distributor at the manufacturer's rate.
+   */
+  async syncDistInvoice(em: EntityManager, id: string) {
+    const inv = await em.findOne(DistributorInvoice, { where: { id }, relations: ['distributor'] });
+    if (!inv) return;
+    const rows = inv.status === 'Verified'
+      ? [
+        ...this.pair(inv.date, 'Distribution', inv.refNo, `Sales invoice · ${inv.distributor.name}`, ACC.AR, ACC.SALES, inv.amount),
+        ...this.pair(inv.date, 'Distribution', inv.refNo, `Cost of goods sold · ${inv.distributor.name}`, ACC.COGS, ACC.INVENTORY_DISTRIBUTOR, inv.cost),
+      ]
+      : [];
+    await this.ledger.replace(em, 'DIST_INVOICE', id, rows);
+  }
+
+  /** money received from a distributor: Cash & Bank / Accounts Receivable */
+  async syncDistInvoicePayment(em: EntityManager, id: string) {
+    const p = await em.findOne(DistributorInvoicePayment, { where: { id }, relations: ['invoice', 'invoice.distributor'] });
+    if (!p) return;
+    await this.ledger.replace(em, 'DIST_RECEIPT', id,
+      this.pair(p.date, 'Distribution', p.refNo, `Received from ${p.invoice.distributor.name} · ${p.invoice.refNo}`, ACC.CASH, ACC.AR, p.amount));
   }
 
   // ───────────── distribution ─────────────

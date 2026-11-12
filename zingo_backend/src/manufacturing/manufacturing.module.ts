@@ -10,15 +10,18 @@ import { MfrPaymentRequest, MfrRequestPayment } from './payment-requests.entitie
 import { PaymentRequestsService } from './payment-requests.service';
 import { ProductionOrdersController } from './production-orders.controller';
 import { ShipmentsController } from './shipments.controller';
+import { DistInvoicesController } from './dist-invoices.controller';
+import { DistributorInvoice, DistributorInvoiceLine, DistributorInvoicePayment } from './dist-invoices.entities';
+import { DistInvoicesService } from './dist-invoices.service';
 import { ProductionShipment } from './shipments.entities';
 import { ShipmentsService } from './shipments.service';
 import { ProductionOrder, ProductionOrderEvent } from './production-orders.entities';
 import { ProductionOrdersService } from './production-orders.service';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([ProductionBatch, ManufacturerPayment, ProductionOrder, ProductionOrderEvent, MfrPaymentRequest, MfrRequestPayment, ProductionShipment]), LedgerModule, SetupModule],
-  controllers: [BatchesController, MfrPaymentsController, ProductionOrdersController, PaymentRequestsController, ShipmentsController],
-  providers: [BatchesService, MfrPaymentsService, ProductionOrdersService, PaymentRequestsService, ShipmentsService],
-  exports: [BatchesService, MfrPaymentsService, ProductionOrdersService, PaymentRequestsService, ShipmentsService],
+  imports: [TypeOrmModule.forFeature([ProductionBatch, ManufacturerPayment, ProductionOrder, ProductionOrderEvent, MfrPaymentRequest, MfrRequestPayment, ProductionShipment, DistributorInvoice, DistributorInvoiceLine, DistributorInvoicePayment]), LedgerModule, SetupModule],
+  controllers: [BatchesController, MfrPaymentsController, ProductionOrdersController, PaymentRequestsController, ShipmentsController, DistInvoicesController],
+  providers: [BatchesService, MfrPaymentsService, ProductionOrdersService, PaymentRequestsService, ShipmentsService, DistInvoicesService],
+  exports: [BatchesService, MfrPaymentsService, ProductionOrdersService, PaymentRequestsService, ShipmentsService, DistInvoicesService],
 })
 export class ManufacturingModule {}

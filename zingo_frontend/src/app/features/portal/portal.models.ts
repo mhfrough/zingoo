@@ -14,6 +14,8 @@ export interface PortalProfile {
   advancesHeld: number;
   creditHeld: number;
   numberFormat: string;
+  /** the earlier stock-request / sales-order flow is in use */
+  salesOrdersEnabled?: boolean;
   paymentMethods: string[];
   paymentCycles: number[];
 }

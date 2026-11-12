@@ -1,8 +1,10 @@
 <app-page-header eyebrow="Zingoo · Zen Foods" title="Sales, stock & collections"
-  description="Create distributor sales orders, dispatch finished stock and collect payments against invoices.">
+  description="Deliveries and stock held by distributors, their sales invoices and the money they owe.">
   @if (canWrite()) {
     <ng-container pageActions>
-      <button appBtn variant="primary" icon="plus" (click)="openOrder()">New sales order</button>
+      @if (legacy()) {
+        <button appBtn variant="primary" icon="plus" (click)="openOrder()">New sales order</button>
+      }
       <button appBtn icon="users" (click)="openDistributor()">Add distributor</button>
     </ng-container>
   }
@@ -16,6 +18,10 @@
     <app-kpi label="Orders waiting dispatch" [value]="fmtNumber(waiting())" icon="package" tone="info" foot="Ready once stock is available" />
   </div>
 
+  <app-invoices-panel mode="company" [invoices]="distInvoices.value() ?? []" [loading]="distInvoices.isLoading()"
+    [error]="distInvoices.error() ? 'The server did not answer.' : null" [canManage]="canManageInvoices()" (changed)="reload()" />
+
+  @if (legacy()) {
   <div class="notice">
     <span>
       <strong>Dispatch and collection.</strong> A new order is a draft. Dispatching checks stock and the credit limit, lowers stock and
@@ -35,6 +41,17 @@
         emptyText="Create the first order for a distributor." (retry)="reload()" (action)="onOrderAction($event)" />
     </div>
   </div>
+  } @else if ((orders.value() ?? []).length) {
+  <div class="card" data-flush>
+    <div class="card__head">
+      <div><h2>Earlier sales orders</h2><p>From the warehouse flow, kept for the record. Switch it back on in Settings &amp; Data</p></div>
+    </div>
+    <div class="card__body">
+      <app-data-table [columns]="orderColumns" [rows]="orders.value() ?? []" [loading]="orders.isLoading()"
+        searchPlaceholder="Search orders" emptyTitle="No sales orders" />
+    </div>
+  </div>
+  }
 
   <div class="card" data-flush>
     <div class="card__head">

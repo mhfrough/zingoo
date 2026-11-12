@@ -4,6 +4,7 @@ import { Router, RouterLink } from '@angular/router';
 import { AuthService } from '../../core/auth.service';
 import { FactoryApi } from '../factory/factory.api';
 import { ShipmentsPanel } from '../factory/shipments-panel';
+import { InvoicesPanel } from '../factory/invoices-panel';
 import { errorText } from '../../shared/errors';
 import { Tone, fmtAmount, fmtDate, fmtMoney, fmtNumber } from '../../shared/format';
 import {
@@ -26,7 +27,7 @@ interface DistributorRow {
 @Component({
   selector: 'app-distribution',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [RouterLink, Btn, DataTable, Kpi, PageHeader, OrderForm, CollectionForm, DistributorForm, CreditOverrideForm, ShipmentsPanel],
+  imports: [RouterLink, Btn, DataTable, Kpi, PageHeader, OrderForm, CollectionForm, DistributorForm, CreditOverrideForm, ShipmentsPanel, InvoicesPanel],
   templateUrl: './distribution.html',
 })
 export class Distribution {
@@ -49,6 +50,11 @@ export class Distribution {
   /** manufacturer deliveries to distributors and the stock they hold (consignment) */
   protected shipments = rxResource({ params: () => this.tick(), stream: () => this.factory.shipments() });
   protected distStock = rxResource({ params: () => this.tick(), stream: () => this.factory.stock() });
+  protected distInvoices = rxResource({ params: () => this.tick(), stream: () => this.factory.invoices() });
+  /** Admin, Finance and Distribution verify invoices and record payments */
+  protected canManageInvoices = computed(() => ['Admin', 'Finance', 'Distribution'].includes(this.auth.user()?.role ?? ''));
+  /** the earlier warehouse sales-order flow, shown only when switched on in Settings */
+  protected legacy = computed(() => !!this.settings.value()?.salesOrdersEnabled);
 
   protected canWrite = computed(() => this.auth.can('distribution'));
   protected canOverride = computed(() => this.auth.can('finance'));

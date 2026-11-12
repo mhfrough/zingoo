@@ -236,7 +236,7 @@ export class ShipmentsPanel {
     {
       id: 'status', label: 'Status', kind: 'tag', tone: (s): Tone => (s.status === 'In transit' ? 'warning' : s.overdue ? 'danger' : 'success'),
       value: (s) => (s.status === 'In transit' ? 'In transit' : s.receivedContainers === s.containers ? 'Received' : `Received ${s.receivedContainers}/${s.containers}`),
-      sub: (s) => (s.sellBy ? `Sell by ${fmtDate(s.sellBy)}${s.daysLeft !== null && s.onHandContainers ? ` · ${s.daysLeft < 0 ? `${-s.daysLeft} days late` : `${s.daysLeft} days left`}` : ''}` : s.receiptNote),
+      sub: (s) => (s.soldContainers ? `${s.soldContainers} sold · ` : '') + (s.sellBy ? `Sell by ${fmtDate(s.sellBy)}${s.daysLeft !== null && s.onHandContainers ? ` · ${s.daysLeft < 0 ? `${-s.daysLeft} days late` : `${s.daysLeft} days left`}` : ''}` : s.receiptNote ?? ''),
     },
   ]);
 

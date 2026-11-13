@@ -12,6 +12,7 @@ import { AccountingDocument, AccountingSettlement, Approval, FinanceEntry, Fundi
 import { ManufacturerPayment, ProductionBatch } from '../manufacturing/manufacturing.entities';
 import { MfrPaymentRequest, MfrRequestPayment } from '../manufacturing/payment-requests.entities';
 import { ProductionShipment } from '../manufacturing/shipments.entities';
+import { DeliveryClaim } from '../manufacturing/delivery-claims.entities';
 import { DistributorInvoice, DistributorInvoicePayment } from '../manufacturing/dist-invoices.entities';
 import { Setting } from '../setup/setup.entities';
 import { SettingsService } from '../setup/setup.service';
@@ -161,6 +162,21 @@ export class PostingService implements OnModuleInit {
   }
 
   /**
+   * A delivery claim accepted with a credit: the faulty goods are no longer owed to the manufacturer and leave the
+   * distributor's stock value. Manufacturer Payable / Inventory at Distributor.
+   */
+  async syncDeliveryClaim(em: EntityManager, id: string) {
+    const c = await em.findOne(DeliveryClaim, { where: { id }, relations: ['shipment', 'product', 'manufacturer', 'distributor'] });
+    if (!c) return;
+    const rows = c.status === 'Accepted' && c.resolution === 'Credit'
+      ? this.pair(c.decidedDate!, 'Manufacturing', c.refNo,
+        `Delivery claim credit · ${c.product.sku} · ${c.shipment.refNo} (${c.manufacturer.name}, ${c.distributor.name})`,
+        ACC.MFR_PAYABLE, ACC.INVENTORY_DISTRIBUTOR, c.value)
+      : [];
+    await this.ledger.replace(em, 'DELIVERY_CLAIM', id, rows);
+  }
+
+  /**
    * Advances paid on an order are set against what the company owes for goods received on it:
    * Manufacturer Payable / Advance to Manufacturer, never more than either. Rewritten after every payment and receipt.
    */
@@ -173,7 +189,9 @@ export class PostingService implements OnModuleInit {
       `SELECT COALESCE(SUM("receivedContainers" * "bundlesPerContainer" * "packetsPerBundle" * rate), 0)::float8 AS value, MAX("receivedDate")::text AS last
          FROM production_shipments WHERE "orderId" = $1 AND status = 'Received'`, [orderId],
     );
-    const applied = round2(Math.min(Number(pays[0].paid), Number(got.value)));
+    // goods taken back by an accepted credit claim are no longer owed
+    const [cr] = await em.query(`SELECT COALESCE(SUM(value), 0)::float8 AS v FROM delivery_claims WHERE "orderId" = $1 AND status = 'Accepted' AND resolution = 'Credit'`, [orderId]);
+    const applied = round2(Math.max(0, Math.min(Number(pays[0].paid), Number(got.value) - Number(cr.v))));
     const date = [pays[0].last, got.last].filter(Boolean).sort().pop() as string | undefined;
     const ref = reqs[0]?.order?.refNo ?? '';
     await this.ledger.replace(em, 'MFR_ADV_APPLY', orderId,

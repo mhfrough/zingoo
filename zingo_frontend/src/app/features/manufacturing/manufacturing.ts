@@ -16,6 +16,7 @@ import { FactoryApi } from '../factory/factory.api';
 import { OrdersPanel } from '../factory/orders-panel';
 import { RequestsPanel } from '../factory/requests-panel';
 import { ShipmentsPanel } from '../factory/shipments-panel';
+import { DeliveryClaimsPanel } from '../factory/delivery-claims-panel';
 import { ProductsPanel } from '../products/products-panel';
 import { SettingsStore } from '../../core/settings.store';
 
@@ -25,7 +26,7 @@ const STATUS_TONE: Record<string, Tone> = { Released: 'success', Planned: 'warni
 @Component({
   selector: 'app-manufacturing',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [Btn, DataTable, Kpi, PageHeader, Tabs, TabPanel, BatchForm, ProductForm, PayManufacturerForm, OrdersPanel, RequestsPanel, ShipmentsPanel, ProductsPanel],
+  imports: [Btn, DataTable, Kpi, PageHeader, Tabs, TabPanel, BatchForm, ProductForm, PayManufacturerForm, OrdersPanel, RequestsPanel, ShipmentsPanel, DeliveryClaimsPanel, ProductsPanel],
   templateUrl: './manufacturing.html',
 })
 export class Manufacturing {

@@ -6,6 +6,7 @@ import { round2 } from '../common/numeric.transformer';
 import { nextRef } from '../common/ref';
 import { AttachmentsService } from '../attachments/attachments.service';
 import { PostingService } from '../ledger/posting.service';
+import { LINK, NotificationsService, TEAM } from '../notifications/notifications.service';
 import { Lookup } from '../setup/setup.entities';
 import { ClaimDecisionDto, ClaimDto, LogisticsDto, MarketApprovalDto } from './exports.dto';
 import { ExportClaim, ExportShipment, ProductMarketApproval } from './exports.entities';
@@ -25,6 +26,7 @@ export class ComplianceService {
     private readonly exports: ExportsService,
     private readonly posting: PostingService,
     private readonly files: AttachmentsService,
+    private readonly notes: NotificationsService,
   ) {}
 
   // ───────────── market approvals ─────────────
@@ -93,9 +95,15 @@ export class ComplianceService {
     if (x.status === 'Shipped' && (dto.batchRef !== undefined || dto.mfgDate !== undefined || dto.expiryDate !== undefined)) {
       throw new BadRequestException('The batch of a shipped container is part of its record and cannot change.');
     }
+    const moved = dto.shippingStatus && dto.shippingStatus !== x.shippingStatus;
     Object.assign(x, dto);
     await em.save(x);
     for (const d of x.documents ?? []) await this.files.attach(d.file.id, 'EXPORT', x.id);
+    if (moved && x.distributorId) {
+      await this.notes.send(em, null, { to: { distributorId: x.distributorId }, kind: 'export.status', tone: dto.shippingStatus === 'Arrived' || dto.shippingStatus === 'Delivered' ? 'success' : 'info',
+        refNo: x.refNo, link: LINK.portal('intl'), title: `Container ${x.refNo}: ${dto.shippingStatus}`,
+        body: [x.vessel && `Vessel ${x.vessel}`, x.eta && `ETA ${x.eta}`, x.dischargePort && `to ${x.dischargePort}`].filter(Boolean).join(' · ') || null });
+    }
     return this.exports.findOne(id);
   }
 
@@ -124,6 +132,14 @@ export class ComplianceService {
         raisedBy: user.name, status: 'Submitted',
       }));
       for (const p of row.photos) await this.files.attach(p.id, 'EXPORT_CLAIM', row.id, em);
+      const who = (await em.query(`SELECT name FROM distributors WHERE id = $1`, [x.distributorId]))[0]?.name ?? 'The buyer';
+      const what = `${dto.quantity} bundles · ${dto.kind} on ${x.refNo}`;
+      await this.notes.send(em, user as any,
+        { to: { staff: TEAM.exports }, kind: 'export-claim.filed', tone: 'danger', refNo: row.refNo, link: LINK.exports,
+          title: `${who} raised claim ${row.refNo}`, body: `${what} · ${row.description}` },
+        { to: { distributorId: x.distributorId }, kind: 'export-claim.filed', refNo: row.refNo, link: LINK.portal('intl'),
+          title: `Claim ${row.refNo} sent to Zen Foods`, body: what },
+      );
       return row;
     });
   }
@@ -140,7 +156,14 @@ export class ComplianceService {
       if (dto.decision === 'Reject') {
         if (!dto.note?.trim()) throw new BadRequestException('Say why the claim is rejected.');
         Object.assign(c, { status: 'Rejected', inspection: dto.inspection?.trim() || null, decidedBy: user.name, decidedAt: new Date(), decisionNote: dto.note.trim() });
-        return em.save(c);
+        const saved = await em.save(c);
+        await this.notes.send(em, user as any,
+          { to: { distributorId: c.distributorId }, kind: 'export-claim.decided', tone: 'danger', refNo: c.refNo, link: LINK.portal('intl'),
+            title: `Claim ${c.refNo} rejected`, body: `Reason: ${c.decisionNote}` },
+          { to: { staff: TEAM.exports }, kind: 'export-claim.decided', tone: 'danger', refNo: c.refNo, link: LINK.exports,
+            title: `Claim ${c.refNo} rejected`, body: `By ${user.name} · ${c.decisionNote}` },
+        );
+        return saved;
       }
       if (!dto.resolution) throw new BadRequestException('Choose a credit note or a replacement.');
       const x = await this.exports.findOne(c.shipmentId, em);
@@ -160,6 +183,13 @@ export class ComplianceService {
       });
       await em.save(c);
       await this.posting.syncExportClaim(em, c.id);
+      const outcome = credit > 0 ? `approved: credit note ${c.creditNoteRef} for ${x.currency} ${credit}` : `approved: ${String(dto.resolution).toLowerCase()}`;
+      await this.notes.send(em, user as any,
+        { to: { distributorId: c.distributorId }, kind: 'export-claim.decided', tone: 'success', refNo: c.refNo, link: LINK.portal('intl'),
+          title: `Claim ${c.refNo} ${outcome}`, body: c.decisionNote },
+        { to: { staff: TEAM.exports }, kind: 'export-claim.decided', tone: 'success', refNo: c.refNo, link: LINK.exports,
+          title: `Claim ${c.refNo} ${outcome}`, body: `By ${user.name}` },
+      );
       return c;
     });
   }

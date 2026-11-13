@@ -9,6 +9,7 @@ import { AuditLog } from '../portal/portal.entities';
 import { LookupsService } from '../setup/lookups.service';
 import { Setting } from '../setup/setup.entities';
 import { SettingsService } from '../setup/setup.service';
+import { LINK, NotificationsService, TEAM } from '../notifications/notifications.service';
 import { CreateCollectionDto, CreateOrderDto, UpdateOrderDto } from './distribution.dto';
 import { Collection, SalesOrder } from './distribution.entities';
 
@@ -34,6 +35,7 @@ export class OrdersService {
     private readonly posting: PostingService,
     private readonly settings: SettingsService,
     private readonly stock: StockService,
+    private readonly notes: NotificationsService,
   ) {}
 
   private async collectedMap(em: EntityManager): Promise<Record<string, number>> {
@@ -177,6 +179,12 @@ export class OrdersService {
       o.dueDate = datePlus(o.dispatchDate, o.paymentTermsDays);
       await em.save(o);
       await this.posting.syncOrder(em, id);
+      await this.notes.send(em, null,
+        { to: { distributorId: o.distributorId }, kind: 'order.dispatched', tone: 'warning', refNo: o.refNo, link: LINK.portal('cargo'),
+          title: `Order ${o.refNo} dispatched to you`, body: `${o.cartons} bundles of ${o.product.sku}${o.dueDate ? ` · invoice due ${o.dueDate}` : ''}. Confirm what arrives on Cargo & damage.` },
+        { to: { staff: TEAM.desk }, kind: 'order.dispatched', refNo: o.refNo, link: LINK.distribution('orders'),
+          title: `Order ${o.refNo} dispatched to ${o.distributor.name}`, body: `${o.cartons} bundles of ${o.product.sku}` },
+      );
       return this.findOne(id, em);
     });
   }

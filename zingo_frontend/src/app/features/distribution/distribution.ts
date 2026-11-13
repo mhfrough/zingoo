@@ -4,6 +4,7 @@ import { Router, RouterLink } from '@angular/router';
 import { AuthService } from '../../core/auth.service';
 import { FactoryApi } from '../factory/factory.api';
 import { ShipmentsPanel } from '../factory/shipments-panel';
+import { DeliveryClaimsPanel } from '../factory/delivery-claims-panel';
 import { InvoicesPanel } from '../factory/invoices-panel';
 import { TrailPanel } from '../factory/trail-panel';
 import { errorText } from '../../shared/errors';
@@ -28,7 +29,7 @@ interface DistributorRow {
 @Component({
   selector: 'app-distribution',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [RouterLink, Btn, DataTable, Kpi, PageHeader, Tabs, TabPanel, OrderForm, CollectionForm, DistributorForm, CreditOverrideForm, ShipmentsPanel, InvoicesPanel, TrailPanel],
+  imports: [RouterLink, Btn, DataTable, Kpi, PageHeader, Tabs, TabPanel, OrderForm, CollectionForm, DistributorForm, CreditOverrideForm, ShipmentsPanel, DeliveryClaimsPanel, InvoicesPanel, TrailPanel],
   templateUrl: './distribution.html',
 })
 export class Distribution {
@@ -41,7 +42,9 @@ export class Distribution {
   /** ?new=order opens the order form straight away (used by the Overview quick-add button) */
   readonly new = input<string>();
 
-  private tick = signal(0);
+  protected tick = signal(0);
+  /** Admin / Distribution may report faulty goods for a distributor */
+  protected canRaiseClaim = computed(() => ['Admin', 'Distribution'].includes(this.auth.user()?.role ?? ''));
   protected orders = rxResource({ params: () => this.tick(), stream: () => this.api.orders() });
   protected distributors = rxResource({ params: () => this.tick(), stream: () => this.api.distributors() });
   protected collections = rxResource({ params: () => this.tick(), stream: () => this.api.collections() });

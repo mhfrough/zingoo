@@ -7,10 +7,12 @@ import { nextRef } from '../common/ref';
 import { PostingService } from '../ledger/posting.service';
 import { LookupsService } from '../setup/lookups.service';
 import { SettingsService } from '../setup/setup.service';
+import { Actor, LINK, NotificationsService, TEAM } from '../notifications/notifications.service';
 import { CreateDistInvoiceDto, DistInvoicePayDto } from './dist-invoices.dto';
 import { DistributorInvoice, DistributorInvoiceLine, DistributorInvoicePayment } from './dist-invoices.entities';
 import { ShipmentUser } from './shipments.service';
 import { ProductionShipment } from './shipments.entities';
+import { creditsByShipment } from './delivery-claims.service';
 
 const today = () => new Date().toISOString().slice(0, 10);
 const addDays = (iso: string, days: number) => {
@@ -32,7 +34,16 @@ export class DistInvoicesService {
     private readonly posting: PostingService,
     private readonly settings: SettingsService,
     private readonly lookups: LookupsService,
+    private readonly notes: NotificationsService,
   ) {}
+
+  /** tells the distributor and the Zen Foods desk about an invoice step */
+  private async tell(em: EntityManager, actor: Actor | null, inv: DistributorInvoice, kind: string, tone: 'info' | 'success' | 'warning' | 'danger', mine: string, staff: string, body: string | null) {
+    await this.notes.send(em, actor,
+      { to: { distributorId: inv.distributorId }, kind, tone, refNo: inv.refNo, link: LINK.portal('stock'), title: mine, body },
+      { to: { staff: TEAM.desk }, kind, tone, refNo: inv.refNo, link: LINK.distribution('sales'), title: staff, body },
+    );
+  }
 
   /** a distributor sees its own invoices, staff everything (or one distributor's) */
   async list(user: ShipmentUser, distributorId?: string) {
@@ -56,6 +67,13 @@ export class DistInvoicesService {
       if (new Set(ids).size !== ids.length) throw new BadRequestException('Put each delivery on one line only.');
       const lots = await em.find(ProductionShipment, { where: { id: In(ids) } });
       const sold = await this.soldMap(em, ids);
+      // an accepted credit claim lowers the cost of what is still in stock: spread over the packets not yet sold
+      const credits = await creditsByShipment(em, ids);
+      const usedRows: { shipmentId: string; v: number }[] = await em.query(
+        `SELECT l."shipmentId", SUM(l.packets * (s.rate - l."costRate"))::float8 AS v FROM distributor_invoice_lines l
+           JOIN distributor_invoices i ON i.id = l."invoiceId" JOIN production_shipments s ON s.id = l."shipmentId"
+          WHERE i.status <> 'Rejected' AND l."shipmentId" = ANY($1) GROUP BY l."shipmentId"`, [ids]);
+      const used = Object.fromEntries(usedRows.map((r) => [r.shipmentId, Number(r.v)]));
       const lines: Partial<DistributorInvoiceLine>[] = [];
       for (const l of dto.lines) {
         const lot = lots.find((x) => x.id === l.shipmentId);
@@ -66,9 +84,12 @@ export class DistInvoicesService {
         if (l.containers > left) throw new BadRequestException(`Only ${left} container${left === 1 ? '' : 's'} of ${lot.refNo} ${left === 1 ? 'is' : 'are'} still in stock.`);
         const packets = l.containers * lot.bundlesPerContainer * lot.packetsPerBundle;
         const rate = await this.saleRate(em, distributorId, lot.productId);
+        const creditLeft = Math.max(0, (credits[lot.id] ?? 0) - (used[lot.id] ?? 0));
+        const leftPackets = left * lot.bundlesPerContainer * lot.packetsPerBundle;
+        const costRate = creditLeft > 0 && leftPackets > 0 ? Math.max(0, Number(lot.rate) - creditLeft / leftPackets) : Number(lot.rate);
         lines.push({
           shipmentId: lot.id, productId: lot.productId, containers: l.containers, packets, rate,
-          costRate: Number(lot.rate), amount: round2(packets * rate),
+          costRate: Math.round(costRate * 10000) / 10000, amount: round2(packets * rate),
         });
       }
       const amount = round2(lines.reduce((n, l) => n + Number(l.amount), 0));
@@ -80,6 +101,10 @@ export class DistInvoicesService {
         amount, cost, dueDate: d.paymentDays === 0 ? null : addDays(dto.date, d.paymentDays ?? 30), status: 'Submitted', submittedBy: user.name,
         lines: lines as DistributorInvoiceLine[],
       }));
+      const pk = `PKR ${amount.toLocaleString('en-US')}`;
+      const boxes = lines.reduce((n, l) => n + (l.containers ?? 0), 0);
+      await this.tell(em, user, inv, 'sales-invoice.filed', 'warning', `Sales invoice ${refNo} sent to Zen Foods`,
+        `${d.name} reports selling ${boxes} container${boxes === 1 ? '' : 's'}: invoice ${refNo} (${pk}) to verify`, `${pk}${dto.invoiceNo ? ` · their no. ${dto.invoiceNo}` : ''}`);
       return this.one(em, inv.id);
     });
   }
@@ -93,23 +118,27 @@ export class DistInvoicesService {
       inv.verifiedBy = user.name;
       await em.save(inv);
       await this.posting.syncDistInvoice(em, id);
+      await this.tell(em, user, inv, 'sales-invoice.verified', 'success', `Sales invoice ${inv.refNo} verified`, `Sales invoice ${inv.refNo} verified`,
+        `PKR ${Number(inv.amount).toLocaleString('en-US')}${inv.dueDate ? ` · due ${inv.dueDate}` : ''}`);
       return this.one(em, id);
     });
   }
 
   /** the company refuses it; its containers count as stock with the distributor again */
-  async reject(id: string, reason: string) {
+  async reject(id: string, reason: string, user?: Actor) {
     return this.db.transaction(async (em) => {
       const inv = await this.load(em, id);
       if (inv.status !== 'Submitted') throw new BadRequestException(`${inv.refNo} is already ${inv.status.toLowerCase()}.`);
       inv.status = 'Rejected';
       inv.reason = reason.trim();
       await em.save(inv);
+      await this.tell(em, user ?? null, inv, 'sales-invoice.rejected', 'danger', `Sales invoice ${inv.refNo} rejected`, `Sales invoice ${inv.refNo} rejected`,
+        `Reason: ${inv.reason}. Its containers count as your stock again.`);
       return this.one(em, id);
     });
   }
 
-  async pay(id: string, dto: DistInvoicePayDto) {
+  async pay(id: string, dto: DistInvoicePayDto, user?: Actor) {
     return this.db.transaction(async (em) => {
       const inv = await this.load(em, id);
       if (inv.status !== 'Verified') throw new BadRequestException(`Verify ${inv.refNo} before recording a payment.`);
@@ -127,6 +156,9 @@ export class DistInvoicesService {
         reference: dto.reference?.trim() || null, note: dto.note?.trim() || null,
       }));
       await this.posting.syncDistInvoicePayment(em, p.id);
+      const left = round2(shaped.due - dto.amount);
+      await this.tell(em, user ?? null, inv, 'sales-invoice.paid', 'success', `Payment of PKR ${round2(dto.amount).toLocaleString('en-US')} recorded on ${inv.refNo}`,
+        `PKR ${round2(dto.amount).toLocaleString('en-US')} received on ${inv.refNo}`, `${refNo} · ${dto.method}${left > 0 ? ` · PKR ${left.toLocaleString('en-US')} still due` : ' · paid in full'}`);
       return this.one(em, id);
     });
   }

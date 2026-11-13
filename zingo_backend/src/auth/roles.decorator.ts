@@ -13,6 +13,11 @@ export const Read = (...pages: string[]) => Roles(...readRoles(...pages));
 /** Roles allowed to change data in this group. */
 export const Write = (group: WriteGroup) => Roles(...WRITE_ROLES[group]);
 
+export const OWN_STATE_KEY = 'ownState';
+
+/** The call only changes the caller's own state (marking notices read): open on hold and to every portal role. */
+export const OwnState = () => SetMetadata(OWN_STATE_KEY, true);
+
 export const PORTAL_PERMIT_KEY = 'portalPermit';
 
 /** what a distributor login may do in the portal, by its portal role (spec section 7) */

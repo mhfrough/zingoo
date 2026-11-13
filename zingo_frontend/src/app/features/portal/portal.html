@@ -116,6 +116,8 @@
           [distributorId]="isDistributor() ? null : (dist() ?? null)" [loading]="salesInvoices.isLoading()"
           [error]="salesInvoices.error() ? 'The server did not answer.' : null"
           [canReport]="canReceiveDelivery()" [canManage]="canManageInvoices()" (changed)="reload()" />
+        <app-delivery-claims-panel mode="distributor" [shipments]="deliveries.value() ?? []" [distributorId]="isDistributor() ? null : (dist() ?? null)"
+          [tick]="tick()" [canRaise]="canRaiseClaim()" (changed)="reload()" />
         <app-trail-panel [rows]="trail.value() ?? []" [loading]="trail.isLoading()" [showDistributor]="false" />
       </div>
     </ng-template>

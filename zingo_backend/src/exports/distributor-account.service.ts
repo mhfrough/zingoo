@@ -5,6 +5,7 @@ import { Distributor } from '../catalog/catalog.entities';
 import { round2 } from '../common/numeric.transformer';
 import { nextRef } from '../common/ref';
 import { PostingService } from '../ledger/posting.service';
+import { LINK, NotificationsService, TEAM } from '../notifications/notifications.service';
 import { LookupsService } from '../setup/lookups.service';
 import { Currency } from '../setup/setup.entities';
 import { SettingsService } from '../setup/setup.service';
@@ -29,6 +30,7 @@ export class DistributorAccountService {
     private readonly lookups: LookupsService,
     private readonly settings: SettingsService,
     private readonly files: AttachmentsService,
+    private readonly notes: NotificationsService,
   ) {}
 
   async account(id: string) {
@@ -164,6 +166,12 @@ export class DistributorAccountService {
         Object.assign(a, { status: 'Recorded', remittanceId: r.id, reviewNote: `Recorded as ${r.refNo} by ${user.name}` });
         await em.save(a);
       }
+      await this.notes.send(em, user as any,
+        { to: { distributorId: d.id }, kind: 'remittance.recorded', tone: 'success', refNo: r.refNo, link: LINK.portal('intl'),
+          title: `Payment received: ${currency} ${dto.amount}`, body: `${r.refNo}${dto.adviceId ? ' · your advice was recorded' : ''}${dto.bankRef ? ` · ref ${dto.bankRef}` : ''}` },
+        { to: { staff: TEAM.exports }, kind: 'remittance.recorded', tone: 'success', refNo: r.refNo, link: LINK.exports,
+          title: `${d.name}: ${currency} ${dto.amount} received (${r.refNo})`, body: `By ${user.name}` },
+      );
       return r;
     }).then(() => this.account(id));
   }
@@ -214,6 +222,12 @@ export class DistributorAccountService {
         proof: dto.proof, note: dto.note?.trim() || null, sentBy: user.name, status: 'Submitted',
       }));
       await this.files.attach(dto.proof.id, 'REMITTANCE_ADVICE', row.id, em);
+      await this.notes.send(em, user as any,
+        { to: { staff: TEAM.exports }, kind: 'remittance-advice.filed', tone: 'warning', refNo: row.refNo, link: LINK.exports,
+          title: `${d.name} reports paying ${row.currency} ${dto.amount}`, body: `Advice ${row.refNo}${row.bankRef ? ` · ref ${row.bankRef}` : ''}. Record the remittance or reject it.` },
+        { to: { distributorId: d.id }, kind: 'remittance-advice.filed', refNo: row.refNo, link: LINK.portal('intl'),
+          title: `Payment advice ${row.refNo} sent`, body: `${row.currency} ${dto.amount}; it counts once Zen Foods records it.` },
+      );
       return row;
     });
   }
@@ -224,7 +238,14 @@ export class DistributorAccountService {
     if (!a) throw new NotFoundException('Remittance advice not found');
     if (a.status !== 'Submitted') throw new BadRequestException(`Advice ${a.refNo} is already ${a.status.toLowerCase()}.`);
     Object.assign(a, { status: 'Rejected', reviewNote: `${note.trim()} (${user.name})` });
-    return em.save(a);
+    const saved = await em.save(a);
+    await this.notes.send(em, user as any,
+      { to: { distributorId: a.distributorId }, kind: 'remittance-advice.rejected', tone: 'danger', refNo: a.refNo, link: LINK.portal('intl'),
+        title: `Payment advice ${a.refNo} rejected`, body: `${a.currency} ${Number(a.amount)} · Reason: ${note.trim()}` },
+      { to: { staff: TEAM.exports }, kind: 'remittance-advice.rejected', tone: 'danger', refNo: a.refNo, link: LINK.exports,
+        title: `Payment advice ${a.refNo} rejected`, body: `By ${user.name} · ${note.trim()}` },
+    );
+    return saved;
   }
 
   /**

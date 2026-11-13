@@ -53,6 +53,33 @@ export interface ProductionOrder {
 }
 
 /** Containers sent against an order, and what arrived. */
+/** faulty goods in a manufacturer's delivery: the distributor raises it, the manufacturer decides */
+export interface DeliveryClaim {
+  id: string;
+  refNo: string;
+  date: string;
+  shipmentId: string;
+  shipmentRef: string | null;
+  orderId: string;
+  sku: string | null;
+  productName: string | null;
+  manufacturerId: string;
+  manufacturer: string | null;
+  distributorId: string;
+  distributor: string | null;
+  kind: 'Damaged' | 'Missing' | 'Quality';
+  bundles: number;
+  value: number;
+  note: string;
+  hasEvidence: boolean;
+  raisedBy: string;
+  status: 'Pending' | 'Accepted' | 'Rejected';
+  resolution: 'Credit' | 'Replace' | null;
+  decisionNote: string | null;
+  decidedBy: string | null;
+  decidedDate: string | null;
+}
+
 export interface Shipment {
   id: string;
   refNo: string;
@@ -306,6 +333,11 @@ export class FactoryApi {
   stock = (distributorId?: string) => this.api.get<DistributorStock>('production-shipments/stock', { distributorId });
   ship = (body: unknown) => this.api.post<Shipment>('production-shipments', body);
   receive = (id: string, body: unknown) => this.api.post<Shipment>(`production-shipments/${id}/receive`, body);
+
+  deliveryClaims = (filter: { distributorId?: string; manufacturerId?: string } = {}) => this.api.get<DeliveryClaim[]>('delivery-claims', filter);
+  raiseClaim = (body: unknown) => this.api.post<DeliveryClaim>('delivery-claims', body);
+  decideClaim = (id: string, body: unknown) => this.api.post<DeliveryClaim>(`delivery-claims/${id}/decide`, body);
+  claimEvidence = (id: string) => this.api.get<{ name: string; mime: string; data: string }>(`delivery-claims/${id}/evidence`);
 
   trail = (distributorId?: string) => this.api.get<TrailRow[]>('production-shipments/trail', { distributorId });
   statement = (manufacturerId?: string) =>

@@ -1,6 +1,7 @@
 import { ChangeDetectionStrategy, Component, computed, effect, inject, signal } from '@angular/core';
 import { FactoryApi } from '../factory/factory.api';
 import { ShipmentsPanel } from '../factory/shipments-panel';
+import { DeliveryClaimsPanel } from '../factory/delivery-claims-panel';
 import { InvoicesPanel } from '../factory/invoices-panel';
 import { TrailPanel } from '../factory/trail-panel';
 import { rxResource } from '@angular/core/rxjs-interop';
@@ -40,7 +41,7 @@ const tone = (s: string): Tone => STATUS_TONE[s] ?? 'neutral';
   selector: 'app-portal',
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [
-    Btn, DataTable, Kpi, PageHeader, Tag, Tabs, TabPanel, RequestForm, ReceiptForm, AdviceForm, AcceptForm, ReasonForm, ShipmentsPanel, InvoicesPanel, TrailPanel, IntlPortal,
+    Btn, DataTable, Kpi, PageHeader, Tag, Tabs, TabPanel, RequestForm, ReceiptForm, AdviceForm, AcceptForm, ReasonForm, ShipmentsPanel, DeliveryClaimsPanel, InvoicesPanel, TrailPanel, IntlPortal,
   ],
   templateUrl: './portal.html',
   styleUrl: './portal.css',
@@ -56,7 +57,7 @@ export class Portal {
   protected canManage = computed(() => ['Admin', 'Finance', 'Distribution'].includes(this.auth.user()?.role ?? ''));
   protected canFinance = computed(() => ['Admin', 'Finance'].includes(this.auth.user()?.role ?? ''));
 
-  private tick = signal(0);
+  protected tick = signal(0);
   /** staff: which distributor to look at */
   protected selected = signal<string | undefined>(undefined);
   protected distributors = rxResource({ params: () => (this.isDistributor() ? undefined : true), stream: () => this.ops.distributors() });
@@ -84,6 +85,12 @@ export class Portal {
   protected toConfirm = computed(() => (this.deliveries.value() ?? []).filter((s) => s.status === 'In transit').length);
   /** the distributor itself, or Admin / Distribution for it */
   protected canReceiveDelivery = computed(() => this.isDistributor() || ['Admin', 'Distribution'].includes(this.auth.user()?.role ?? ''));
+  /** faulty goods claims: Owner, Sales or Warehouse logins of the distributor, or Admin / Distribution for it */
+  protected canRaiseClaim = computed(() => {
+    const u = this.auth.user() as { role?: string; portalRole?: string } | null;
+    if (u?.role === 'Distributor') return ['Owner', 'Sales', 'Warehouse'].includes(u.portalRole ?? 'Owner');
+    return ['Admin', 'Distribution'].includes(u?.role ?? '');
+  });
   protected desk = rxResource({ params: () => (this.canManage() ? this.tick() : undefined), stream: () => this.api.desk() });
 
   protected tab = signal('dashboard');

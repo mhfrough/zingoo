@@ -9,6 +9,7 @@ import { Collection, SalesOrder } from '../distribution/distribution.entities';
 import { PostingService } from '../ledger/posting.service';
 import { LookupsService } from '../setup/lookups.service';
 import { SettingsService } from '../setup/setup.service';
+import { LINK, NotificationsService, TEAM, plural } from '../notifications/notifications.service';
 import {
   AcceptRequestDto, CreateAdviceDto, CreateReceiptDto, CreateRequestDto, ProofDto,
 } from './portal.dto';
@@ -43,7 +44,10 @@ export class PortalService {
     private readonly posting: PostingService,
     private readonly settings: SettingsService,
     private readonly lookups: LookupsService,
+    private readonly notes: NotificationsService,
   ) {}
+
+  private distName = async (em: EntityManager, id: string) => (await em.findOne(Distributor, { where: { id } }))?.name ?? 'A distributor';
 
   // ───────────── who is looking ─────────────
 
@@ -269,6 +273,13 @@ export class PortalService {
       const refNo = await nextRef(em, PortalRequest, 'REQ', 3);
       const r = await em.save(em.create(PortalRequest, { ...dto, distributorId, refNo, status: 'Requested' }));
       await this.audit(em, user, 'Request submitted', refNo, `${product.sku} / ${dto.cartons} bundles`);
+      const who = await this.distName(em, distributorId);
+      await this.notes.send(em, user,
+        { to: { staff: TEAM.desk }, kind: 'request.filed', tone: 'warning', refNo, link: LINK.desk,
+          title: `${who} asks for ${plural(dto.cartons, 'bundle')} of ${product.sku}`, body: `Stock request ${refNo}${dto.poRef ? ` · PO ${dto.poRef}` : ''}. Accept it into an order or reject it.` },
+        { to: { distributorId }, kind: 'request.filed', refNo, link: LINK.portal('orders'),
+          title: `Request ${refNo} sent to Zen Foods`, body: `${plural(dto.cartons, 'bundle')} of ${product.sku}. You will be told when it is accepted or rejected.` },
+      );
       return r;
     });
   }
@@ -292,18 +303,30 @@ export class PortalService {
       r.orderId = order.id;
       await em.save(r);
       await this.audit(em, user, 'Request accepted', r.refNo, `Created ${refNo}`);
+      await this.notes.send(em, user,
+        { to: { distributorId: r.distributorId }, kind: 'request.accepted', tone: 'success', refNo: r.refNo, link: LINK.portal('orders'),
+          title: `Request ${r.refNo} accepted: order ${refNo}`, body: `${plural(r.cartons, 'bundle')} of ${r.product.sku} at PKR ${rate} a pack.` },
+        { to: { staff: TEAM.desk }, kind: 'request.accepted', tone: 'success', refNo: r.refNo, link: LINK.desk,
+          title: `Request ${r.refNo} (${r.distributor.name}) accepted into ${refNo}`, body: `By ${user.name}` },
+      );
       return { request: r, order };
     });
   }
 
   rejectRequest(id: string, note: string, user: PortalUser) {
     return this.db.transaction(async (em) => {
-      const r = await em.findOne(PortalRequest, { where: { id } });
+      const r = await em.findOne(PortalRequest, { where: { id }, relations: ['product', 'distributor'] });
       if (!r || r.status !== 'Requested') throw new BadRequestException('This request is no longer waiting.');
       r.status = 'Rejected';
       r.reviewNote = note;
       await em.save(r);
       await this.audit(em, user, 'Request rejected', r.refNo, note);
+      await this.notes.send(em, user,
+        { to: { distributorId: r.distributorId }, kind: 'request.rejected', tone: 'danger', refNo: r.refNo, link: LINK.portal('orders'),
+          title: `Request ${r.refNo} rejected`, body: `${plural(r.cartons, 'bundle')} of ${r.product.sku} · Reason: ${note}` },
+        { to: { staff: TEAM.desk }, kind: 'request.rejected', tone: 'danger', refNo: r.refNo, link: LINK.desk,
+          title: `Request ${r.refNo} (${r.distributor.name}) rejected`, body: `By ${user.name} · ${note}` },
+      );
       return r;
     });
   }
@@ -330,6 +353,18 @@ export class PortalService {
         status: discrepancy ? 'Disputed' : 'Accepted',
       }));
       await this.audit(em, user, 'Delivery acknowledged', o.refNo, discrepancy ? 'Damage or shortage claim pending' : 'Delivered without reported shortage');
+      if (discrepancy) {
+        const what = `${dto.damagedCartons} damaged, ${dto.missingCartons} missing of ${o.cartons} bundles on ${o.refNo}`;
+        await this.notes.send(em, user,
+          { to: { staff: TEAM.desk }, kind: 'claim.filed', tone: 'danger', refNo, link: LINK.desk,
+            title: `${o.distributor.name} claims damaged or missing goods on ${o.refNo}`, body: [what, dto.reason].filter(Boolean).join(' · ') },
+          { to: { distributorId }, kind: 'claim.filed', refNo, link: LINK.portal('cargo'),
+            title: `Claim ${refNo} sent to Zen Foods`, body: what },
+        );
+      } else {
+        await this.notes.send(em, user, { to: { staff: TEAM.desk }, kind: 'delivery.received', tone: 'success', refNo, link: LINK.desk,
+          title: `${o.distributor.name} received ${o.refNo} complete` });
+      }
       return this.slimReceipt({ ...r, order: o } as CargoReceipt);
     });
   }
@@ -352,6 +387,12 @@ export class PortalService {
       await em.save(r);
       await this.posting.syncCreditNote(em, note.id);
       await this.audit(em, user, 'Credit note approved', refNo, `${r.order.refNo} · PKR ${amount}`);
+      await this.notes.send(em, user,
+        { to: { distributorId: r.order.distributorId }, kind: 'claim.decided', tone: 'success', refNo: r.refNo, link: LINK.portal('cargo'),
+          title: `Claim ${r.refNo} approved: credit note ${refNo}`, body: `PKR ${amount} credited on ${r.order.refNo}${note.refund > 0 ? ` (PKR ${note.refund} owed back to you)` : ''}.` },
+        { to: { staff: TEAM.desk }, kind: 'claim.decided', tone: 'success', refNo: r.refNo, link: LINK.desk,
+          title: `Claim ${r.refNo} approved (${refNo}, PKR ${amount})`, body: `By ${user.name}` },
+      );
       return note;
     });
   }
@@ -364,6 +405,12 @@ export class PortalService {
       r.reviewNote = noteText;
       await em.save(r);
       await this.audit(em, user, 'Claim rejected', r.refNo, noteText);
+      await this.notes.send(em, user,
+        { to: { distributorId: r.order.distributorId }, kind: 'claim.decided', tone: 'danger', refNo: r.refNo, link: LINK.portal('cargo'),
+          title: `Claim ${r.refNo} rejected`, body: `On ${r.order.refNo} · Reason: ${noteText}` },
+        { to: { staff: TEAM.desk }, kind: 'claim.decided', tone: 'danger', refNo: r.refNo, link: LINK.desk,
+          title: `Claim ${r.refNo} rejected`, body: `By ${user.name} · ${noteText}` },
+      );
       return { id: r.id, status: r.status };
     });
   }
@@ -395,6 +442,12 @@ export class PortalService {
         note: dto.note ?? null, status: 'Submitted', isAdvance: order.status !== 'Dispatched',
       }));
       await this.audit(em, user, 'Payment advice sent', refNo, `${order.refNo} / PKR ${dto.amount}`);
+      await this.notes.send(em, user,
+        { to: { staff: TEAM.finance }, kind: 'advice.filed', tone: 'warning', refNo, link: LINK.desk,
+          title: `${await this.distName(em, distributorId)} reports paying PKR ${dto.amount} on ${order.refNo}`, body: `${a.method}${dto.bankRef ? ` · ref ${dto.bankRef}` : ''}. Verify it before it counts as cash.` },
+        { to: { distributorId }, kind: 'advice.filed', refNo, link: LINK.portal('payments'),
+          title: `Payment advice ${refNo} sent`, body: `PKR ${dto.amount} on ${order.refNo}; it counts once Zen Foods confirms it.` },
+      );
       const { proofData, ...rest } = a;
       return { ...rest, hasProof: !!proofData };
     });
@@ -414,6 +467,12 @@ export class PortalService {
       a.collectionId = c.id;
       await em.save(a);
       await this.audit(em, user, 'Payment confirmed', a.refNo, `Receipt ${c.refNo}${c.isAdvance ? ' (advance held until dispatch)' : ''}`);
+      await this.notes.send(em, user,
+        { to: { distributorId: a.distributorId }, kind: 'advice.confirmed', tone: 'success', refNo: a.refNo, link: LINK.portal('payments'),
+          title: `Payment of PKR ${Number(a.amount)} confirmed`, body: `Advice ${a.refNo} · receipt ${c.refNo}` },
+        { to: { staff: TEAM.desk }, kind: 'advice.confirmed', tone: 'success', refNo: a.refNo, link: LINK.desk,
+          title: `Payment advice ${a.refNo} confirmed (PKR ${Number(a.amount)})`, body: `By ${user.name} · receipt ${c.refNo}` },
+      );
       return { id: a.id, status: a.status, collection: c };
     });
   }
@@ -426,6 +485,12 @@ export class PortalService {
       a.reviewNote = note;
       await em.save(a);
       await this.audit(em, user, 'Payment rejected', a.refNo, note);
+      await this.notes.send(em, user,
+        { to: { distributorId: a.distributorId }, kind: 'advice.rejected', tone: 'danger', refNo: a.refNo, link: LINK.portal('payments'),
+          title: `Payment advice ${a.refNo} rejected`, body: `PKR ${Number(a.amount)} · Reason: ${note}` },
+        { to: { staff: TEAM.desk }, kind: 'advice.rejected', tone: 'danger', refNo: a.refNo, link: LINK.desk,
+          title: `Payment advice ${a.refNo} rejected`, body: `By ${user.name} · ${note}` },
+      );
       return { id: a.id, status: a.status };
     });
   }

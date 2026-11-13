@@ -7,6 +7,7 @@ import { round2 } from '../common/numeric.transformer';
 import { nextRef } from '../common/ref';
 import { PostingService } from '../ledger/posting.service';
 import { SettingsService } from '../setup/setup.service';
+import { LINK, NotificationsService, TEAM } from '../notifications/notifications.service';
 import { ProductionOrder, ProductionOrderEvent } from './production-orders.entities';
 import { ReceiveDto, ShipDto } from './shipments.dto';
 import { ProductionShipment } from './shipments.entities';
@@ -41,6 +42,7 @@ export class ShipmentsService {
     @InjectDataSource() private readonly db: DataSource,
     private readonly posting: PostingService,
     private readonly settings: SettingsService,
+    private readonly notes: NotificationsService,
   ) {}
 
   // ───────────── reads ─────────────
@@ -139,7 +141,19 @@ export class ShipmentsService {
       }));
       await this.event(em, o.id, user, `Shipped ${dto.containers} container${dto.containers > 1 ? 's' : ''} (${refNo})`,
         [dto.vehicle && `Vehicle ${dto.vehicle}`, dto.waybill && `Waybill ${dto.waybill}`].filter(Boolean).join(' · ') || null);
-      return this.one(em, row.id);
+      const full = await this.one(em, row.id);
+      const what = `${dto.containers} container${dto.containers > 1 ? 's' : ''} of ${full.product.sku} (${o.refNo})`;
+      const via = [dto.vehicle && `vehicle ${dto.vehicle}`, dto.waybill && `waybill ${dto.waybill}`].filter(Boolean).join(' · ');
+      const to = o.destination === 'Warehouse' ? 'the Zen Foods warehouse' : full.distributor?.name ?? 'the distributor';
+      await this.notes.send(em, user,
+        { to: { distributorId: o.destination === 'Distributor' ? o.distributorId : null }, kind: 'shipment.dispatched', tone: 'warning', refNo, link: LINK.portal('stock'),
+          title: `${full.manufacturer.name} dispatched ${what} to you`, body: [via, 'Confirm what arrives on Deliveries & stock.'].filter(Boolean).join(' · ') },
+        { to: { staff: [...TEAM.manufacturing, 'Distribution'] }, kind: 'shipment.dispatched', refNo, link: LINK.manufacturing('orders'),
+          title: `${full.manufacturer.name} dispatched ${what} to ${to}`, body: via || null },
+        { to: { manufacturerId: o.manufacturerId }, kind: 'shipment.dispatched', refNo, link: LINK.factory,
+          title: `Shipment ${refNo} on its way to ${to}`, body: what },
+      );
+      return full;
     });
   }
 
@@ -177,7 +191,19 @@ export class ShipmentsService {
       await this.posting.syncProductionShipment(em, s.id);
       await this.posting.syncOrderAdvance(em, s.orderId);
       await this.event(em, s.orderId, user, `Received ${dto.receivedContainers} of ${s.containers} (${s.refNo})`, s.receiptNote);
-      return this.one(em, id);
+      const full = await this.one(em, id);
+      const short = dto.receivedContainers < s.containers;
+      const who = s.destination === 'Warehouse' ? 'The warehouse' : full.distributor?.name ?? 'The distributor';
+      const title = `${who} received ${dto.receivedContainers} of ${s.containers} container${s.containers > 1 ? 's' : ''} on ${s.refNo}`;
+      const body = [`${full.product.sku} · order ${full.order.refNo}`, s.receiptNote].filter(Boolean).join(' · ');
+      const tone = short ? 'danger' as const : 'success' as const;
+      await this.notes.send(em, user,
+        { to: { manufacturerId: s.manufacturerId }, kind: 'shipment.received', tone, refNo: s.refNo, link: LINK.factory, title, body },
+        { to: { staff: [...TEAM.manufacturing, 'Distribution'] }, kind: 'shipment.received', tone, refNo: s.refNo, link: LINK.manufacturing('orders'), title, body },
+        { to: { distributorId: s.destination === 'Distributor' ? s.distributorId : null }, kind: 'shipment.received', tone, refNo: s.refNo, link: LINK.portal('stock'),
+          title: `Receipt of ${s.refNo} recorded`, body: short ? `${body} · Report faulty bundles as a delivery claim.` : body },
+      );
+      return full;
     });
   }
 

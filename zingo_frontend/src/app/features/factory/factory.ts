@@ -10,6 +10,7 @@ import { FactoryApi } from './factory.api';
 import { OrdersPanel } from './orders-panel';
 import { RequestsPanel } from './requests-panel';
 import { ShipmentsPanel } from './shipments-panel';
+import { DeliveryClaimsPanel } from './delivery-claims-panel';
 import { MfrStatement } from './trail-panel';
 
 /**
@@ -20,7 +21,7 @@ import { MfrStatement } from './trail-panel';
 @Component({
   selector: 'app-factory',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [FormsModule, Field, Kpi, PageHeader, Select, OrdersPanel, RequestsPanel, ShipmentsPanel, MfrStatement],
+  imports: [FormsModule, Field, Kpi, PageHeader, Select, OrdersPanel, RequestsPanel, ShipmentsPanel, DeliveryClaimsPanel, MfrStatement],
   styles: `
     .terms {
       display: grid;
@@ -91,6 +92,9 @@ import { MfrStatement } from './trail-panel';
         [loading]="shipments.isLoading()" [error]="shipments.error() ? 'The server did not answer.' : null"
         [canShip]="canAnswer()" (changed)="reload()" />
 
+      <app-delivery-claims-panel mode="factory" [manufacturerId]="isManufacturer() ? null : (profile.value()?.manufacturer?.id ?? null)"
+        [tick]="tick()" [canDecide]="canAnswer()" (changed)="reload()" />
+
       <app-requests-panel mode="factory" [requests]="requests.value() ?? []" [position]="position.value() ?? null"
         [loading]="requests.isLoading()" [error]="requests.error() ? 'The server did not answer.' : null"
         [manufacturer]="profile.value()?.manufacturer ?? null" [canRequest]="canAnswer()" (changed)="reload()" />
@@ -108,7 +112,7 @@ export class Factory {
   /** the manufacturer itself, or staff who may write production data */
   protected canAnswer = computed(() => this.isManufacturer() || this.auth.can('manufacturing'));
 
-  private tick = signal(0);
+  protected tick = signal(0);
   /** staff: the manufacturer picked in the selector (empty = the first one) */
   protected picked = signal<string | null>(null);
 

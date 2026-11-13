@@ -9,6 +9,7 @@ import { Signer, canSign } from '../finance/finance.service';
 import { PostingService } from '../ledger/posting.service';
 import { LookupsService } from '../setup/lookups.service';
 import { SettingsService } from '../setup/setup.service';
+import { Actor, LINK, NotificationsService, TEAM } from '../notifications/notifications.service';
 import { CreatePaymentRequestDto, PayRequestDto } from './payment-requests.dto';
 import { MfrPaymentRequest, MfrRequestPayment } from './payment-requests.entities';
 import { ProductionOrder } from './production-orders.entities';
@@ -33,6 +34,7 @@ export class PaymentRequestsService {
     private readonly posting: PostingService,
     private readonly settings: SettingsService,
     private readonly lookups: LookupsService,
+    private readonly notes: NotificationsService,
   ) {}
 
   // ───────────── reads ─────────────
@@ -58,6 +60,7 @@ export class PaymentRequestsService {
       relations: ['product', 'manufacturer'], order: { date: 'DESC', refNo: 'DESC' },
     });
     const requests = await this.list(user, scope);
+    const credited = await this.creditsByOrder(em, orders.map((o) => o.id));
     const rows = orders.map((o) => {
       const value = round2(o.containers * o.bundlesPerContainer * o.packetsPerBundle * Number(o.rate));
       const advance = round2((value * Number(o.advancePct)) / 100);
@@ -72,13 +75,15 @@ export class PaymentRequestsService {
         approved: sum(mine.filter((r) => r.approved), (r) => r.amount),
         paid,
         advancePaid: sum(mine.filter((r) => r.kind === 'Advance'), (r) => r.paid),
-        toPay: round2(Math.max(0, value - paid)),
+        /** accepted delivery claims settled by a credit: no longer owed */
+        credited: credited[o.id] ?? 0,
+        toPay: round2(Math.max(0, value - (credited[o.id] ?? 0) - paid)),
       };
     }).filter((r) => r.status === 'Accepted' || r.paid > 0); // a cancelled order stays only while money went out on it
-    const total = (k: 'value' | 'advance' | 'requested' | 'approved' | 'paid' | 'toPay') => round2(rows.reduce((n, r) => n + r[k], 0));
+    const total = (k: 'value' | 'advance' | 'requested' | 'approved' | 'paid' | 'credited' | 'toPay') => round2(rows.reduce((n, r) => n + r[k], 0));
     return {
       rows,
-      totals: { value: total('value'), advance: total('advance'), requested: total('requested'), approved: total('approved'), paid: total('paid'), toPay: total('toPay') },
+      totals: { value: total('value'), advance: total('advance'), requested: total('requested'), approved: total('approved'), paid: total('paid'), credited: total('credited'), toPay: total('toPay') },
     };
   }
 
@@ -104,13 +109,18 @@ export class PaymentRequestsService {
          FROM mfr_request_payments p JOIN mfr_payment_requests r ON r.id = p."requestId" JOIN production_orders o ON o.id = r."orderId"
         WHERE r."manufacturerId" = $1`, [scope]))
       .map((r: any): Entry => ({ date: r.date, kind: `${r.kind} paid`, ref: r.ref, description: `${r.reqRef} · ${r.orderRef}`, owed: 0, paid: round2(r.amount) }));
-    const entries = [...goods, ...pays].sort((a, b) => a.date.localeCompare(b.date) || a.ref.localeCompare(b.ref));
+    const credits: Entry[] = (await em.query(
+      `SELECT c."decidedDate"::text AS date, c."refNo" AS ref, s."refNo" AS lot, c.bundles, c.kind, c.value::float8 AS value
+         FROM delivery_claims c JOIN production_shipments s ON s.id = c."shipmentId"
+        WHERE c."manufacturerId" = $1 AND c.status = 'Accepted' AND c.resolution = 'Credit'`, [scope]))
+      .map((r: any): Entry => ({ date: r.date, kind: 'Claim credit', ref: r.ref, description: `${r.bundles} ${String(r.kind).toLowerCase()} bundles · ${r.lot}`, owed: -round2(r.value), paid: 0 }));
+    const entries = [...goods, ...credits, ...pays].sort((a, b) => a.date.localeCompare(b.date) || a.ref.localeCompare(b.ref));
     let balance = 0;
     const rows = entries.map((e) => ({ ...e, balance: (balance = round2(balance + e.owed - e.paid)) }));
     return {
       manufacturerId: scope,
       entries: rows,
-      totals: { owed: round2(goods.reduce((n, e) => n + e.owed, 0)), paid: round2(pays.reduce((n, e) => n + e.paid, 0)), balance },
+      totals: { owed: round2([...goods, ...credits].reduce((n, e) => n + e.owed, 0)), paid: round2(pays.reduce((n, e) => n + e.paid, 0)), balance },
     };
   }
 
@@ -125,9 +135,11 @@ export class PaymentRequestsService {
       const date = dto.date ?? today();
       if (date > today()) throw new BadRequestException('A request cannot be dated in the future.');
 
-      const value = round2(order.containers * order.bundlesPerContainer * order.packetsPerBundle * Number(order.rate));
-      const advance = round2((value * Number(order.advancePct)) / 100);
+      const gross = round2(order.containers * order.bundlesPerContainer * order.packetsPerBundle * Number(order.rate));
+      const advance = round2((gross * Number(order.advancePct)) / 100);
       const open = await em.find(MfrPaymentRequest, { where: { orderId: order.id, status: 'Submitted' } });
+      // goods taken back by an accepted credit claim are not owed, so they cannot be asked for
+      const value = round2(gross - ((await this.creditsByOrder(em, [order.id]))[order.id] ?? 0));
       const asked = (kind?: string) => round2(open.filter((r) => !kind || r.kind === kind).reduce((n, r) => n + Number(r.amount), 0));
       const cap = dto.kind === 'Advance'
         ? round2(Math.min(advance - asked('Advance'), value - asked()))
@@ -154,6 +166,15 @@ export class PaymentRequestsService {
         bank: { bank: chosen.bank, title: chosen.title, account: chosen.account, ...(chosen.branch ? { branch: chosen.branch } : {}) },
         raisedBy: user.name,
       }));
+      const what = `${dto.kind} of PKR ${amount.toLocaleString('en-US')} on ${order.refNo}`;
+      await this.notes.send(em, user,
+        { to: { staff: TEAM.finance }, kind: 'payment-request.filed', tone: 'warning', refNo, link: LINK.finance,
+          title: `${m!.name} asks for ${what}`, body: `Request ${refNo}${dto.invoiceNo ? ` · invoice ${dto.invoiceNo}` : ''}. Sign and pay, or reject it.` },
+        { to: { staff: TEAM.manufacturing }, kind: 'payment-request.filed', refNo, link: LINK.manufacturing('payments'),
+          title: `${m!.name} asks for ${what}`, body: `Request ${refNo}, waiting for Finance.` },
+        { to: { manufacturerId: order.manufacturerId }, kind: 'payment-request.filed', refNo, link: LINK.factory,
+          title: `Payment request ${refNo} sent to Zen Foods`, body: what },
+      );
       return this.one(em, r.id);
     });
   }
@@ -167,6 +188,12 @@ export class PaymentRequestsService {
       if ((await this.posting.signatures(em, 'MFR_REQUEST', id)).length) throw new BadRequestException(`${r.refNo} is already signed; ask Zen Foods to reject it instead.`);
       r.status = 'Withdrawn';
       await em.save(r);
+      await this.notes.send(em, user,
+        { to: { staff: [...TEAM.finance, ...TEAM.manufacturing] }, kind: 'payment-request.withdrawn', refNo: r.refNo, link: LINK.finance,
+          title: `Payment request ${r.refNo} was withdrawn`, body: `PKR ${Number(r.amount).toLocaleString('en-US')} · by ${user.name}` },
+        { to: { manufacturerId: r.manufacturerId }, kind: 'payment-request.withdrawn', refNo: r.refNo, link: LINK.factory,
+          title: `Payment request ${r.refNo} withdrawn` },
+      );
       return this.one(em, id);
     });
   }
@@ -182,11 +209,20 @@ export class PaymentRequestsService {
       if (!canSign(user, seat)) throw new ForbiddenException(`Your account cannot sign as seat ${seat}.`);
       if (shaped.signatures.includes(seat)) throw new BadRequestException(`Seat ${seat} has already signed.`);
       await em.save(em.create(Approval, { docType: 'MFR_REQUEST', docId: id, seat, userId: user.id ?? null }));
+      const [after] = await this.shapeAll(em, [r]);
+      if (after.approved) {
+        await this.notes.send(em, user as Actor,
+          { to: { manufacturerId: r.manufacturerId }, kind: 'payment-request.approved', tone: 'success', refNo: r.refNo, link: LINK.factory,
+            title: `Payment request ${r.refNo} approved`, body: `PKR ${Number(r.amount).toLocaleString('en-US')}; payment follows.` },
+          { to: { staff: [...TEAM.finance, ...TEAM.manufacturing] }, kind: 'payment-request.approved', tone: 'success', refNo: r.refNo, link: LINK.finance,
+            title: `Payment request ${r.refNo} approved, ready to pay`, body: `PKR ${Number(r.amount).toLocaleString('en-US')}` },
+        );
+      }
       return this.one(em, id);
     });
   }
 
-  async reject(id: string, reason: string) {
+  async reject(id: string, reason: string, user?: Actor) {
     return this.db.transaction(async (em) => {
       const r = await this.load(em, id);
       if (r.status !== 'Submitted') throw new BadRequestException(`${r.refNo} is already ${r.status.toLowerCase()}.`);
@@ -195,11 +231,17 @@ export class PaymentRequestsService {
       r.status = 'Rejected';
       r.reason = reason.trim();
       await em.save(r);
+      await this.notes.send(em, user ?? null,
+        { to: { manufacturerId: r.manufacturerId }, kind: 'payment-request.rejected', tone: 'danger', refNo: r.refNo, link: LINK.factory,
+          title: `Payment request ${r.refNo} rejected`, body: `PKR ${Number(r.amount).toLocaleString('en-US')} · Reason: ${r.reason}` },
+        { to: { staff: [...TEAM.finance, ...TEAM.manufacturing] }, kind: 'payment-request.rejected', tone: 'danger', refNo: r.refNo, link: LINK.finance,
+          title: `Payment request ${r.refNo} rejected`, body: r.reason },
+      );
       return this.one(em, id);
     });
   }
 
-  async pay(id: string, dto: PayRequestDto) {
+  async pay(id: string, dto: PayRequestDto, user?: Actor) {
     return this.db.transaction(async (em) => {
       const r = await this.load(em, id);
       if (r.status !== 'Submitted') throw new BadRequestException(`${r.refNo} is ${r.status.toLowerCase()}.`);
@@ -219,6 +261,14 @@ export class PaymentRequestsService {
       }));
       await this.posting.syncMfrRequestPayment(em, p.id);
       await this.posting.syncOrderAdvance(em, r.orderId);
+      const left = round2(shaped.due - dto.amount);
+      const body = `${refNo} · ${dto.method}${dto.reference ? ` · ref ${dto.reference.trim()}` : ''}${left > 0 ? ` · PKR ${left.toLocaleString('en-US')} still due` : ''}`;
+      await this.notes.send(em, user ?? null,
+        { to: { manufacturerId: r.manufacturerId }, kind: 'payment-request.paid', tone: 'success', refNo: r.refNo, link: LINK.factory,
+          title: `Zen Foods paid PKR ${round2(dto.amount).toLocaleString('en-US')} on ${r.refNo}`, body },
+        { to: { staff: [...TEAM.finance, ...TEAM.manufacturing] }, kind: 'payment-request.paid', tone: 'success', refNo: r.refNo, link: LINK.finance,
+          title: `PKR ${round2(dto.amount).toLocaleString('en-US')} paid on ${r.refNo}`, body },
+      );
       return this.one(em, id);
     });
   }
@@ -242,6 +292,14 @@ export class PaymentRequestsService {
   }
 
   /** each request with its signatures, approval, payments, what is still due and a status in words */
+  /** accepted credit claims per production order, PKR */
+  private async creditsByOrder(em: EntityManager, orderIds: string[]): Promise<Record<string, number>> {
+    if (!orderIds.length) return {};
+    const rows: { orderId: string; v: number }[] = await em.query(
+      `SELECT "orderId", SUM(value)::float8 AS v FROM delivery_claims WHERE status = 'Accepted' AND resolution = 'Credit' AND "orderId" = ANY($1) GROUP BY "orderId"`, [orderIds]);
+    return Object.fromEntries(rows.map((r) => [r.orderId, round2(Number(r.v))]));
+  }
+
   async shapeAll(em: EntityManager, rows: MfrPaymentRequest[]) {
     const s = await this.settings.get(em);
     const ids = rows.map((r) => r.id);

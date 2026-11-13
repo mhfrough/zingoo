@@ -64,14 +64,14 @@ export class PaymentRequestsController {
 
   @Post(':id/reject')
   @Write('finance')
-  reject(@Param('id', ParseUUIDPipe) id: string, @Body() dto: ReasonDto) {
-    return this.service.reject(id, dto.reason);
+  reject(@Param('id', ParseUUIDPipe) id: string, @Body() dto: ReasonDto, @Request() req: any) {
+    return this.service.reject(id, dto.reason, req.user);
   }
 
   @Post(':id/pay')
   @Write('finance')
   @ApiOperation({ summary: 'Pay an approved request, fully or partly' })
-  pay(@Param('id', ParseUUIDPipe) id: string, @Body() dto: PayRequestDto) {
-    return this.service.pay(id, dto);
+  pay(@Param('id', ParseUUIDPipe) id: string, @Body() dto: PayRequestDto, @Request() req: any) {
+    return this.service.pay(id, dto, req.user);
   }
 }

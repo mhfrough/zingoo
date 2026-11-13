@@ -14,12 +14,13 @@ import { errorText } from '../shared/errors';
 import { CONNECTION_STATUS, ConnectionStatus, IconComponent, Tag, ToastService } from '../ui';
 import { ViewAsOption } from '../core/auth.service';
 import { prefersReducedMotion } from '../ui/motion';
+import { NotificationBell } from './notification-bell';
 
 /** Sidebar + top bar around every portal page. Below 1100px the sidebar is a drawer. */
 @Component({
   selector: 'app-shell',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [RouterOutlet, RouterLink, RouterLinkActive, IconComponent, Tag, ConnectionStatus],
+  imports: [RouterOutlet, RouterLink, RouterLinkActive, IconComponent, Tag, ConnectionStatus, NotificationBell],
   templateUrl: './shell.html',
 })
 export class Shell {

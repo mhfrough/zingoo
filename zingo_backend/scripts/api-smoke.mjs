@@ -1639,5 +1639,108 @@ ok('notifications: shipped, claim decided, payment received, advice rejected', [
 ok('staff see claims and market approvals to decide as alerts', ((await call(T.owner, 'GET', '/reports/alerts')).json ?? []).some((a) => a.title === `Claim to decide · ${hClaim.json.refNo}`));
 ok('a staff login cannot read the portal account -> 403', (await call(T.owner, 'GET', '/portal/intl/account')).status === 403);
 
+
+// ── N notifications: every request reaches the other side and Zen Foods; delivery claims decided by the manufacturer ──
+const nDay = new Date().toISOString().slice(0, 10);
+const nList = async (t) => (await call(t, 'GET', '/notifications?limit=100')).json ?? { items: [], unread: 0 };
+const nHas = async (t, kind, ref) => (await nList(t)).items.some((n) => n.kind === kind && (!ref || n.refNo === ref));
+const nWait = async (t) => (await call(t, 'GET', '/notifications/waiting')).json ?? [];
+for (const t of [T.owner, T.sales, T.finance, T.factory, T.dist, p3Maker]) await call(t, 'POST', '/notifications/read', {});
+ok('every login reads its own notifications (staff, distributor, manufacturer)',
+  (await Promise.all([T.owner, T.dist, p3Maker, T.audit].map((t) => call(t, 'GET', '/notifications')))).every((r) => r.status === 200));
+ok('after "mark all read" nothing is unread', (await call(T.dist, 'GET', '/notifications/counts')).json?.unread === 0);
+ok('no token -> 401', (await call(null, 'GET', '/notifications')).status === 401);
+
+// distributor request -> company (not the manufacturer)
+const nReq = (await call(T.dist, 'POST', '/portal/requests', { date: nDay, productId: p7sku.id, cartons: 2, poRef: 'PO-N1' })).json;
+ok('a distributor request tells the company desk (Admin and Distribution)', await nHas(T.owner, 'request.filed', nReq?.refNo) && await nHas(T.sales, 'request.filed', nReq?.refNo));
+ok('stock requests stay with the company: the manufacturer is not told', !(await nHas(p3Maker, 'request.filed', nReq?.refNo)));
+ok('nobody is told about their own action', !(await nHas(T.dist, 'request.filed', nReq?.refNo)));
+const nOwnerWait = await nWait(T.owner);
+ok('the company sees the request as waiting on Zen Foods (on them)', nOwnerWait.some((w) => w.refNo === nReq?.refNo && w.waitingOn === 'Zen Foods' && w.mine));
+ok('the distributor sees it waiting on Zen Foods', (await nWait(T.dist)).some((w) => w.refNo === nReq?.refNo && w.waitingOn === 'Zen Foods' && !w.mine));
+ok('the bell counts unread notices and items on the reader', (await call(T.owner, 'GET', '/notifications/counts')).json?.unread >= 1 && (await call(T.owner, 'GET', '/notifications/counts')).json?.waiting >= 1);
+await call(T.sales, 'POST', `/portal/requests/${nReq.id}/reject`, { note: 'Out of stock this week' });
+const nRej = (await nList(T.dist)).items.find((n) => n.kind === 'request.rejected' && n.refNo === nReq.refNo);
+ok('the distributor is told the request was rejected, with the reason and a link', nRej && !nRej.read && nRej.body.includes('Out of stock this week') && nRej.link === '/admin/partner-portal?tab=orders', JSON.stringify(nRej));
+
+// production order -> manufacturer; answer -> company and the distributor it is for
+const nMo = (await call(T.factory, 'POST', '/production-orders', { date: nDay, productId: p5Mo.productId, containers: 1, send: true })).json;
+ok('a sent production order tells the manufacturer', await nHas(p3Maker, 'order.sent', nMo?.refNo));
+ok('another manufacturer is not told', !(await nHas(p3OtherT, 'order.sent', nMo?.refNo)));
+ok('it waits on the manufacturer (on them in their portal)', (await nWait(p3Maker)).some((w) => w.refNo === nMo?.refNo && w.mine) && nOwnerWait.length >= 0 && (await nWait(T.owner)).some((w) => w.refNo === nMo?.refNo && !w.mine));
+await call(p3Maker, 'POST', `/production-orders/${nMo.id}/accept`, { readyDate: nDay });
+ok('the manufacturer accepting tells the company and the distributor', await nHas(T.owner, 'order.accepted', nMo.refNo) && await nHas(T.factory, 'order.accepted', nMo.refNo) && await nHas(T.dist, 'order.accepted', nMo.refNo));
+
+// dispatch -> distributor and company; receipt -> manufacturer
+const nShip = (await call(p3Maker, 'POST', '/production-shipments', { orderId: nMo.id, date: nDay, containers: 1, vehicle: 'TLR-9', waybill: 'BLT-N' })).json;
+const nDisp = (await nList(T.dist)).items.find((n) => n.kind === 'shipment.dispatched' && n.refNo === nShip?.refNo);
+ok('a dispatch tells the distributor (with vehicle and waybill)', nDisp && nDisp.body.includes('TLR-9') && nDisp.link === '/admin/partner-portal?tab=stock', JSON.stringify(nDisp));
+ok('a dispatch tells the company', await nHas(T.owner, 'shipment.dispatched', nShip?.refNo) && await nHas(T.sales, 'shipment.dispatched', nShip?.refNo));
+ok('the delivery waits on the distributor', (await nWait(T.dist)).some((w) => w.refNo === nShip?.refNo && w.mine));
+await call(T.dist, 'POST', `/production-shipments/${nShip.id}/receive`, { date: nDay, receivedContainers: 1 });
+ok('the receipt tells the manufacturer and the company', await nHas(p3Maker, 'shipment.received', nShip.refNo) && await nHas(T.owner, 'shipment.received', nShip.refNo));
+
+// faulty goods: distributor raises, manufacturer decides, everyone is told
+ok('a claim on more bundles than arrived -> 400', (await call(T.dist, 'POST', '/delivery-claims', { shipmentId: nShip.id, date: nDay, kind: 'Damaged', bundles: 11, note: 'x' })).status === 400);
+ok('a claim needs a description -> 400', (await call(T.dist, 'POST', '/delivery-claims', { shipmentId: nShip.id, date: nDay, kind: 'Damaged', bundles: 1, note: '' })).status === 400);
+ok('the manufacturer cannot raise a claim -> 403', (await call(p3Maker, 'POST', '/delivery-claims', { shipmentId: nShip.id, date: nDay, kind: 'Damaged', bundles: 1, note: 'x' })).status === 403);
+ok('a claim on a delivery still in transit -> 400', (await (async () => {
+  const o = (await call(T.factory, 'POST', '/production-orders', { date: nDay, productId: p5Mo.productId, containers: 1, send: true })).json;
+  await call(p3Maker, 'POST', `/production-orders/${o.id}/accept`, {});
+  const s = (await call(p3Maker, 'POST', '/production-shipments', { orderId: o.id, date: nDay, containers: 1 })).json;
+  return call(T.dist, 'POST', '/delivery-claims', { shipmentId: s.id, date: nDay, kind: 'Damaged', bundles: 1, note: 'x' });
+})()).status === 400);
+const nClaim = await call(T.dist, 'POST', '/delivery-claims', { shipmentId: nShip.id, date: nDay, kind: 'Damaged', bundles: 2, note: 'Two bundles crushed in the truck' });
+ok('the distributor raises a faulty-goods claim SCL with its value (2 bundles × 432 packets × 4.25)',
+  nClaim.status === 201 && /^SCL-\d{3}$/.test(nClaim.json?.refNo) && nClaim.json?.status === 'Pending' && nClaim.json?.value === 3672, JSON.stringify(nClaim.json));
+const nC = nClaim.json;
+ok('the manufacturer is told and has to act', await nHas(p3Maker, 'delivery-claim.filed', nC.refNo) && (await nWait(p3Maker)).some((w) => w.refNo === nC.refNo && w.mine));
+ok('the company is told (Admin, Manufacturing, Distribution) and sees it waiting on the manufacturer',
+  await nHas(T.owner, 'delivery-claim.filed', nC.refNo) && await nHas(T.factory, 'delivery-claim.filed', nC.refNo) && await nHas(T.sales, 'delivery-claim.filed', nC.refNo)
+  && (await nWait(T.owner)).some((w) => w.refNo === nC.refNo && !w.mine && w.waitingOn === p5Mo.manufacturer.name));
+ok('each side lists the claim: distributor, manufacturer and staff', ((await call(T.dist, 'GET', '/delivery-claims')).json ?? []).some((c) => c.id === nC.id)
+  && ((await call(p3Maker, 'GET', '/delivery-claims')).json ?? []).some((c) => c.id === nC.id) && ((await call(T.owner, 'GET', '/delivery-claims')).json ?? []).some((c) => c.id === nC.id));
+ok('another manufacturer neither sees nor decides it', !((await call(p3OtherT, 'GET', '/delivery-claims')).json ?? []).some((c) => c.id === nC.id)
+  && (await call(p3OtherT, 'POST', `/delivery-claims/${nC.id}/decide`, { decision: 'Accept', resolution: 'Credit' })).status === 403);
+ok('the distributor cannot decide its own claim -> 403', (await call(T.dist, 'POST', `/delivery-claims/${nC.id}/decide`, { decision: 'Accept', resolution: 'Credit' })).status === 403);
+ok('a rejection needs a reason -> 400', (await call(p3Maker, 'POST', `/delivery-claims/${nC.id}/decide`, { decision: 'Reject' })).status === 400);
+const nDec = await call(p3Maker, 'POST', `/delivery-claims/${nC.id}/decide`, { decision: 'Accept', resolution: 'Credit', note: 'Agreed, transit damage' });
+ok('the manufacturer accepts with a credit', nDec.json?.status === 'Accepted' && nDec.json?.resolution === 'Credit' && nDec.json?.decidedBy, JSON.stringify(nDec.json));
+ok('deciding twice -> 400', (await call(p3Maker, 'POST', `/delivery-claims/${nC.id}/decide`, { decision: 'Reject', note: 'x' })).status === 400);
+ok('the distributor and the company are told the outcome', await nHas(T.dist, 'delivery-claim.decided', nC.refNo) && await nHas(T.owner, 'delivery-claim.decided', nC.refNo) && await nHas(T.finance, 'delivery-claim.decided', nC.refNo));
+const nJ = ((await call(T.finance, 'GET', '/reports/journal?period=all')).json ?? []).filter((l) => l.reference === nC.refNo);
+ok('the credit posts Manufacturer Payable / Inventory at Distributor 3,672', nJ.some((l) => l.account === 'Manufacturer Payable' && l.debit === 3672) && nJ.some((l) => l.account === 'Inventory at Distributor' && l.credit === 3672), JSON.stringify(nJ));
+ok('the manufacturer statement shows the claim credit', ((await call(p3Maker, 'GET', '/mfr-payment-requests/statement')).json?.entries ?? []).some((e) => e.kind === 'Claim credit' && e.ref === nC.refNo && e.owed === -3672));
+ok('the order position counts the credit off what is still to pay', ((await call(T.owner, 'GET', '/mfr-payment-requests/position')).json?.rows ?? []).find((r) => r.orderId === nMo.id)?.credited === 3672);
+const nInv = (await call(T.dist, 'POST', '/distributor-invoices', { date: nDay, lines: [{ shipmentId: nShip.id, containers: 1 }] })).json;
+ok('selling the delivery carries the lower cost (18,360 - 3,672)', Math.abs(Number(nInv?.cost) - 14688) < 0.5, JSON.stringify(nInv?.cost));
+ok('a sales invoice tells the company desk', await nHas(T.sales, 'sales-invoice.filed', nInv?.refNo) && await nHas(T.finance, 'sales-invoice.filed', nInv?.refNo));
+await call(T.finance, 'POST', `/distributor-invoices/${nInv.id}/verify`);
+ok('verifying it tells the distributor', await nHas(T.dist, 'sales-invoice.verified', nInv.refNo));
+const nClaim2 = (await call(T.dist, 'POST', '/delivery-claims', { shipmentId: nShip.id, date: nDay, kind: 'Quality', bundles: 1, note: 'Stale taste' })).json;
+ok('once the delivery is sold a credit is refused -> 400', (await call(p3Maker, 'POST', `/delivery-claims/${nClaim2.id}/decide`, { decision: 'Accept', resolution: 'Credit' })).status === 400);
+ok('a replacement can still be agreed (nothing posts)', (await call(T.factory, 'POST', `/delivery-claims/${nClaim2.id}/decide`, { decision: 'Accept', resolution: 'Replace' })).json?.resolution === 'Replace'
+  && !((await call(T.finance, 'GET', '/reports/journal?period=all')).json ?? []).some((l) => l.reference === nClaim2.refNo));
+ok('the ledger still balances after claims', (await call(T.owner, 'GET', '/reports/trial-balance')).json?.balanced === true);
+
+// manufacturer payment request -> Finance; decision -> manufacturer
+const nPr = (await call(p3Maker, 'POST', '/mfr-payment-requests', { orderId: nMo.id, kind: 'Balance', amount: 1000 })).json;
+ok('a payment request tells Finance and Manufacturing', await nHas(T.finance, 'payment-request.filed', nPr?.refNo) && await nHas(T.factory, 'payment-request.filed', nPr?.refNo));
+ok('it waits on Finance', (await nWait(T.finance)).some((w) => w.refNo === nPr?.refNo && w.mine));
+await call(T.finance, 'POST', `/mfr-payment-requests/${nPr.id}/reject`, { reason: 'Send the invoice first' });
+ok('the manufacturer is told it was rejected, with the reason', (await nList(p3Maker)).items.some((n) => n.kind === 'payment-request.rejected' && n.refNo === nPr.refNo && n.body.includes('Send the invoice first')));
+ok('the manufacturer never sees distributor payment notices', !(await nList(p3Maker)).items.some((n) => n.kind.startsWith('advice.') || n.kind.startsWith('request.')));
+ok('a distributor never sees another distributor\'s notices', (await nList(T.dist)).items.every((n) => !n.title.includes('Upper Sindh')));
+
+// read state is per login
+const nBefore = (await nList(T.dist)).unread;
+const nFirst = (await nList(T.dist)).items.find((n) => !n.read);
+const nAfter = (await call(T.dist, 'POST', '/notifications/read', { ids: [nFirst.id] })).json?.unread;
+ok('opening a notice marks only it read', nBefore >= 2 && nAfter === nBefore - 1, JSON.stringify([nBefore, nAfter]));
+ok('reading it as the distributor does not mark it read for staff', (await nList(T.owner)).unread > 0);
+ok('ids must be uuids -> 400', (await call(T.dist, 'POST', '/notifications/read', { ids: ['x'] })).status === 400);
+ok('mark all read clears the badge', (await call(T.dist, 'POST', '/notifications/read', {})).json?.unread === 0);
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

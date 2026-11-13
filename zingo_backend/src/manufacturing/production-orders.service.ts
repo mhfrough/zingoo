@@ -7,6 +7,7 @@ import { nextRef } from '../common/ref';
 import { Role } from '../common/enums';
 import { Lookup } from '../setup/setup.entities';
 import { SettingsService } from '../setup/setup.service';
+import { LINK, Note, NotificationsService, TEAM, plural } from '../notifications/notifications.service';
 import {
   AcceptProductionOrderDto, CreateProductionOrderDto, ReasonDto, StageDto, UpdateProductionOrderDto,
 } from './production-orders.dto';
@@ -30,6 +31,7 @@ export class ProductionOrdersService {
   constructor(
     @InjectDataSource() private readonly db: DataSource,
     private readonly settings: SettingsService,
+    private readonly notes: NotificationsService,
   ) {}
 
   // ───────────── reads ─────────────
@@ -130,6 +132,14 @@ export class ProductionOrdersService {
       o.reason = dto.reason.trim();
       await em.save(o);
       await this.event(em, o.id, user, 'Cancelled', o.reason);
+      await this.notes.send(em, user,
+        { to: { manufacturerId: o.manufacturerId }, kind: 'order.cancelled', tone: 'danger', refNo: o.refNo, link: LINK.factory,
+          title: `Zen Foods cancelled order ${o.refNo}`, body: `${this.what(o)} · Reason: ${o.reason}` },
+        { to: { staff: TEAM.manufacturing }, kind: 'order.cancelled', tone: 'danger', refNo: o.refNo, link: LINK.manufacturing('orders'),
+          title: `Order ${o.refNo} cancelled`, body: `By ${user.name} · ${o.reason}` },
+        ...(o.distributorId ? [{ to: { distributorId: o.distributorId }, kind: 'order.cancelled', tone: 'danger' as const, refNo: o.refNo, link: LINK.portal('stock'),
+          title: `Production order ${o.refNo} for you was cancelled`, body: this.what(o) }] : []),
+      );
       return this.shape(await this.load(em, id), (await this.movedMap(em))[id]);
     });
   }
@@ -145,7 +155,9 @@ export class ProductionOrdersService {
       o.status = 'Accepted';
       o.readyDate = dto.readyDate ?? null;
       await em.save(o);
-      await this.event(em, o.id, user, 'Accepted', [dto.readyDate && `Ready by ${dto.readyDate}`, dto.note?.trim()].filter(Boolean).join(' · ') || null);
+      const note = [dto.readyDate && `Ready by ${dto.readyDate}`, dto.note?.trim()].filter(Boolean).join(' · ') || null;
+      await this.event(em, o.id, user, 'Accepted', note);
+      await this.answered(em, user, o, 'order.accepted', 'success', `${o.manufacturer.name} accepted order ${o.refNo}`, note);
       return this.shape(await this.load(em, id), (await this.movedMap(em))[id]);
     });
   }
@@ -159,6 +171,7 @@ export class ProductionOrdersService {
       o.reason = dto.reason.trim();
       await em.save(o);
       await this.event(em, o.id, user, 'Rejected', o.reason);
+      await this.answered(em, user, o, 'order.rejected', 'danger', `${o.manufacturer.name} rejected order ${o.refNo}`, `Reason: ${o.reason}`);
       return this.shape(await this.load(em, id), (await this.movedMap(em))[id]);
     });
   }
@@ -177,6 +190,7 @@ export class ProductionOrdersService {
       o.stage = dto.stage;
       await em.save(o);
       await this.event(em, o.id, user, dto.stage, dto.note?.trim() || null);
+      await this.answered(em, user, o, 'order.stage', 'info', `Order ${o.refNo} is now at "${dto.stage}"`, dto.note?.trim() || null);
       return this.shape(await this.load(em, id), (await this.movedMap(em))[id]);
     });
   }
@@ -207,10 +221,33 @@ export class ProductionOrdersService {
     return o;
   }
 
-  private async markSent(em: EntityManager, o: ProductionOrder, user: OrderUser) {
-    o.status = 'Sent';
-    await em.save(o);
-    await this.event(em, o.id, user, 'Sent to manufacturer', null);
+  private async markSent(em: EntityManager, order: ProductionOrder, user: OrderUser) {
+    order.status = 'Sent';
+    await em.save(order);
+    await this.event(em, order.id, user, 'Sent to manufacturer', null);
+    const o = order.product && order.manufacturer ? order : await this.load(em, order.id);
+    await this.notes.send(em, user,
+      { to: { manufacturerId: o.manufacturerId }, kind: 'order.sent', tone: 'warning', refNo: o.refNo, link: LINK.factory,
+        title: `New order ${o.refNo} from Zen Foods`, body: `${this.what(o)}. Accept or reject it.` },
+      { to: { staff: TEAM.manufacturing }, kind: 'order.sent', refNo: o.refNo, link: LINK.manufacturing('orders'),
+        title: `Order ${o.refNo} sent to ${o.manufacturer?.name ?? 'the manufacturer'}`, body: `By ${user.name} · ${this.what(o)}` },
+    );
+  }
+
+  /** "2 containers of Z20-MAS for Upper Sindh" */
+  private what(o: ProductionOrder) {
+    return `${plural(o.containers, 'container')} of ${o.product?.sku ?? 'the product'}${o.destination === 'Warehouse' ? ' for the warehouse' : o.distributor ? ` for ${o.distributor.name}` : ''}`;
+  }
+
+  /** the manufacturer answered or reported progress: Zen Foods and the distributor the goods are for are told */
+  private async answered(em: EntityManager, user: OrderUser, o: ProductionOrder, kind: string, tone: Note['tone'], title: string, note: string | null) {
+    const body = [this.what(o), note].filter(Boolean).join(' · ');
+    await this.notes.send(em, user,
+      { to: { staff: TEAM.manufacturing }, kind, tone, refNo: o.refNo, link: LINK.manufacturing('orders'), title, body },
+      { to: { manufacturerId: o.manufacturerId }, kind, tone, refNo: o.refNo, link: LINK.factory, title, body },
+      ...(o.distributorId && kind !== 'order.rejected' ? [{ to: { distributorId: o.distributorId }, kind, tone, refNo: o.refNo, link: LINK.portal('stock'),
+        title: kind === 'order.accepted' ? `Goods on the way: order ${o.refNo} is in production` : title, body }] : []),
+    );
   }
 
   private async event(em: EntityManager, orderId: string, user: OrderUser, event: string, note: string | null) {

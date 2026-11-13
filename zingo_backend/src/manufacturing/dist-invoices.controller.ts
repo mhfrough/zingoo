@@ -41,14 +41,14 @@ export class DistInvoicesController {
 
   @Post(':id/reject')
   @Roles(...MANAGE)
-  reject(@Param('id', ParseUUIDPipe) id: string, @Body() dto: ReasonDto) {
-    return this.service.reject(id, dto.reason);
+  reject(@Param('id', ParseUUIDPipe) id: string, @Body() dto: ReasonDto, @Request() req: any) {
+    return this.service.reject(id, dto.reason, req.user);
   }
 
   @Post(':id/pay')
   @Roles(...MANAGE)
   @ApiOperation({ summary: 'Record money received from the distributor against a verified invoice' })
-  pay(@Param('id', ParseUUIDPipe) id: string, @Body() dto: DistInvoicePayDto) {
-    return this.service.pay(id, dto);
+  pay(@Param('id', ParseUUIDPipe) id: string, @Body() dto: DistInvoicePayDto, @Request() req: any) {
+    return this.service.pay(id, dto, req.user);
   }
 }

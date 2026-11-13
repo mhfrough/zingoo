@@ -9,6 +9,7 @@ import { ExportsModule } from './exports/exports.module';
 import { FinanceModule } from './finance/finance.module';
 import { LedgerModule } from './ledger/ledger.module';
 import { ManufacturingModule } from './manufacturing/manufacturing.module';
+import { NotificationsModule } from './notifications/notifications.module';
 import { PortalModule } from './portal/portal.module';
 import { ReportsModule } from './reports/reports.module';
 import { SetupModule } from './setup/setup.module';
@@ -45,6 +46,9 @@ import { UsersModule } from './users/users.module';
     // setup: settings, currencies, chart of accounts, cost centers
     SetupModule,
     CompaniesModule,
+
+    // in-app notifications (global: every flow sends them)
+    NotificationsModule,
 
     // masters
     CatalogModule,

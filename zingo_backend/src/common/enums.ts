@@ -28,7 +28,7 @@ export type PortalRole = (typeof PORTAL_ROLES)[number];
 /** What a ledger line came from (used to replace the lines when the document changes). */
 export type RefType =
   | 'BATCH' | 'MFR_PAYMENT' | 'ORDER' | 'COLLECTION' | 'FINANCE' | 'ACC_DOC' | 'ACC_SETTLEMENT'
-  | 'EXPORT' | 'EXPORT_RECEIPT' | 'EXPORT_COST' | 'VOUCHER' | 'CREDIT_NOTE' | 'FUNDING_REPAY' | 'MFR_REQ_PAY' | 'SHIPMENT' | 'MFR_ADV_APPLY' | 'DIST_INVOICE' | 'DIST_RECEIPT' | 'REMITTANCE' | 'EXPORT_CLAIM';
+  | 'EXPORT' | 'EXPORT_RECEIPT' | 'EXPORT_COST' | 'VOUCHER' | 'CREDIT_NOTE' | 'FUNDING_REPAY' | 'MFR_REQ_PAY' | 'SHIPMENT' | 'MFR_ADV_APPLY' | 'DIST_INVOICE' | 'DIST_RECEIPT' | 'REMITTANCE' | 'EXPORT_CLAIM' | 'DELIVERY_CLAIM';
 
 export type JournalSource =
   | 'Manufacturing' | 'Distribution' | 'Investment' | 'Accounting' | 'Exports' | 'Manual Voucher' | 'Distributor Portal';

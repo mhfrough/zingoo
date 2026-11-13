@@ -11,6 +11,7 @@ import { PostingService } from '../ledger/posting.service';
 import { LookupsService } from '../setup/lookups.service';
 import { ContainerType, Currency, Setting } from '../setup/setup.entities';
 import { SettingsService } from '../setup/setup.service';
+import { LINK, NotificationsService, TEAM } from '../notifications/notifications.service';
 import { flagsFor, shipmentMath } from './export-math';
 import { CreateExportDto, ExportCostPaymentDto, ExportReceiptDto, UpdateExportDto } from './exports.dto';
 import { ExportCostPayment, ExportReceipt, ExportShipment } from './exports.entities';
@@ -59,6 +60,7 @@ export class ExportsService {
     private readonly settings: SettingsService,
     private readonly stock: StockService,
     private readonly lookups: LookupsService,
+    private readonly notes: NotificationsService,
   ) {}
 
   /** factory cost per carton: the released-batch average, else the planning rates x packs */
@@ -330,6 +332,10 @@ export class ExportsService {
       x.status = 'Shipped';
       await em.save(x);
       await this.posting.syncShipment(em, id);
+      if (x.distributorId) {
+        await this.notes.send(em, null, { to: { distributorId: x.distributorId }, kind: 'export.shipped', tone: 'info', refNo: x.refNo, link: LINK.portal('intl'),
+          title: `Container ${x.refNo} shipped`, body: `${x.cartons} bundles of ${x.product.sku}${x.dueDate ? ` · payment due ${x.dueDate}` : ''}` });
+      }
       return this.findOne(id, em);
     });
   }

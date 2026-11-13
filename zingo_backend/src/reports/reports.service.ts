@@ -298,7 +298,9 @@ export class ReportsService {
       ...(await this.db.query(`
         SELECT o."refNo" AS reference, m.name AS party, MAX(s."receivedDate")::text AS "dueDate",
                (SUM(s."receivedContainers" * s."bundlesPerContainer" * s."packetsPerBundle" * s.rate)
-                - LEAST(SUM(s."receivedContainers" * s."bundlesPerContainer" * s."packetsPerBundle" * s.rate),
+                - COALESCE((SELECT SUM(c.value) FROM delivery_claims c WHERE c."orderId" = o.id AND c.status = 'Accepted' AND c.resolution = 'Credit'), 0)
+                - LEAST(SUM(s."receivedContainers" * s."bundlesPerContainer" * s."packetsPerBundle" * s.rate)
+                          - COALESCE((SELECT SUM(c.value) FROM delivery_claims c WHERE c."orderId" = o.id AND c.status = 'Accepted' AND c.resolution = 'Credit'), 0),
                         COALESCE((SELECT SUM(p.amount) FROM mfr_request_payments p JOIN mfr_payment_requests r ON r.id = p."requestId" WHERE r."orderId" = o.id), 0)))::float8 AS outstanding
           FROM production_shipments s JOIN production_orders o ON o.id = s."orderId" JOIN manufacturers m ON m.id = o."manufacturerId"
          WHERE s.status = 'Received' GROUP BY o.id, o."refNo", m.name`) as { reference: string; party: string; dueDate: string; outstanding: number }[])

@@ -1,0 +1,12 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "zingo-web",
+      "runtimeExecutable": "npx",
+      "runtimeArgs": ["ng", "serve", "--port", "4270"],
+      "cwd": "zingo_frontend",
+      "port": 4270
+    }
+  ]
+}

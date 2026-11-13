@@ -35,6 +35,8 @@
         <app-shipments-panel mode="company" [shipments]="shipments.value() ?? []" [stock]="distStock.value() ?? null"
           [loading]="shipments.isLoading()" [error]="shipments.error() ? 'The server did not answer.' : null"
           [canReceive]="canWrite()" (changed)="reload()" />
+
+        <app-delivery-claims-panel mode="company" [shipments]="shipments.value() ?? []" [tick]="tick()" [canRaise]="canRaiseClaim()" (changed)="reload()" />
       </div>
     </ng-template>
 

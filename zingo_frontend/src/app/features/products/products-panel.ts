@@ -65,15 +65,19 @@ export class ProductsPanel {
   protected unassigned = computed(() => (this.products.value() ?? []).filter((p) => p.active && (!p.manufacturerId || !p.distributorId)).length);
 
   protected columns: TableColumn<Product>[] = [
-    { id: 'sku', label: 'Product', value: (p) => p.sku, sub: (p) => [p.name, p.flavour !== p.name ? p.flavour : null, p.packetSize].filter(Boolean).join(' · ') },
+    { id: 'sku', label: 'SKU', value: (p) => p.sku, sub: (p) => (p.gramsPerPacket ? `${p.gramsPerPacket} g` : null) },
+    { id: 'name', label: 'Product name', value: (p) => p.name, sub: (p) => [p.flavour !== p.name ? p.flavour : null, p.packetSize].filter(Boolean).join(' · ') || null },
     {
       id: 'packaging', label: 'Packets per container', kind: 'number', value: (p) => perContainer(p),
-      sub: (p) => `${fmtNumber(p.packsPerCarton)} per bundle × ${fmtNumber(p.bundlesPerContainer)} bundles`, priority: 2,
+      sub: (p) => `${fmtNumber(p.packsPerCarton)} per bundle × ${fmtNumber(p.bundlesPerContainer)} bundles${(p.packagings?.length ?? 0) > 1 ? ` · ${p.packagings!.length} templates` : ''}`, priority: 2,
     },
     { id: 'manufacturer', label: 'Manufacturer', value: (p) => p.manufacturer?.name ?? 'Not assigned', priority: 2 },
     {
-      id: 'distributor', label: 'Distributor', value: (p) => p.distributor?.name ?? 'Not assigned',
-      sub: (p) => (p.effectiveSelloutDays ? `Sell out in ${p.effectiveSelloutDays} days` : null),
+      id: 'distributor', label: 'Distributors', value: (p) => p.distributor?.name ?? 'Not assigned',
+      sub: (p) => [
+        (p.distributorIds?.length ?? 0) > 1 ? `+${p.distributorIds!.length - 1} more` : null,
+        p.effectiveSelloutDays ? `Sell out in ${p.effectiveSelloutDays} days` : null,
+      ].filter(Boolean).join(' · ') || null,
     },
     {
       id: 'container', label: 'Container price', kind: 'money', priority: 2, value: (p) => p.rate * perContainer(p),

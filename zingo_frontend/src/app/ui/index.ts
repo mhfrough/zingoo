@@ -20,6 +20,7 @@ export { PasswordField } from './password-field';
 export { RichText, richTextLength, safeHref, sanitizeRich } from './rich-text';
 export { SearchBox } from './search';
 export { Select } from './select';
+export { MultiSelect } from './multi-select';
 export type { SelectOption } from './select';
 export { PageSkeleton, Skeleton, SkeletonForm, SkeletonKpi, SkeletonTable, SkeletonText } from './skeleton';
 export { TabPanel, Tabs } from './tabs';

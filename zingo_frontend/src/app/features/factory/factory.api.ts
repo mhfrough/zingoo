@@ -28,6 +28,8 @@ export interface ProductionOrder {
   distributorId: string | null;
   distributor: Distributor | null;
   containers: number;
+  /** the product's packaging template used (empty = its default at the time) */
+  packaging?: string | null;
   bundlesPerContainer: number;
   packetsPerBundle: number;
   /** PKR per packet */

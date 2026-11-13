@@ -57,6 +57,10 @@ export class ProductionOrder extends AppEntity {
   @Column({ type: 'int' })
   containers: number;
 
+  /** the product's packaging template the order uses (empty = the default) */
+  @Column({ type: 'varchar', length: 60, nullable: true })
+  packaging: string | null;
+
   /** packaging at the time of the order */
   @Column({ type: 'int' })
   bundlesPerContainer: number;

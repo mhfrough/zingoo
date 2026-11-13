@@ -17,8 +17,11 @@ export class RolesGuard implements CanActivate {
     const targets = [context.getHandler(), context.getClass()];
     if (this.reflector.getAllAndOverride<boolean>(IS_PUBLIC, targets)) return true;
 
-    const user = context.switchToHttp().getRequest().user as { role: Role } | undefined;
+    const req = context.switchToHttp().getRequest();
+    const user = req.user as { role: Role; readOnly?: boolean } | undefined;
     if (!user) return false;
+    // a distributor on hold may look but not change anything
+    if (user.readOnly && req.method !== 'GET') throw new ForbiddenException('This distributor account is on hold: you can view, but not make changes.');
 
     const allowed = this.reflector.getAllAndOverride<Role[] | undefined>(ROLES_KEY, targets);
     const ok = allowed ? allowed.includes(user.role) : !PARTNER_ROLES.includes(user.role);

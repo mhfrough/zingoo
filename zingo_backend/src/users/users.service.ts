@@ -119,6 +119,19 @@ export class UsersService implements OnApplicationBootstrap {
     return this.view(await this.repo.save(u));
   }
 
+  /**
+   * For a Distributor login: whether its distributor is suspended (no sign-in), on hold (look only) or fine.
+   * A temporary suspension ends on its "until" date.
+   */
+  async distributorStanding(u: Pick<User, 'role' | 'distributorId'>): Promise<'ok' | 'hold' | 'suspended'> {
+    if (u.role !== 'Distributor' || !u.distributorId) return 'ok';
+    const [d] = await this.repo.manager.query(`SELECT status, "statusUntil"::text AS until FROM distributors WHERE id = $1`, [u.distributorId]);
+    if (!d) return 'ok';
+    const today = new Date().toISOString().slice(0, 10);
+    if (d.status === 'Permanent suspend' || (d.status === 'Temporary suspend' && (!d.until || d.until > today))) return 'suspended';
+    return d.status === 'Hold' ? 'hold' : 'ok';
+  }
+
   async resetPassword(id: string, password: string) {
     const u = await this.repo.findOne({ where: { id } });
     if (!u) throw new NotFoundException('User not found');

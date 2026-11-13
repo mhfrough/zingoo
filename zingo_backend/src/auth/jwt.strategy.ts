@@ -23,7 +23,11 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       const admin = await this.users.findById(payload.viewer);
       if (!admin || admin.status !== 'Active' || admin.role !== 'Admin') throw new UnauthorizedException();
     }
+    // a distributor's logins follow its status: suspended cannot use the app, on hold can only look
+    const standing = await this.users.distributorStanding(user);
+    if (standing === 'suspended') throw new UnauthorizedException('This distributor account is suspended.');
     return {
+      readOnly: standing === 'hold',
       id: user.id, email: user.email, name: user.name, role: user.role, seat: user.seat,
       distributorId: user.distributorId, manufacturerId: user.manufacturerId, viewAs: payload.viewer ?? null,
     };

@@ -29,6 +29,7 @@ export class AuthService {
     const ok = user && (await bcrypt.compare(password, user.password));
     if (!user || !ok) throw new UnauthorizedException('Wrong email or password');
     if (user.status !== 'Active') throw new UnauthorizedException('This account is disabled');
+    if ((await this.users.distributorStanding(user)) === 'suspended') throw new UnauthorizedException('This distributor account is suspended. Contact Zen Foods.');
 
     return {
       access_token: this.jwt.sign({ sub: user.id }),

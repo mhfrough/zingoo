@@ -1,25 +1,29 @@
-import { ChangeDetectionStrategy, Component, computed, inject, input } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, inject, input, signal } from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
-import { ReactiveFormsModule, Validators } from '@angular/forms';
-import { SettingsStore } from '../../core/settings.store';
+import { FormArray, FormGroup, ReactiveFormsModule, Validators } from '@angular/forms';
+import { AuthService } from '../../core/auth.service';
+import { LookupList, SettingsStore } from '../../core/settings.store';
+import { errorText } from '../../shared/errors';
 import { fmtAmount2, fmtNumber } from '../../shared/format';
-import { Btn, Field, MoneyInput, Offcanvas, Select, SelectOption } from '../../ui';
+import { Btn, Field, MoneyInput, MultiSelect, Offcanvas, Select, SelectOption, ToastService } from '../../ui';
 import { FormModal } from '../ops/form-modal';
-import { Distributor, Manufacturer, Product } from '../ops/models';
+import { Distributor, Manufacturer, PackagingTemplate, Product } from '../ops/models';
+import { SettingsApi } from '../settings/settings.api';
 
 /** a value from a select, or keep what the product already has even if it was switched off in Settings */
 const withCurrent = (list: string[], current: string | null | undefined): SelectOption<string>[] =>
   [...list, ...(current && !list.includes(current) ? [current] : [])].map((v) => ({ value: v, label: v }));
 
 /**
- * Add or edit a SKU: one flavour in one packet size, its packaging (packet -> bundle -> container),
- * the manufacturer that makes it, the distributor that sells it (and in how many days), and its rates.
- * Flavours and packet sizes come from Settings & Data.
+ * Add or edit a SKU: name, flavour, packet size and grams; its packaging templates (packet -> bundle -> container,
+ * one default, picked on each production order); the manufacturer that makes it and the distributors that sell it;
+ * its per-packet rates with the cost and margin worked out per packet, bundle and container.
+ * Flavours and packet sizes come from Settings & Data; an Admin can add a new one right here.
  */
 @Component({
   selector: 'app-product-form',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [MoneyInput, ReactiveFormsModule, Offcanvas, Field, Btn, Select],
+  imports: [MoneyInput, ReactiveFormsModule, Offcanvas, Field, Btn, Select, MultiSelect],
   template: `
     <app-offcanvas #oc [(open)]="open" [title]="product() ? 'Edit product / SKU' : 'Add product / SKU'"
                subtitle="Rates are per packet, in PKR." size="lg" [dirty]="form.dirty">
@@ -30,68 +34,95 @@ const withCurrent = (list: string[], current: string | null | undefined): Select
         <section class="block">
           <header><h3>Product</h3><p>What it is. Flavours and packet sizes are lists in Settings &amp; Data.</p></header>
           <div class="form-grid">
-            <app-field label="SKU code" [required]="true" [error]="invalid('sku') ? 'Enter the SKU code' : null">
+            <app-field label="SKU code" [required]="true" [error]="invalid('sku') ? 'Enter the SKU code' : null" hint="Unique; letter case does not matter">
               <input type="text" formControlName="sku" placeholder="Z10-MAS" />
             </app-field>
             <app-field label="Product name" [required]="true" [error]="invalid('name') ? 'Enter the name' : null">
               <input type="text" formControlName="name" placeholder="Masala Masti" />
             </app-field>
+            <app-field label="Availability">
+              <select formControlName="active"><option value="true">Active</option><option value="false">Inactive</option></select>
+            </app-field>
             <app-field label="Flavour">
               <app-select formControlName="flavour" [options]="flavours()" placeholder="Choose a flavour" />
+              @if (canAddToLists()) {
+                @if (adding() === 'FLAVOUR') {
+                  <div class="add-row">
+                    <input type="text" [value]="newEntry()" (input)="newEntry.set($any($event.target).value)" placeholder="New flavour" maxlength="80" aria-label="New flavour" />
+                    <button appBtn type="button" size="sm" (click)="addEntry('FLAVOUR')" [loading]="saving()">Add</button>
+                    <button appBtn type="button" size="sm" variant="ghost" (click)="adding.set(null)">Cancel</button>
+                  </div>
+                } @else {
+                  <button type="button" class="add-link" (click)="startAdd('FLAVOUR')">+ Add a flavour</button>
+                }
+              }
             </app-field>
             <app-field label="Packet size">
               <app-select formControlName="packetSize" [options]="sizes()" placeholder="Choose a size" />
+              @if (canAddToLists()) {
+                @if (adding() === 'PACKET_SIZE') {
+                  <div class="add-row">
+                    <input type="text" [value]="newEntry()" (input)="newEntry.set($any($event.target).value)" placeholder="New size" maxlength="80" aria-label="New packet size" />
+                    <button appBtn type="button" size="sm" (click)="addEntry('PACKET_SIZE')" [loading]="saving()">Add</button>
+                    <button appBtn type="button" size="sm" variant="ghost" (click)="adding.set(null)">Cancel</button>
+                  </div>
+                } @else {
+                  <button type="button" class="add-link" (click)="startAdd('PACKET_SIZE')">+ Add a packet size</button>
+                }
+              }
             </app-field>
             <app-field label="Retail price tier" hint="Rs printed on the packet" [required]="true">
               <input type="number" formControlName="pack" min="1" step="1" />
             </app-field>
-            <app-field label="Availability">
-              <select formControlName="active"><option value="true">Active</option><option value="false">Inactive</option></select>
+            <app-field label="Grams per packet" hint="Weight the price tier buys; helps bargain with the manufacturer">
+              <input type="number" formControlName="gramsPerPacket" min="0" step="0.5" placeholder="e.g. 18" />
             </app-field>
-            <app-field label="Description" wide>
+            <app-field label="Description" [wide]="true">
               <textarea formControlName="description" rows="2" maxlength="2000" placeholder="Taste, ingredients, target buyer"></textarea>
             </app-field>
           </div>
         </section>
 
         <section class="block">
-          <header><h3>Packaging</h3><p>Snack packet → bundle → container. A container is one batch handed to a distributor.</p></header>
-          <div class="form-grid">
-            <app-field label="Packets per bundle" [required]="true" [error]="invalid('packsPerCarton') ? 'At least 1' : null">
-              <input type="number" formControlName="packsPerCarton" min="1" step="1" />
-            </app-field>
-            <app-field label="Bundles per container" [required]="true"
-                       [error]="invalid('bundlesPerContainer') ? 'At least 1' : null">
-              <input type="number" formControlName="bundlesPerContainer" min="1" step="1" />
-            </app-field>
-            <app-field label="Packets per container">
-              <input type="text" [value]="perContainer()" readonly tabindex="-1" />
-            </app-field>
+          <header><h3>Packaging templates</h3><p>Snack packet → bundle → container. Save several; one is the default, and each production order picks one.</p></header>
+          <div class="templates" formArrayName="packagings">
+            @for (g of templates.controls; track g; let i = $index) {
+              <div class="tpl" [formGroupName]="i">
+                <app-field label="Name" [required]="true"><input type="text" formControlName="name" maxlength="60" /></app-field>
+                <app-field label="Packets per bundle" [required]="true"><input type="number" formControlName="packetsPerBundle" min="1" step="1" /></app-field>
+                <app-field label="Bundles per container" [required]="true"><input type="number" formControlName="bundlesPerContainer" min="1" step="1" /></app-field>
+                <span class="tpl__total">{{ num(perContainerOf(i)) }} packets / container</span>
+                <label class="tpl__default"><input type="radio" name="tpl-default" [checked]="g.value.isDefault" (change)="makeDefault(i)" /> Default</label>
+                <button appBtn type="button" variant="ghost" icon="trash" iconOnly (click)="removeTemplate(i)" [disabled]="templates.length === 1"
+                        [attr.aria-label]="'Remove packaging template ' + (i + 1)"></button>
+              </div>
+            }
+            <div><button appBtn type="button" size="sm" icon="plus" (click)="addTemplate()">Add packaging template</button></div>
           </div>
         </section>
 
         <section class="block">
-          <header><h3>Partners</h3><p>Who makes it and who sells it. Sell-out days: how long the distributor has to sell one container.</p></header>
+          <header><h3>Partners</h3><p>Who makes it and who sells it. Sell-out days: how long a distributor has to sell one container (0 = no limit).</p></header>
           <div class="form-grid">
             <app-field label="Manufacturer" hint="Makes this product">
               <app-select formControlName="manufacturerId" [options]="manufacturerOptions()" placeholder="Choose a manufacturer" />
             </app-field>
-            <app-field label="Distributor" hint="Receives and sells it">
-              <app-select formControlName="distributorId" [options]="distributorOptions()" placeholder="Choose a distributor" />
+            <app-field label="Sell-out days" [hint]="selloutHint()" [error]="invalid('selloutDays') ? '0 to 365 days' : null">
+              <input type="number" formControlName="selloutDays" min="0" max="365" step="1" placeholder="Distributor default" />
             </app-field>
-            <app-field label="Sell-out days" [hint]="selloutHint()" [error]="invalid('selloutDays') ? '1 to 365 days' : null">
-              <input type="number" formControlName="selloutDays" min="1" max="365" step="1" placeholder="Distributor default" />
+            <app-field label="Distributors" [wide]="true" hint="One or more; the first is the default for orders">
+              <app-multi-select formControlName="distributorIds" [options]="distributorOptions()" placeholder="Add a distributor" />
             </app-field>
           </div>
         </section>
 
         <section class="block">
-          <header><h3>Rates per packet</h3><p>In PKR. Type the price of one packet; the bundle and container prices are worked out below.</p></header>
+          <header><h3>Rates per packet</h3><p>In PKR. Type the price of one packet; the bundle and container figures are worked out below (default packaging).</p></header>
           <div class="form-grid">
             <app-field label="MRP">
               <app-money-input formControlName="mrp" />
             </app-field>
-            <app-field label="Distributor price" [required]="true">
+            <app-field label="Distributor price" [required]="true" hint="What the distributor pays Zen Foods">
               <app-money-input formControlName="rate" />
             </app-field>
             <app-field label="Manufacturer rate">
@@ -103,11 +134,14 @@ const withCurrent = (list: string[], current: string | null | undefined): Select
             <app-field label="Printing cost" hint="Only if bought separately">
               <app-money-input formControlName="printingRate" />
             </app-field>
-            <app-field label="Inbound freight">
+            <app-field label="Inbound freight" hint="Manufacturer to us">
               <app-money-input formControlName="inboundRate" />
             </app-field>
+            <app-field label="Outbound freight" hint="To the distributor">
+              <app-money-input formControlName="outboundRate" />
+            </app-field>
           </div>
-          <table class="prices" aria-label="Prices per packet, bundle and container">
+          <table class="prices" aria-label="Costs and margin per packet, bundle and container">
             <thead>
               <tr>
                 <th scope="col">PKR</th>
@@ -118,7 +152,7 @@ const withCurrent = (list: string[], current: string | null | undefined): Select
             </thead>
             <tbody>
               @for (r of priceRows(); track r.label) {
-                <tr [attr.data-total]="r.total ? '' : null">
+                <tr [attr.data-kind]="r.kind">
                   <th scope="row">{{ r.label }}</th>
                   <td>{{ amount2(r.packet) }}</td>
                   <td>{{ amount2(r.packet * packetsPerBundle()) }}</td>
@@ -168,10 +202,74 @@ const withCurrent = (list: string[], current: string | null | undefined): Select
         }
       }
 
-      & tr[data-total] {
+      & tr[data-kind='cost'] th {
+        padding-inline-start: var(--space-4);
+        color: var(--text-2);
+      }
+
+      & tr[data-kind='total'] {
+        font-weight: var(--weight-semibold);
+      }
+
+      & tr[data-kind='margin'] {
         font-weight: var(--weight-semibold);
         background: var(--surface-sunken);
       }
+    }
+
+    .templates {
+      display: flex;
+      flex-direction: column;
+      gap: var(--space-3);
+    }
+
+    .tpl {
+      display: grid;
+      grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr) minmax(0, 1fr) auto auto auto;
+      align-items: end;
+      gap: var(--space-2);
+      padding-block-end: var(--space-3);
+      border-block-end: 1px solid var(--border);
+
+      @media (max-width: 760px) {
+        grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+      }
+    }
+
+    .tpl__total,
+    .tpl__default {
+      display: flex;
+      align-items: center;
+      gap: var(--space-1);
+      block-size: var(--control-h);
+      font-size: var(--text-sm);
+      white-space: nowrap;
+    }
+
+    .tpl__total {
+      color: var(--text-3);
+    }
+
+    .add-row {
+      display: flex;
+      gap: var(--space-2);
+      margin-block-start: var(--space-2);
+
+      & input {
+        flex: 1;
+        min-inline-size: 0;
+      }
+    }
+
+    .add-link {
+      align-self: flex-start;
+      margin-block-start: var(--space-1);
+      padding: 0;
+      border: 0;
+      background: none;
+      color: var(--accent-text);
+      font-size: var(--text-xs);
+      cursor: pointer;
     }
 
     .sections {
@@ -205,6 +303,9 @@ const withCurrent = (list: string[], current: string | null | undefined): Select
 })
 export class ProductForm extends FormModal {
   private store = inject(SettingsStore);
+  private auth = inject(AuthService);
+  private settingsApi = inject(SettingsApi);
+  private toasts = inject(ToastService);
 
   readonly product = input<Product | null>(null);
   readonly manufacturers = input<Manufacturer[]>([]);
@@ -216,81 +317,178 @@ export class ProductForm extends FormModal {
     name: this.fb.nonNullable.control('', Validators.required),
     flavour: this.fb.control<string | null>(null),
     packetSize: this.fb.control<string | null>(null),
+    gramsPerPacket: this.fb.control<number | null>(null, Validators.min(0)),
     description: this.fb.nonNullable.control(''),
     pack: this.fb.nonNullable.control(10, [Validators.required, Validators.min(1)]),
     mrp: this.fb.nonNullable.control(10, Validators.min(0)),
     rate: this.fb.nonNullable.control(6.25, [Validators.required, Validators.min(0)]),
-    packsPerCarton: this.fb.nonNullable.control(432, [Validators.required, Validators.min(1)]),
-    bundlesPerContainer: this.fb.nonNullable.control(10, [Validators.required, Validators.min(1)]),
+    packagings: this.fb.array<FormGroup>([]),
     manufacturerId: this.fb.control<string | null>(null),
-    distributorId: this.fb.control<string | null>(null),
-    selloutDays: this.fb.control<number | null>(null, [Validators.min(1), Validators.max(365)]),
+    distributorIds: this.fb.nonNullable.control<string[]>([]),
+    selloutDays: this.fb.control<number | null>(null, [Validators.min(0), Validators.max(365)]),
     manufacturerRate: this.fb.nonNullable.control(4.25, Validators.min(0)),
     packagingRate: this.fb.nonNullable.control(0, Validators.min(0)),
     printingRate: this.fb.nonNullable.control(0, Validators.min(0)),
     inboundRate: this.fb.nonNullable.control(0, Validators.min(0)),
+    outboundRate: this.fb.nonNullable.control(0, Validators.min(0)),
     active: this.fb.nonNullable.control('true'),
   });
 
+  protected get templates() {
+    return this.form.controls.packagings as FormArray<FormGroup>;
+  }
+
   private value = toSignal(this.form.valueChanges, { initialValue: this.form.getRawValue() });
 
-  protected flavours = computed(() => withCurrent(this.store.options('FLAVOUR'), this.product()?.flavour));
-  protected sizes = computed(() => withCurrent(this.store.options('PACKET_SIZE'), this.product()?.packetSize));
+  protected flavours = computed(() => withCurrent(this.store.options('FLAVOUR'), this.value().flavour ?? this.product()?.flavour));
+  protected sizes = computed(() => withCurrent(this.store.options('PACKET_SIZE'), this.value().packetSize ?? this.product()?.packetSize));
   protected manufacturerOptions = computed<SelectOption<string>[]>(() =>
     this.manufacturers().map((m) => ({ value: m.id, label: m.name, sub: m.poc ?? m.contact ?? undefined })));
   protected distributorOptions = computed<SelectOption<string>[]>(() =>
     this.distributors().map((d) => ({ value: d.id, label: d.name, sub: d.region })));
 
-  protected perContainer = computed(() => {
-    const v = this.value();
-    return `${fmtNumber(Number(v.packsPerCarton || 0) * Number(v.bundlesPerContainer || 0))} packets`;
+  // ───────── a new flavour or packet size, added to the Settings list from here (Admin only) ─────────
+  protected canAddToLists = computed(() => this.auth.can('admin'));
+  protected adding = signal<LookupList | null>(null);
+  protected newEntry = signal('');
+  protected saving = signal(false);
+
+  protected startAdd(list: LookupList) {
+    this.newEntry.set('');
+    this.adding.set(list);
+  }
+
+  protected addEntry(list: LookupList) {
+    const code = this.newEntry().trim();
+    if (!code) return;
+    this.saving.set(true);
+    this.settingsApi.addLookup({ list, code }).subscribe({
+      next: () => {
+        this.saving.set(false);
+        this.adding.set(null);
+        this.store.reload();
+        this.form.patchValue(list === 'FLAVOUR' ? { flavour: code } : { packetSize: code });
+        this.form.markAsDirty();
+        this.toasts.success(`${code} added to Settings & Data.`);
+      },
+      error: (err) => {
+        this.saving.set(false);
+        this.toasts.error(errorText(err));
+      },
+    });
+  }
+
+  // ───────── packaging templates ─────────
+  private templateGroup(t?: Partial<PackagingTemplate>) {
+    return this.fb.nonNullable.group({
+      name: [t?.name ?? '', Validators.required],
+      packetsPerBundle: [t?.packetsPerBundle ?? 432, [Validators.required, Validators.min(1)]],
+      bundlesPerContainer: [t?.bundlesPerContainer ?? 10, [Validators.required, Validators.min(1)]],
+      isDefault: [t?.isDefault ?? false],
+    });
+  }
+
+  protected addTemplate() {
+    const d = this.defaultTemplate();
+    this.templates.push(this.templateGroup({ name: `Template ${this.templates.length + 1}`, packetsPerBundle: d.packetsPerBundle, bundlesPerContainer: d.bundlesPerContainer }));
+    this.form.markAsDirty();
+  }
+
+  protected removeTemplate(i: number) {
+    const wasDefault = this.templates.at(i).value.isDefault;
+    this.templates.removeAt(i);
+    if (wasDefault && this.templates.length) this.templates.at(0).patchValue({ isDefault: true });
+    this.form.markAsDirty();
+  }
+
+  protected makeDefault(i: number) {
+    this.templates.controls.forEach((g, j) => g.patchValue({ isDefault: j === i }));
+    this.form.markAsDirty();
+  }
+
+  private defaultTemplate = computed(() => {
+    const list = (this.value().packagings ?? []) as Partial<PackagingTemplate>[];
+    const d = list.find((t) => t.isDefault) ?? list[0];
+    return { packetsPerBundle: Number(d?.packetsPerBundle || 0), bundlesPerContainer: Number(d?.bundlesPerContainer || 0) };
   });
-  /** packets in one bundle and in one container, as typed */
-  protected packetsPerBundle = computed(() => Number(this.value().packsPerCarton || 0));
-  protected packetsPerContainer = computed(() => this.packetsPerBundle() * Number(this.value().bundlesPerContainer || 0));
-  /** each per-packet price, and what it comes to for a bundle and a container (for understanding only, nothing is stored) */
+  protected perContainerOf = (i: number) => {
+    const t = ((this.value().packagings ?? [])[i] ?? {}) as Partial<PackagingTemplate>;
+    return Number(t.packetsPerBundle || 0) * Number(t.bundlesPerContainer || 0);
+  };
+
+  /** packets in one bundle and in one container of the default template, as typed */
+  protected packetsPerBundle = computed(() => this.defaultTemplate().packetsPerBundle);
+  protected packetsPerContainer = computed(() => this.packetsPerBundle() * this.defaultTemplate().bundlesPerContainer);
+
+  /**
+   * The client's margin check, per packet: MRP less every cost (the manufacturer's rate, the distributor's share
+   * of the MRP, printing, packaging, inbound and outbound freight). Display only; nothing extra is stored.
+   */
   protected priceRows = computed(() => {
     const v = this.value();
     const n = (x: unknown) => Number(x || 0);
-    const landed = n(v.manufacturerRate) + n(v.packagingRate) + n(v.printingRate) + n(v.inboundRate);
+    const mrp = n(v.mrp);
+    const costs = [
+      { label: 'Manufacturer rate', packet: n(v.manufacturerRate) },
+      { label: 'Distributor share (MRP − distributor price)', packet: Math.max(0, mrp - n(v.rate)) },
+      { label: 'Printing', packet: n(v.printingRate) },
+      { label: 'Packaging', packet: n(v.packagingRate) },
+      { label: 'Inbound freight', packet: n(v.inboundRate) },
+      { label: 'Outbound freight', packet: n(v.outboundRate) },
+    ];
+    const total = costs.reduce((s, c) => s + c.packet, 0);
     return [
-      { label: 'MRP', packet: n(v.mrp), total: false },
-      { label: 'Distributor price', packet: n(v.rate), total: false },
-      { label: 'Manufacturer rate', packet: n(v.manufacturerRate), total: false },
-      { label: 'Landed cost', packet: landed, total: false },
-      { label: 'Margin', packet: n(v.rate) - landed, total: true },
+      { label: 'MRP', packet: mrp, kind: 'price' },
+      ...costs.map((c) => ({ ...c, kind: 'cost' })),
+      { label: 'Total cost', packet: total, kind: 'total' },
+      { label: 'Margin (MRP − total cost)', packet: mrp - total, kind: 'margin' },
     ];
   });
   protected amount2 = fmtAmount2;
   protected num = fmtNumber;
   protected selloutHint = computed(() => {
-    const d = this.distributors().find((x) => x.id === this.value().distributorId);
-    return d ? `Empty = ${d.name}'s ${d.selloutDays ?? 30} days` : 'Empty = the distributor default';
+    const first = this.value().distributorIds?.[0];
+    const d = this.distributors().find((x) => x.id === first);
+    return d ? `Empty = ${d.name}'s ${d.selloutDays ? d.selloutDays + ' days' : 'no limit'}. 0 = no limit` : 'Empty = the distributor default. 0 = no limit';
   });
 
   protected reset() {
     const p = this.product();
     const s = this.store.settings();
+    this.adding.set(null);
+    this.templates.clear();
+    const templates: Partial<PackagingTemplate>[] = p?.packagings?.length
+      ? p.packagings
+      : [{ name: 'Standard', packetsPerBundle: p?.packsPerCarton ?? s?.packsPerCarton ?? 432, bundlesPerContainer: p?.bundlesPerContainer ?? s?.bundlesPerContainer ?? 10, isDefault: true }];
+    for (const t of templates) this.templates.push(this.templateGroup(t));
     this.form.reset(p
       ? {
-        ...p, description: p.description ?? '', flavour: p.flavour ?? null, packetSize: p.packetSize ?? null,
-        bundlesPerContainer: p.bundlesPerContainer ?? 10, manufacturerId: p.manufacturerId ?? null,
-        distributorId: p.distributorId ?? null, selloutDays: p.selloutDays ?? null, active: String(p.active),
+        sku: p.sku, name: p.name, flavour: p.flavour ?? null, packetSize: p.packetSize ?? null, gramsPerPacket: p.gramsPerPacket ?? null,
+        description: p.description ?? '', pack: p.pack, mrp: p.mrp, rate: p.rate, manufacturerId: p.manufacturerId ?? null,
+        distributorIds: p.distributorIds?.length ? [...p.distributorIds] : p.distributorId ? [p.distributorId] : [],
+        selloutDays: p.selloutDays ?? null, manufacturerRate: p.manufacturerRate, packagingRate: p.packagingRate,
+        printingRate: p.printingRate, inboundRate: p.inboundRate, outboundRate: p.outboundRate ?? 0, active: String(p.active),
       }
       : {
-        sku: '', name: '', flavour: null, packetSize: null, description: '', pack: 10, mrp: 10, rate: 6.25,
-        packsPerCarton: s?.packsPerCarton ?? 432, bundlesPerContainer: s?.bundlesPerContainer ?? 10,
-        manufacturerId: this.manufacturers().length === 1 ? this.manufacturers()[0].id : null, distributorId: null, selloutDays: null,
-        manufacturerRate: 4.25, packagingRate: 0, printingRate: 0, inboundRate: 0, active: 'true',
+        sku: '', name: '', flavour: null, packetSize: null, gramsPerPacket: null, description: '', pack: 10, mrp: 10, rate: 6.25,
+        manufacturerId: this.manufacturers().length === 1 ? this.manufacturers()[0].id : null, distributorIds: [], selloutDays: null,
+        manufacturerRate: 4.25, packagingRate: 0, printingRate: 0, inboundRate: 0, outboundRate: 0, active: 'true',
       });
+    // reset() above sets the template rows back to their first values; put them back
+    templates.forEach((t, i) => this.templates.at(i).reset({ ...t, isDefault: !!t.isDefault }));
   }
 
   protected request() {
     const v = this.form.getRawValue();
     const days = v.selloutDays === null || (v.selloutDays as unknown) === '' ? null : Number(v.selloutDays);
+    const grams = v.gramsPerPacket === null || (v.gramsPerPacket as unknown) === '' ? null : Number(v.gramsPerPacket);
     return this.api.saveProduct(this.product()?.id ?? null, {
       ...v, sku: v.sku.trim(), name: v.name.trim(), description: v.description.trim() || null,
-      selloutDays: days, active: v.active === 'true',
+      selloutDays: days, gramsPerPacket: grams, active: v.active === 'true',
+      packagings: (v.packagings as PackagingTemplate[]).map((t) => ({
+        name: t.name.trim(), packetsPerBundle: Number(t.packetsPerBundle), bundlesPerContainer: Number(t.bundlesPerContainer), isDefault: !!t.isDefault,
+      })),
+      packsPerCarton: Number(this.packetsPerBundle()), bundlesPerContainer: Number(this.defaultTemplate().bundlesPerContainer),
     });
   }
 

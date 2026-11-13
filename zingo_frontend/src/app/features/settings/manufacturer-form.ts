@@ -1,8 +1,9 @@
 import { AttachmentMeta } from '../../core/attachments.api';
 import { ChangeDetectionStrategy, Component, computed, inject, input } from '@angular/core';
+import { toSignal } from '@angular/core/rxjs-interop';
 import { FormArray, FormGroup, ReactiveFormsModule, Validators } from '@angular/forms';
 import { SettingsStore } from '../../core/settings.store';
-import { Btn, Field, FilesInput, Offcanvas, Select, SelectOption } from '../../ui';
+import { Btn, Field, FilesInput, MoneyInput, MultiSelect, Offcanvas, Select, SelectOption } from '../../ui';
 import { FormModal } from '../ops/form-modal';
 import { Manufacturer, PartnerBankAccount } from '../ops/models';
 import { SettingsApi } from './settings.api';
@@ -15,7 +16,7 @@ import { SettingsApi } from './settings.api';
 @Component({
   selector: 'app-manufacturer-form',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [FilesInput, ReactiveFormsModule, Offcanvas, Field, Btn, Select],
+  imports: [FilesInput, ReactiveFormsModule, Offcanvas, Field, Btn, Select, MultiSelect, MoneyInput],
   styles: `
     .form-section {
       grid-column: 1 / -1;
@@ -75,13 +76,23 @@ import { SettingsApi } from './settings.api';
         <app-field label="Contact" [wide]="true"><input type="text" formControlName="contact" maxlength="200" /></app-field>
 
         <h4 class="form-section">Payment terms</h4>
-        <app-field label="Advance on order (%)" hint="Paid when an order is placed" [required]="true"
-                   [error]="invalid('advancePct') ? '0 to 100' : null">
-          <input type="number" formControlName="advancePct" min="0" max="100" step="1" />
+        <app-field label="Terms" [wide]="true" hint="Pick one or both" [error]="noTerm() ? 'Choose at least one term' : null">
+          <app-multi-select formControlName="paymentTerms" [options]="termOptions" placeholder="Add a term" />
         </app-field>
-        <app-field label="Balance due in (days)" hint="After delivery" [required]="true" [error]="invalid('paymentDays') ? '0 to 365 days' : null">
-          <input type="number" formControlName="paymentDays" min="0" max="365" step="1" />
-        </app-field>
+        @if (has('Advance')) {
+          <app-field label="Advance on order (%)" hint="Paid when an order is placed" [required]="true"
+                     [error]="invalid('advancePct') ? '0 to 100' : null">
+            <input type="number" formControlName="advancePct" min="0" max="100" step="1" />
+          </app-field>
+        }
+        @if (has('Credit line')) {
+          <app-field label="Credit limit" hint="Most Zen Foods may owe. 0 = no limit">
+            <app-money-input formControlName="creditLimit" />
+          </app-field>
+          <app-field label="Days to clear" hint="After delivery. 0 = no limit" [required]="true" [error]="invalid('paymentDays') ? '0 to 365 days' : null">
+            <input type="number" formControlName="paymentDays" min="0" max="365" step="1" />
+          </app-field>
+        }
         <app-field label="Currency">
           <select formControlName="currency">
             @for (c of currencies(); track c.code) {
@@ -140,7 +151,9 @@ export class ManufacturerForm extends FormModal {
   readonly form = this.fb.nonNullable.group({
     name: ['', Validators.required],
     contact: [''],
+    paymentTerms: [['Advance'] as string[]],
     advancePct: [30, [Validators.required, Validators.min(0), Validators.max(100)]],
+    creditLimit: [0, Validators.min(0)],
     paymentDays: [30, [Validators.required, Validators.min(0), Validators.max(365)]],
     currency: ['PKR'],
     bankAccounts: this.fb.array<FormGroup>([]),
@@ -149,6 +162,15 @@ export class ManufacturerForm extends FormModal {
     terms: [''],
     files: [[] as AttachmentMeta[]],
   });
+
+  /** the two ways a manufacturer can be paid */
+  protected termOptions: SelectOption<string>[] = [
+    { value: 'Advance', label: 'Advance on order', sub: '% of each order, paid up front' },
+    { value: 'Credit line', label: 'Credit line', sub: 'Pay later, up to a limit, within days' },
+  ];
+  private terms = toSignal(this.form.controls.paymentTerms.valueChanges, { initialValue: this.form.controls.paymentTerms.value });
+  protected has = (t: string) => (this.terms() ?? []).includes(t);
+  protected noTerm = computed(() => !(this.terms() ?? []).length);
 
   protected get banks() {
     return this.form.controls.bankAccounts as FormArray<FormGroup>;
@@ -199,8 +221,9 @@ export class ManufacturerForm extends FormModal {
     this.banks.clear();
     for (const a of m?.bankAccounts ?? []) this.banks.push(this.bankGroup(a));
     this.form.reset({
-      name: m?.name ?? '', contact: m?.contact ?? '', advancePct: m ? Number(m.advancePct ?? 0) : Number(this.store.settings()?.defaultAdvancePct ?? 30),
-      paymentDays: m?.paymentDays ?? 30, currency: m?.currency ?? 'PKR', poc: m?.poc ?? '', contract: m?.contract ?? '',
+      name: m?.name ?? '', contact: m?.contact ?? '', paymentTerms: m?.paymentTerms?.length ? [...m.paymentTerms] : ['Advance'],
+      advancePct: m ? Number(m.advancePct ?? 0) : Number(this.store.settings()?.defaultAdvancePct ?? 30),
+      creditLimit: Number(m?.creditLimit ?? 0), paymentDays: m?.paymentDays ?? 30, currency: m?.currency ?? 'PKR', poc: m?.poc ?? '', contract: m?.contract ?? '',
       terms: m?.terms ?? '', files: m?.files ?? [],
     });
     // reset() above would clear the bank rows' values: put them back
@@ -210,7 +233,7 @@ export class ManufacturerForm extends FormModal {
   protected request() {
     const v = this.form.getRawValue();
     return this.settingsApi.saveManufacturer(this.manufacturer()?.id ?? null, {
-      ...v, paymentDays: Number(v.paymentDays), advancePct: Number(v.advancePct),
+      ...v, paymentDays: Number(v.paymentDays), advancePct: Number(v.advancePct), creditLimit: Number(v.creditLimit),
       bankAccounts: (v.bankAccounts as PartnerBankAccount[]).map((a) => ({ ...a, branch: a.branch?.trim() || undefined })),
     });
   }

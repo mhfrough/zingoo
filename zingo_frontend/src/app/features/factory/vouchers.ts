@@ -19,7 +19,7 @@ export function orderVoucher(o: ProductionOrder, company?: string): Voucher {
       rows: [[`${o.product.sku} · ${o.product.name}`, fmtNumber(o.containers), fmtNumber(o.bundles), fmtNumber(o.packets), fmtAmount2(o.rate), fmtAmount(o.value)]],
       foot: ['Total', '', '', '', '', fmtAmount(o.value)],
     },
-    note: `${o.bundlesPerContainer} bundles per container, ${o.packetsPerBundle} packets per bundle. Prices in PKR.`,
+    note: `${o.packaging ? `Packaging "${o.packaging}": ` : ''}${o.bundlesPerContainer} bundles per container, ${o.packetsPerBundle} packets per bundle. Prices in PKR.`,
   };
 }
 

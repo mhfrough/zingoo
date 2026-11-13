@@ -6,7 +6,7 @@
 
 export const manufacturers = [
   {
-    key: 'm1', name: 'Brand Choice Pakistan', paymentDays: 30, advancePct: 30, currency: 'PKR', contact: 'Production partner',
+    key: 'm1', name: 'Brand Choice Pakistan', paymentTerms: ['Advance', 'Credit line'] as ('Advance' | 'Credit line')[], creditLimit: 5000000, paymentDays: 30, advancePct: 30, currency: 'PKR', contact: 'Production partner',
     // sample account details, not real ones
     bankAccounts: [
       { bank: 'Meezan Bank', title: 'Brand Choice Pakistan', account: 'PK00SAMPLE0000000001', branch: 'Sample branch', isDefault: true },
@@ -18,16 +18,16 @@ export const manufacturers = [
 const productDefaults = { packsPerCarton: 432, bundlesPerContainer: 10, manufacturer: 'm1', packagingRate: 0.35, printingRate: 0.15, inboundRate: 0.1, currency: 'PKR', active: true };
 
 export const products = [
-  { key: 'p1', flavour: 'Masala Masti', packetSize: 'Rs 10 pack', distributor: 'd1', sku: 'Z10-MAS', name: 'Masala Masti', pack: 10, mrp: 10, rate: 6.25, manufacturerRate: 4.25, ...productDefaults },
+  { key: 'p1', gramsPerPacket: 18, outboundRate: 0.1, packagings: [{ name: 'Standard', packetsPerBundle: 432, bundlesPerContainer: 10, isDefault: true }, { name: 'Half container', packetsPerBundle: 432, bundlesPerContainer: 5, isDefault: false }], flavour: 'Masala Masti', packetSize: 'Rs 10 pack', distributor: 'd1', sku: 'Z10-MAS', name: 'Masala Masti', pack: 10, mrp: 10, rate: 6.25, manufacturerRate: 4.25, ...productDefaults },
   { key: 'p2', flavour: 'Ketchup Tango', packetSize: 'Rs 10 pack', distributor: 'd2', sku: 'Z10-KET', name: 'Ketchup Tango', pack: 10, mrp: 10, rate: 6.25, manufacturerRate: 4.25, ...productDefaults },
   { key: 'p3', flavour: 'Masala Masti', packetSize: 'Rs 20 pack', distributor: 'd3', sku: 'Z20-MAS', name: 'Masala Masti', pack: 20, mrp: 20, rate: 12.5, manufacturerRate: 8.7, ...productDefaults },
   { key: 'p4', flavour: 'Ketchup Tango', packetSize: 'Rs 20 pack', distributor: 'd1', sku: 'Z20-KET', name: 'Ketchup Tango', pack: 20, mrp: 20, rate: 12.5, manufacturerRate: 8.7, ...productDefaults },
 ];
 
 export const distributors = [
-  { key: 'd1', name: 'Sindh Central Distributors', region: 'Hyderabad', province: 'Sindh', areas: ['Tando Allahyar', 'Matiari'], contact: 'Demo contact', address: 'Hyderabad, Sindh, Pakistan', taxNo: '', paymentDays: 30, creditLimit: 300000, advancePct: 10, selloutDays: 30 },
-  { key: 'd2', name: 'South Route Partners', region: 'Karachi', province: 'Sindh', areas: [], contact: 'Demo contact', address: 'Karachi, Sindh, Pakistan', taxNo: '', paymentDays: 45, creditLimit: 250000, advancePct: 15, selloutDays: 40 },
-  { key: 'd3', name: 'Upper Sindh Supply', region: 'Sukkur', province: 'Sindh', areas: ['Rohri', 'Shikarpur'], contact: 'Demo contact', address: 'Sukkur, Sindh, Pakistan', taxNo: '', paymentDays: 60, creditLimit: 200000, advancePct: 10, selloutDays: 30 },
+  { key: 'd1', name: 'Sindh Central Distributors', region: 'Hyderabad', market: 'Local' as const, provinces: ['Sindh'], districts: [{ name: 'Hyderabad', province: 'Sindh' }, { name: 'Tando Allahyar', province: 'Sindh' }, { name: 'Matiari', province: 'Sindh' }], cities: [{ name: 'Hyderabad', province: 'Sindh', district: 'Hyderabad' }, { name: 'Tando Allahyar', province: 'Sindh', district: 'Tando Allahyar' }, { name: 'Matiari', province: 'Sindh', district: 'Matiari' }], contact: 'Demo contact', address: 'Hyderabad, Sindh, Pakistan', taxNo: '', paymentDays: 30, creditLimit: 300000, advancePct: 10, selloutDays: 30 },
+  { key: 'd2', name: 'South Route Partners', region: 'Karachi', market: 'Local' as const, provinces: ['Sindh'], districts: [{ name: 'Karachi', province: 'Sindh' }], cities: [{ name: 'Karachi', province: 'Sindh', district: 'Karachi' }], exclusive: true, contact: 'Demo contact', address: 'Karachi, Sindh, Pakistan', taxNo: '', paymentDays: 45, creditLimit: 250000, advancePct: 15, selloutDays: 40 },
+  { key: 'd3', name: 'Upper Sindh Supply', region: 'Sukkur', market: 'Local' as const, provinces: ['Sindh'], districts: [{ name: 'Sukkur', province: 'Sindh' }, { name: 'Shikarpur', province: 'Sindh' }], cities: [{ name: 'Sukkur', province: 'Sindh', district: 'Sukkur' }, { name: 'Rohri', province: 'Sindh', district: 'Sukkur' }, { name: 'Shikarpur', province: 'Sindh', district: 'Shikarpur' }], contact: 'Demo contact', address: 'Sukkur, Sindh, Pakistan', taxNo: '', paymentDays: 60, creditLimit: 200000, advancePct: 10, selloutDays: 30 },
 ];
 
 /** users: the client's 7 roles plus one demo distributor login */

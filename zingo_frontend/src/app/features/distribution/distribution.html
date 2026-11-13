@@ -104,5 +104,5 @@
   [products]="products.value() ?? []" (saved)="reload()" />
 <app-collection-form [(open)]="collectOpen" [order]="collectingOrder()" (saved)="reload()" />
 <app-distributor-form [(open)]="distributorOpen" [distributor]="editingDistributor()"
-  [paymentCycles]="settings.value()?.paymentCycles ?? [15, 30, 45, 60]" [defaultSelloutDays]="settings.value()?.defaultSelloutDays ?? 30" (saved)="reload()" />
+  [paymentCycles]="settings.value()?.paymentCycles ?? [15, 30, 45, 60]" [defaultSelloutDays]="settings.value()?.defaultSelloutDays ?? 30" [others]="distributors.value() ?? []" (saved)="reload()" />
 <app-credit-override-form [(open)]="overrideOpen" [order]="overrideOrder()" (saved)="reload()" />

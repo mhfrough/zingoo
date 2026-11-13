@@ -10,6 +10,8 @@ export class CreateProductionOrderDto {
   @IsOptional() @IsIn([...ORDER_DESTINATIONS]) destination?: OrderDestination;
   @IsOptional() @IsUUID() distributorId?: string | null;
   @IsInt() @Min(1) @Max(100000) containers: number;
+  /** a packaging template of the product, by name; empty = its default */
+  @IsOptional() @IsString() @MaxLength(60) packaging?: string | null;
   /** price per packet; empty = the product's manufacturer rate */
   @IsOptional() @IsNumber() @Min(0) rate?: number;
   @IsOptional() @IsDateString() dueDate?: string | null;

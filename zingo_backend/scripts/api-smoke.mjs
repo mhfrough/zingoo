@@ -939,10 +939,10 @@ ok('but cannot be added to a new account -> 400',
 await call(T.owner, 'PATCH', `/lookups/${p2BankRow.id}`, { active: true });
 ok('only Admin edits manufacturers -> 403', (await call(T.finance, 'PATCH', `/manufacturers/${p2New.json?.id}`, { advancePct: 10 })).status === 403);
 const p2D = ((await call(T.owner, 'GET', '/distributors')).json ?? []).find((d) => d.region === 'Hyderabad');
-ok('a distributor has a province and the other areas it covers', p2D?.province === 'Sindh' && p2D?.areas?.includes('Matiari'), JSON.stringify(p2D));
-const p2DUp = await call(T.owner, 'PATCH', `/distributors/${p2D.id}`, { region: 'Hyderabad', areas: [' Kotri ', 'kotri', '', 'Hyderabad', 'Jamshoro'] });
-ok('areas are trimmed, without blanks, repeats or the main city', JSON.stringify(p2DUp.json?.areas) === JSON.stringify(['Kotri', 'Jamshoro']), JSON.stringify(p2DUp.json?.areas));
-ok('more than 100 areas -> 400', (await call(T.owner, 'PATCH', `/distributors/${p2D.id}`, { areas: Array.from({ length: 101 }, (_, i) => `Area ${i}`) })).status === 400);
+ok('a distributor covers provinces, districts and cities', p2D?.provinces?.includes('Sindh') && p2D?.districts?.some((d) => d.name === 'Matiari') && p2D?.cities?.some((c) => c.name === 'Matiari' && c.district === 'Matiari'), JSON.stringify(p2D));
+const p2DUp = await call(T.owner, 'PATCH', `/distributors/${p2D.id}`, { cities: [{ name: ' Kotri ', province: 'Sindh', district: 'Jamshoro' }, { name: 'Kotri', province: 'Sindh', district: 'Jamshoro' }, { name: 'Hyderabad', province: 'Sindh', district: 'Hyderabad' }] });
+ok('areas are trimmed, without blanks or repeats', JSON.stringify((p2DUp.json?.cities ?? []).map((c) => c.name)) === JSON.stringify(['Kotri', 'Hyderabad']), JSON.stringify(p2DUp.json?.cities));
+ok('more than 600 cities -> 400', (await call(T.owner, 'PATCH', `/distributors/${p2D.id}`, { cities: Array.from({ length: 601 }, (_, i) => ({ name: `Area ${i}`, province: 'Sindh' })) })).status === 400);
 
 // ── P3 production orders and the manufacturer portal ──
 const p3Maker = await login('manufacturer@demo.local');
@@ -1232,6 +1232,71 @@ ok('rejecting twice -> 400', (await call(T.finance, 'POST', `/accounting-documen
 ok('an approved bill cannot be rejected -> 400', (await call(T.finance, 'POST', `/accounting-documents/${bl.json.id}/reject`, { reason: 'Too late' })).status === 400);
 ok('an income invoice cannot be rejected -> 400', (await call(T.finance, 'POST', `/accounting-documents/${ivDraft.json.id}/reject`, { reason: 'No' })).status === 400);
 ok('a rejected bill can be deleted', (await call(T.finance, 'DELETE', `/accounting-documents/${p8Bill.json.id}`)).status === 200);
+
+// ── Client fixes 2026-11-13: A distributor areas, exclusivity, terms, status ──
+const aDists = (await call(T.owner, 'GET', '/distributors')).json ?? [];
+const aSouth = aDists.find((d) => d.name === 'South Route Partners');
+const aSindh = aDists.find((d) => d.name === 'Sindh Central Distributors');
+ok('sample: South Route holds Karachi exclusively', aSouth?.exclusive === true && aSouth?.districts?.some((d) => d.name === 'Karachi'));
+const aNew = (o = {}) => ({ name: `A Dist ${Date.now() % 100000}`, market: 'Local', provinces: ['Sindh'], cities: [{ name: 'Karachi', province: 'Sindh', district: 'Karachi' }], ...o });
+const aClash = await call(T.owner, 'POST', '/distributors', aNew());
+ok('a city inside an exclusive district cannot go to another distributor -> 400', aClash.status === 400 && /exclusively to South Route/.test(aClash.json?.message), JSON.stringify(aClash.json));
+const aOk = await call(T.owner, 'POST', '/distributors', aNew({ provinces: ['Punjab'], districts: [{ name: 'Lahore', province: 'Punjab' }], cities: [{ name: 'Lahore', province: 'Punjab', district: 'Lahore' }] }));
+ok('a distributor with provinces, districts and cities; territory label from the first city', aOk.status === 201 && aOk.json?.region === 'Lahore' && aOk.json?.districts?.[0]?.name === 'Lahore', JSON.stringify(aOk.json));
+ok('making it exclusive over an area another already covers -> 400', (await call(T.owner, 'PATCH', `/distributors/${aSindh.id}`, { exclusive: true, provinces: ['Sindh', 'Punjab'] })).status === 400);
+ok('no area at all -> 400', (await call(T.owner, 'POST', '/distributors', { name: 'Nowhere Ltd' })).status === 400);
+const aIntl = await call(T.owner, 'POST', '/distributors', { name: `A Intl ${Date.now() % 100000}`, market: 'International', countries: ['United Arab Emirates'], provinces: ['Sindh'] });
+ok('an international distributor keeps countries, not Pakistan areas', aIntl.status === 201 && aIntl.json?.countries?.[0] === 'United Arab Emirates' && aIntl.json?.provinces?.length === 0, JSON.stringify(aIntl.json));
+ok('custom payment days (21) are allowed', (await call(T.owner, 'PATCH', `/distributors/${aOk.json.id}`, { paymentDays: 21 })).json?.paymentDays === 21);
+ok('0 sell-out days (no limit) is allowed', (await call(T.owner, 'PATCH', `/distributors/${aOk.json.id}`, { selloutDays: 0 })).json?.selloutDays === 0);
+ok('an unknown status -> 400', (await call(T.owner, 'PATCH', `/distributors/${aSindh.id}`, { status: 'Sleeping' })).status === 400);
+// Hold: the distributor's login can look, not change
+await call(T.owner, 'PATCH', `/distributors/${aSindh.id}`, { status: 'Hold', statusNote: 'Audit' });
+ok('on hold: the distributor can still read', (await call(T.dist, 'GET', '/portal/profile')).status === 200);
+ok('on hold: the distributor cannot change anything -> 403', (await call(T.dist, 'POST', '/distributor-invoices', { date: p6Day, lines: [{ shipmentId: p6S.id, containers: 1 }] })).status === 403);
+ok('on hold: staff still work for it', (await call(T.owner, 'GET', `/portal/profile?distributorId=${aSindh.id}`)).status === 200);
+// Suspended: no sign-in
+await call(T.owner, 'PATCH', `/distributors/${aSindh.id}`, { status: 'Temporary suspend', statusUntil: '2999-01-01' });
+ok('temporarily suspended: the login cannot sign in -> 401', (await call(null, 'POST', '/auth/login', { email: 'distributor@demo.local', password: PW })).status === 401);
+ok('and its open session stops working -> 401', (await call(T.dist, 'GET', '/portal/profile')).status === 401);
+ok('no new production order can go to it -> 400', (await call(T.factory, 'POST', '/production-orders', { date: p6Day, productId: p5Mo.productId, containers: 1, distributorId: aSindh.id })).status === 400);
+await call(T.owner, 'PATCH', `/distributors/${aSindh.id}`, { status: 'Temporary suspend', statusUntil: p6Day });
+ok('a temporary suspension ends on its date', (await call(null, 'POST', '/auth/login', { email: 'distributor@demo.local', password: PW })).status === 201);
+await call(T.owner, 'PATCH', `/distributors/${aSindh.id}`, { status: 'Permanent suspend' });
+ok('permanently suspended: no sign-in -> 401', (await call(null, 'POST', '/auth/login', { email: 'distributor@demo.local', password: PW })).status === 401);
+const aBack = await call(T.owner, 'PATCH', `/distributors/${aSindh.id}`, { status: 'Active' });
+ok('active again: signs in, and the suspension date is cleared', aBack.json?.statusUntil === null && (await call(null, 'POST', '/auth/login', { email: 'distributor@demo.local', password: PW })).status === 201);
+T.dist = await login('distributor@demo.local');
+
+// ── B manufacturer payment terms ──
+const bM = ((await call(T.owner, 'GET', '/manufacturers')).json ?? []).find((m) => m.name === 'Brand Choice Pakistan');
+ok('sample manufacturer: advance and a credit line of 5,000,000', JSON.stringify(bM?.paymentTerms) === JSON.stringify(['Advance', 'Credit line']) && bM?.creditLimit === 5000000, JSON.stringify(bM?.paymentTerms));
+const bOnlyAdv = await call(T.owner, 'POST', '/manufacturers', { name: `B Adv ${Date.now() % 100000}`, paymentTerms: ['Advance'], advancePct: 40, creditLimit: 100, paymentDays: 20 });
+ok('advance only: no credit limit or days are kept', bOnlyAdv.json?.advancePct === 40 && bOnlyAdv.json?.creditLimit === 0 && bOnlyAdv.json?.paymentDays === 0, JSON.stringify(bOnlyAdv.json));
+const bOnlyCredit = await call(T.owner, 'POST', '/manufacturers', { name: `B Credit ${Date.now() % 100000}`, paymentTerms: ['Credit line'], advancePct: 40, creditLimit: 250000, paymentDays: 45 });
+ok('credit line only: no advance', bOnlyCredit.json?.advancePct === 0 && bOnlyCredit.json?.creditLimit === 250000 && bOnlyCredit.json?.paymentDays === 45, JSON.stringify(bOnlyCredit.json));
+ok('no term at all -> 400', (await call(T.owner, 'POST', '/manufacturers', { name: 'B None', paymentTerms: [] })).status === 400);
+ok('an unknown term -> 400', (await call(T.owner, 'POST', '/manufacturers', { name: 'B Odd', paymentTerms: ['Barter'] })).status === 400);
+
+// ── C products ──
+const cProds = (await call(T.owner, 'GET', '/products')).json ?? [];
+const cMas = cProds.find((p) => p.sku === 'Z10-MAS');
+ok('sample SKU: grams, outbound freight and two packaging templates', cMas?.gramsPerPacket === 18 && cMas?.outboundRate === 0.1 && cMas?.packagings?.length === 2 && cMas?.packagings?.find((t) => t.isDefault)?.name === 'Standard', JSON.stringify(cMas?.packagings));
+ok('a duplicate SKU in other letter case -> 409', (await call(T.owner, 'POST', '/products', { sku: ' z10-mas ', name: 'Copy', pack: 10, mrp: 10, rate: 6, packsPerCarton: 20 })).status === 409);
+const cBody = (o = {}) => ({ sku: `C-${Date.now() % 100000}`, name: 'Chilli Crunch', pack: 20, mrp: 20, rate: 13, packsPerCarton: 24, ...o });
+const cNew = await call(T.owner, 'POST', '/products', cBody({
+  packagings: [{ name: 'Big', packetsPerBundle: 24, bundlesPerContainer: 40, isDefault: false }, { name: 'Small', packetsPerBundle: 12, bundlesPerContainer: 20, isDefault: true }],
+  distributorIds: [aSouth.id, aSindh.id],
+}));
+ok('the default template sets packets per bundle and bundles per container', cNew.status === 201 && cNew.json?.packsPerCarton === 12 && cNew.json?.bundlesPerContainer === 20, JSON.stringify(cNew.json));
+ok('several distributors: the first is the main one', cNew.json?.distributorId === aSouth.id && cNew.json?.distributorIds?.length === 2);
+ok('two templates with one name -> 400', (await call(T.owner, 'POST', '/products', cBody({ packagings: [{ name: 'A', packetsPerBundle: 1, bundlesPerContainer: 1, isDefault: true }, { name: 'a', packetsPerBundle: 2, bundlesPerContainer: 2, isDefault: false }] }))).status === 400);
+ok('two default templates -> 400', (await call(T.owner, 'POST', '/products', cBody({ packagings: [{ name: 'A', packetsPerBundle: 1, bundlesPerContainer: 1, isDefault: true }, { name: 'B', packetsPerBundle: 2, bundlesPerContainer: 2, isDefault: true }] }))).status === 400);
+ok('an unknown distributor in the list -> 400', (await call(T.owner, 'POST', '/products', cBody({ distributorIds: ['00000000-0000-4000-8000-000000000000'] }))).status === 400);
+const cOrder = await call(T.factory, 'POST', '/production-orders', { date: p6Day, productId: cMas.id, containers: 2, packaging: 'Half container' });
+ok('a production order picks a packaging template', cOrder.json?.packaging === 'Half container' && cOrder.json?.bundlesPerContainer === 5 && cOrder.json?.packets === 2 * 5 * 432, JSON.stringify(cOrder.json?.packaging));
+ok('a template the product does not have -> 400', (await call(T.factory, 'POST', '/production-orders', { date: p6Day, productId: cMas.id, containers: 1, packaging: 'Jumbo' })).status === 400);
+ok('no template given: the default', (await call(T.factory, 'POST', '/production-orders', { date: p6Day, productId: cMas.id, containers: 1 })).json?.packaging === 'Standard');
 
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

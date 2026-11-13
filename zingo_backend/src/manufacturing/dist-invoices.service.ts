@@ -77,7 +77,7 @@ export class DistInvoicesService {
       const refNo = await nextRef(em, DistributorInvoice, s.docPrefixes['distInvoice'] ?? 'DI', 3);
       const inv = await em.save(em.create(DistributorInvoice, {
         refNo, date: dto.date, distributorId, invoiceNo: dto.invoiceNo?.trim() || null, note: dto.note?.trim() || null,
-        amount, cost, dueDate: addDays(dto.date, d.paymentDays ?? 30), status: 'Submitted', submittedBy: user.name,
+        amount, cost, dueDate: d.paymentDays === 0 ? null : addDays(dto.date, d.paymentDays ?? 30), status: 'Submitted', submittedBy: user.name,
         lines: lines as DistributorInvoiceLine[],
       }));
       return this.one(em, inv.id);
@@ -176,7 +176,7 @@ export class DistInvoicesService {
       const due = inv.status === 'Verified' ? round2(Number(inv.amount) - paid) : 0;
       const containers = (inv.lines ?? []).reduce((n, l) => n + l.containers, 0);
       const packets = (inv.lines ?? []).reduce((n, l) => n + l.packets, 0);
-      const overdue = due > 0.01 && inv.dueDate < today();
+      const overdue = due > 0.01 && !!inv.dueDate && inv.dueDate < today();
       const state = inv.status !== 'Verified' ? (inv.status === 'Submitted' ? 'Waiting verification' : 'Rejected')
         : due <= 0.01 ? 'Paid' : paid > 0 ? 'Part paid' : overdue ? 'Overdue' : 'Open';
       return { ...inv, payments, paid, due, containers, packets, overdue, state, margin: round2(Number(inv.amount) - Number(inv.cost)) };

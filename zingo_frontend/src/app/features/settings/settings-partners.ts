@@ -16,9 +16,21 @@ const contractText = (p: { contract?: string | null; files?: unknown[] }) =>
 /** the bank account a manufacturer is paid at unless it picks another */
 const defaultBank = (m: Manufacturer) => m.bankAccounts?.find((b) => b.isDefault) ?? m.bankAccounts?.[0];
 
-/** "Hyderabad, Sindh · +2 areas" */
-const areaText = (d: Distributor) =>
-  [[d.region, d.province].filter(Boolean).join(', '), d.areas?.length ? `+${d.areas.length} area${d.areas.length > 1 ? 's' : ''}` : null].filter(Boolean).join(' · ');
+/** "Sindh · 2 districts · 5 cities · exclusive" */
+const areaText = (d: Distributor) => {
+  const n = (count: number | undefined, one: string, many: string) => (count ? `${count} ${count > 1 ? many : one}` : null);
+  return [
+    (d.provinces ?? []).join(', ') || null,
+    n(d.districts?.length, 'district', 'districts'), n(d.cities?.length, 'city', 'cities'),
+    (d.countries ?? []).length ? (d.countries!.length > 2 ? `${d.countries!.length} countries` : d.countries!.join(', ')) : null,
+    d.exclusive ? 'exclusive' : null,
+  ].filter(Boolean).join(' · ') || d.region;
+};
+
+/** the tone of a distributor's status */
+const STATUS_TONE: Record<string, 'success' | 'warning' | 'danger' | 'neutral'> = {
+  Active: 'success', Hold: 'warning', 'Temporary suspend': 'danger', 'Permanent suspend': 'neutral',
+};
 
 /** The companies the business deals with: contract manufacturers and distributors. */
 @Component({
@@ -59,7 +71,7 @@ const areaText = (d: Distributor) =>
     </div>
 
     <app-manufacturer-form [(open)]="manufacturerOpen" [manufacturer]="editingManufacturer()" (saved)="reload()" />
-    <app-distributor-form [(open)]="distributorOpen" [distributor]="editingDistributor()" [paymentCycles]="store.settings()?.paymentCycles ?? [15, 30, 45, 60]" [defaultSelloutDays]="store.settings()?.defaultSelloutDays ?? 30" (saved)="reload()" />
+    <app-distributor-form [(open)]="distributorOpen" [distributor]="editingDistributor()" [paymentCycles]="store.settings()?.paymentCycles ?? [15, 30, 45, 60]" [defaultSelloutDays]="store.settings()?.defaultSelloutDays ?? 30" [others]="distributors.value() ?? []" (saved)="reload()" />
   `,
 })
 export class SettingsPartners {
@@ -79,8 +91,11 @@ export class SettingsPartners {
     { id: 'name', label: 'Manufacturer', value: (m) => m.name, sub: (m) => m.contact },
     { id: 'poc', label: 'Point of contact', priority: 2, value: (m) => m.poc || null, sub: (m) => contractText(m) },
     {
-      id: 'terms', label: 'Payment terms', value: (m) => `${Number(m.advancePct ?? 0)}% advance`,
-      sub: (m) => `Balance in ${m.paymentDays} days`,
+      id: 'terms', label: 'Payment terms',
+      value: (m) => (m.paymentTerms ?? ['Advance']).map((t) => (t === 'Advance' ? `${Number(m.advancePct ?? 0)}% advance` : 'Credit line')).join(' + '),
+      sub: (m) => ((m.paymentTerms ?? []).includes('Credit line')
+        ? `Limit ${Number(m.creditLimit) ? fmtMoney(m.creditLimit!) : 'none'} · clear in ${m.paymentDays ? m.paymentDays + ' days' : 'no limit'}`
+        : 'Pay on delivery'),
     },
     {
       id: 'bank', label: 'Default bank', priority: 2, value: (m) => defaultBank(m)?.bank ?? 'No bank account',
@@ -91,10 +106,20 @@ export class SettingsPartners {
   protected manufacturerActions = (): RowAction[] => !this.canManufacturers() ? [] : [{ id: 'edit', label: 'Edit' }];
 
   protected distributorColumns: TableColumn<Distributor>[] = [
-    { id: 'name', label: 'Distributor', value: (d) => d.name, sub: (d) => areaText(d) },
+    { id: 'name', label: 'Distributor', value: (d) => d.name, sub: (d) => `${d.market ?? 'Local'} · ${areaText(d)}` },
     { id: 'contact', label: 'Contact', value: (d) => d.poc || d.contact, sub: (d) => contractText(d) ?? d.address, priority: 3 },
-    { id: 'days', label: 'Payment terms', kind: 'number', align: 'end', priority: 2, value: (d) => d.paymentDays, sub: (d) => `days · sell-out ${d.selloutDays ?? 30} days` },
-    { id: 'limit', label: 'Credit limit (PKR)', kind: 'money', value: (d) => d.creditLimit, sub: (d) => (d.advancePct ? `${d.advancePct}% advance` : null) },
+    {
+      id: 'days', label: 'Payment terms', align: 'end', priority: 2, value: (d) => (d.paymentDays ? `${d.paymentDays} days` : 'No limit'),
+      sub: (d) => `sell-out ${d.selloutDays ? d.selloutDays + ' days' : 'no limit'}`,
+    },
+    {
+      id: 'limit', label: 'Credit limit (PKR)', align: 'end', value: (d) => (Number(d.creditLimit) ? fmtMoney(d.creditLimit) : 'No limit'),
+      sub: (d) => (d.advancePct ? `${d.advancePct}% advance` : null),
+    },
+    {
+      id: 'status', label: 'Status', kind: 'tag', value: (d) => d.status ?? 'Active', tone: (d) => STATUS_TONE[d.status ?? 'Active'],
+      sub: (d) => (d.status === 'Temporary suspend' && d.statusUntil ? `until ${d.statusUntil}` : d.statusNote ?? null), priority: 2,
+    },
   ];
   protected distributorActions = (): RowAction[] => !this.canDistributors() ? [] : [{ id: 'edit', label: 'Edit' }];
 

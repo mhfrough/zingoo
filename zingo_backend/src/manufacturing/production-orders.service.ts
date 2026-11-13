@@ -241,22 +241,34 @@ export class ProductionOrdersService {
         ? dto.distributorId
         : productChanged || !before?.distributorId ? product.distributorId : before.distributorId;
       if (!distributorId) throw new BadRequestException(`Assign a distributor to ${product.sku} first, choose one, or send the order to the warehouse.`);
-      if (!(await em.exists(Distributor, { where: { id: distributorId } }))) throw new BadRequestException('Choose a distributor from Settings & Data.');
+      const dist = await em.findOne(Distributor, { where: { id: distributorId } });
+      if (!dist) throw new BadRequestException('Choose a distributor from Settings & Data.');
+      if (dist.status === 'Temporary suspend' || dist.status === 'Permanent suspend') {
+        throw new BadRequestException(`${dist.name} is suspended; no new orders can go to it.`);
+      }
     }
 
     const date = dto.date ?? before!.date;
     const dueDate = dto.dueDate !== undefined ? dto.dueDate : before?.dueDate ?? null;
     if (dueDate && dueDate < date) throw new BadRequestException('The delivery date cannot be before the order date.');
 
+    // the packaging template: the one asked for, else the order's own, else the product's default
+    const templates = product.packagings ?? [];
+    const wanted = dto.packaging !== undefined ? dto.packaging : productChanged ? null : before?.packaging ?? null;
+    const tpl = wanted ? templates.find((t) => t.name === wanted) : templates.find((t) => t.isDefault);
+    if (wanted && !tpl) throw new BadRequestException(`${product.sku} has no packaging template "${wanted}".`);
+    const repack = productChanged || dto.packaging !== undefined;
+
     return {
       date,
       productId: product.id,
+      packaging: tpl?.name ?? null,
       manufacturerId: manufacturer.id,
       destination,
       distributorId,
       containers: dto.containers ?? before!.containers,
-      bundlesPerContainer: productChanged ? product.bundlesPerContainer : before!.bundlesPerContainer,
-      packetsPerBundle: productChanged ? product.packsPerCarton : before!.packetsPerBundle,
+      bundlesPerContainer: repack ? tpl?.bundlesPerContainer ?? product.bundlesPerContainer : before!.bundlesPerContainer,
+      packetsPerBundle: repack ? tpl?.packetsPerBundle ?? product.packsPerCarton : before!.packetsPerBundle,
       rate: dto.rate ?? (productChanged ? Number(product.manufacturerRate) : before!.rate),
       advancePct: !before || manufacturer.id !== before.manufacturerId ? Number(manufacturer.advancePct ?? 0) : before.advancePct,
       dueDate,

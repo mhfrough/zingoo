@@ -30,22 +30,23 @@ export interface UnitEconomics {
 
 /**
  * The price bridge of one SKU:
- *   landed cost = factory + packaging + printing + inbound freight
+ *   landed cost = factory + packaging + printing + inbound freight + outbound freight
  *   gross       = distributor price - landed cost
  *   net         = gross - overhead per pack
  * It is a planning model; dispatched orders freeze their own cost, and company profit is on the income statement.
  */
 export function unitEconomics(
-  p: Pick<Product, 'manufacturerRate' | 'packagingRate' | 'printingRate' | 'inboundRate' | 'rate' | 'mrp'>,
+  p: Pick<Product, 'manufacturerRate' | 'packagingRate' | 'printingRate' | 'inboundRate' | 'rate' | 'mrp'> & { outboundRate?: number },
   overhead: number,
 ): UnitEconomics {
   const factory = Number(p.manufacturerRate) || 0;
   const packaging = Number(p.packagingRate) || 0;
   const printing = Number(p.printingRate) || 0;
   const inbound = Number(p.inboundRate) || 0;
+  const outbound = Number(p.outboundRate) || 0;
   const distributor = Number(p.rate) || 0;
   const oh = Number(overhead) || 0;
-  const addOns = rnd(packaging + printing + inbound);
+  const addOns = rnd(packaging + printing + inbound + outbound);
   const variable = rnd(factory + addOns);
   const total = rnd(variable + oh);
   const gross = rnd(distributor - variable);

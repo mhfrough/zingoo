@@ -1,6 +1,14 @@
 import { AttachmentMeta } from '../../core/attachments.api';
 /** Shapes returned by the API (zingo_backend). Only the fields the pages use. */
 
+/** one saved way of packing a product */
+export interface PackagingTemplate {
+  name: string;
+  packetsPerBundle: number;
+  bundlesPerContainer: number;
+  isDefault: boolean;
+}
+
 export interface Product {
   id: string;
   sku: string;
@@ -12,6 +20,14 @@ export interface Product {
   packagingRate: number;
   printingRate: number;
   inboundRate: number;
+  /** weight of one packet in grams */
+  gramsPerPacket?: number | null;
+  /** saved packaging templates; the default one's figures are packsPerCarton / bundlesPerContainer */
+  packagings?: PackagingTemplate[];
+  /** every distributor that sells it; the first is distributorId */
+  distributorIds?: string[];
+  /** freight to the distributor, per packet */
+  outboundRate?: number;
   /** packets per bundle */
   packsPerCarton: number;
   /** bundles per container (a container is one batch handed to a distributor) */
@@ -47,8 +63,12 @@ export interface PartnerBankAccount {
 export interface Manufacturer {
   id: string;
   name: string;
-  /** days to pay the balance after delivery */
+  /** how it is paid: an advance on each order, a credit line, or both */
+  paymentTerms?: ('Advance' | 'Credit line')[];
+  /** credit line: days to clear after delivery (0 = no limit) */
   paymentDays: number;
+  /** credit line: most Zen Foods may owe, in its currency (0 = no limit) */
+  creditLimit?: number;
   /** advance on each order, % of its value */
   advancePct?: number;
   bankAccounts?: PartnerBankAccount[];
@@ -64,10 +84,21 @@ export interface Manufacturer {
 export interface Distributor {
   id: string;
   name: string;
-  /** main city */
+  /** a short territory label for lists (first city, else district, province or country) */
   region: string;
+  /** Pakistan, abroad, or both */
+  market?: 'Local' | 'International' | 'Both';
+  provinces?: string[];
+  districts?: { name: string; province: string }[];
+  cities?: { name: string; province: string; district?: string | null }[];
+  countries?: string[];
+  /** no other distributor may be given these areas */
+  exclusive?: boolean;
+  status?: 'Active' | 'Hold' | 'Temporary suspend' | 'Permanent suspend';
+  statusNote?: string | null;
+  statusUntil?: string | null;
+  /** earlier fields, kept for older records */
   province?: string | null;
-  /** other cities or areas covered */
   areas?: string[];
   contact: string | null;
   address: string | null;

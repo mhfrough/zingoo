@@ -58,6 +58,15 @@ const today = () => new Date().toISOString().slice(0, 10);
         <app-field label="Order date" [required]="true">
           <input type="date" formControlName="date" />
         </app-field>
+        @if (templateOptions().length > 1) {
+          <app-field label="Packaging" hint="The product's packaging templates">
+            <select formControlName="packaging">
+              @for (t of templateOptions(); track t.value) {
+                <option [value]="t.value">{{ t.label }}</option>
+              }
+            </select>
+          </app-field>
+        }
         <app-field label="Containers" [required]="true" [error]="invalid('containers') ? 'At least 1' : null">
           <input type="number" formControlName="containers" min="1" step="1" />
         </app-field>
@@ -118,6 +127,7 @@ export class ProductionOrderForm extends FormModal {
     productId: this.fb.control<string | null>(null, Validators.required),
     date: this.fb.nonNullable.control(today(), Validators.required),
     containers: this.fb.nonNullable.control(1, [Validators.required, Validators.min(1)]),
+    packaging: this.fb.nonNullable.control(''),
     dueDate: this.fb.control<string | null>(null),
     manufacturerId: this.fb.control<string | null>(null, Validators.required),
     destination: this.fb.nonNullable.control<'Distributor' | 'Warehouse'>('Distributor'),
@@ -139,15 +149,26 @@ export class ProductionOrderForm extends FormModal {
     this.distributors().map((d) => ({ value: d.id, label: d.name, sub: d.region })));
 
   private product = computed(() => this.products().find((p) => p.id === this.value().productId) ?? null);
+  /** the chosen product's packaging templates ("Standard · 432 × 10") */
+  protected templateOptions = computed(() => (this.product()?.packagings ?? []).map((t) => ({
+    value: t.name, label: `${t.name} · ${t.packetsPerBundle} per bundle × ${t.bundlesPerContainer} bundles${t.isDefault ? ' (default)' : ''}`,
+  })));
+  /** the template the order uses */
+  private template = computed(() => {
+    const list = this.product()?.packagings ?? [];
+    return list.find((t) => t.name === this.value().packaging) ?? list.find((t) => t.isDefault) ?? null;
+  });
   /** a saved order keeps its own packaging; a new one uses the product's */
   protected bundles = computed(() => {
     const o = this.order();
-    const per = o && o.productId === this.value().productId ? o.bundlesPerContainer : this.product()?.bundlesPerContainer ?? 0;
+    const same = o && o.productId === this.value().productId && (o.packaging ?? '') === (this.value().packaging ?? '');
+    const per = same ? o!.bundlesPerContainer : this.template()?.bundlesPerContainer ?? this.product()?.bundlesPerContainer ?? 0;
     return Number(this.value().containers || 0) * per;
   });
   protected packets = computed(() => {
     const o = this.order();
-    const per = o && o.productId === this.value().productId ? o.packetsPerBundle : this.product()?.packsPerCarton ?? 0;
+    const same = o && o.productId === this.value().productId && (o.packaging ?? '') === (this.value().packaging ?? '');
+    const per = same ? o!.packetsPerBundle : this.template()?.packetsPerBundle ?? this.product()?.packsPerCarton ?? 0;
     return this.bundles() * per;
   });
   protected orderValue = computed(() => Math.round(this.packets() * Number(this.value().rate || 0) * 100) / 100);
@@ -174,6 +195,7 @@ export class ProductionOrderForm extends FormModal {
       const p = this.products().find((x) => x.id === id);
       if (!p || (this.order() && this.order()!.productId === id)) return;
       this.form.patchValue({
+        packaging: (p.packagings ?? []).find((t) => t.isDefault)?.name ?? '',
         manufacturerId: p.manufacturerId ?? this.form.controls.manufacturerId.value,
         distributorId: p.distributorId ?? this.form.controls.distributorId.value,
         rate: Number(p.manufacturerRate ?? 0),
@@ -186,11 +208,11 @@ export class ProductionOrderForm extends FormModal {
     this.sendNow.set(false);
     this.form.reset(o
       ? {
-        productId: o.productId, date: o.date, containers: o.containers, dueDate: o.dueDate, manufacturerId: o.manufacturerId,
+        productId: o.productId, date: o.date, containers: o.containers, packaging: o.packaging ?? '', dueDate: o.dueDate, manufacturerId: o.manufacturerId,
         destination: o.destination, distributorId: o.distributorId, rate: Number(o.rate), notes: o.notes ?? '',
       }
       : {
-        productId: null, date: today(), containers: 1, dueDate: null, manufacturerId: null,
+        productId: null, date: today(), containers: 1, packaging: '', dueDate: null, manufacturerId: null,
         destination: 'Distributor', distributorId: null, rate: 0, notes: '',
       }, { emitEvent: true });
     this.form.controls.distributorId.setValidators(this.form.controls.destination.value === 'Distributor' ? Validators.required : null);
@@ -200,7 +222,7 @@ export class ProductionOrderForm extends FormModal {
   protected request() {
     const v = this.form.getRawValue();
     return this.factory.save(this.order()?.id ?? null, {
-      productId: v.productId, date: v.date, containers: Number(v.containers), dueDate: v.dueDate || null,
+      productId: v.productId, date: v.date, containers: Number(v.containers), packaging: v.packaging || null, dueDate: v.dueDate || null,
       manufacturerId: v.manufacturerId, destination: v.destination,
       distributorId: v.destination === 'Distributor' ? v.distributorId : null,
       rate: Number(v.rate), notes: v.notes.trim() || null, send: this.sendNow(),

@@ -40,8 +40,9 @@ export class DistributorInvoice extends AppEntity {
   @Column({ type: 'decimal', precision: 16, scale: 2, transformer: numeric })
   cost: number;
 
-  @Column({ type: 'date' })
-  dueDate: string;
+  /** empty when the distributor's payment terms are 0 (no limit) */
+  @Column({ type: 'date', nullable: true })
+  dueDate: string | null;
 
   @Column({ type: 'varchar', length: 12, default: 'Submitted' })
   status: DistInvoiceStatus;

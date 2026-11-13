@@ -264,7 +264,7 @@ export class ReportsService {
     ]);
     const rows = [
       ...dis.filter((i) => i.status === 'Verified' && i.due > 0.01).map((i) => ({
-        reference: i.refNo, type: 'Distributor sales', party: i.distributor.name, date: i.date, dueDate: i.dueDate, outstanding: i.due,
+        reference: i.refNo, type: 'Distributor sales', party: i.distributor.name, date: i.date, dueDate: i.dueDate ?? i.date, outstanding: i.due,
       })),
       ...shipments.filter((e) => e.status === 'Shipped' && e.due > 0.01).map((e) => ({
         reference: e.refNo, type: `Export · ${e.currency}`, party: e.buyer,

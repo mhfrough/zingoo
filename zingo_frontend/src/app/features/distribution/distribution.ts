@@ -202,7 +202,10 @@ export class Distribution {
 
   protected distributorColumns: TableColumn<DistributorRow>[] = [
     { id: 'name', label: 'Distributor', value: (r) => r.d.name, sub: (r) => r.d.contact },
-    { id: 'region', label: 'Territory', value: (r) => r.d.region, sub: (r) => `Terms ${r.d.paymentDays} days`, priority: 2 },
+    {
+      id: 'region', label: 'Territory', value: (r) => `${r.d.region}${r.d.exclusive ? ' · exclusive' : ''}`, priority: 2,
+      sub: (r) => `${r.d.status && r.d.status !== 'Active' ? r.d.status + ' · ' : ''}Terms ${r.d.paymentDays ? r.d.paymentDays + ' days' : 'no limit'}`,
+    },
     { id: 'orders', label: 'Orders', kind: 'number', value: (r) => r.orders, priority: 3 },
     { id: 'sales', label: 'Sales (PKR)', kind: 'money', value: (r) => r.sales, sub: (r) => (r.d.creditLimit > 0 ? `Limit ${fmtAmount(r.d.creditLimit)}` : 'No credit limit') },
     { id: 'due', label: 'Due (PKR)', kind: 'money', value: (r) => r.due },

@@ -2,6 +2,14 @@ import { Column, Entity, JoinColumn, ManyToOne, Unique } from 'typeorm';
 import { AppEntity } from '../common/app.entity';
 import { numeric } from '../common/numeric.transformer';
 
+/** one saved way of packing a product */
+export interface PackagingTemplate {
+  name: string;
+  packetsPerBundle: number;
+  bundlesPerContainer: number;
+  isDefault: boolean;
+}
+
 /** an uploaded file kept on a manufacturer or a distributor */
 export interface PartnerFile {
   id: string;
@@ -48,6 +56,21 @@ export class Product extends AppEntity {
   @Column({ type: 'decimal', precision: 12, scale: 4, default: 0, transformer: numeric })
   inboundRate: number;
 
+  /** freight from the manufacturer or warehouse to the distributor, per packet */
+  @Column({ type: 'decimal', precision: 12, scale: 4, default: 0, transformer: numeric })
+  outboundRate: number;
+
+  /** weight of one packet in grams (what the price tier buys; used to bargain with the manufacturer) */
+  @Column({ type: 'decimal', precision: 10, scale: 2, nullable: true, transformer: numeric })
+  gramsPerPacket: number | null;
+
+  /**
+   * Saved packaging templates (packets per bundle, bundles per container); one is the default, and
+   * packsPerCarton / bundlesPerContainer always hold the default's figures. An order picks a template.
+   */
+  @Column({ type: 'jsonb', default: () => "'[]'" })
+  packagings: PackagingTemplate[];
+
   /** packets in one bundle (the column keeps its first name: a bundle was called a carton) */
   @Column({ type: 'int' })
   packsPerCarton: number;
@@ -76,7 +99,11 @@ export class Product extends AppEntity {
   @Column({ type: 'uuid', nullable: true })
   manufacturerId: string | null;
 
-  /** the distributor that sells this SKU */
+  /** every distributor that sells this SKU; the first one is also `distributorId` (the default for orders) */
+  @Column({ type: 'jsonb', default: () => "'[]'" })
+  distributorIds: string[];
+
+  /** the main distributor that sells this SKU */
   @ManyToOne(() => Distributor, { nullable: true })
   @JoinColumn({ name: 'distributorId' })
   distributor: Distributor | null;
@@ -108,17 +135,29 @@ export interface PartnerBankAccount {
   isDefault: boolean;
 }
 
+/** the ways a manufacturer can be paid */
+export const MANUFACTURER_TERMS = ['Advance', 'Credit line'] as const;
+export type ManufacturerTerm = (typeof MANUFACTURER_TERMS)[number];
+
 /** The production partner(s) that make the goods. */
 @Entity('manufacturers')
 export class Manufacturer extends AppEntity {
   @Column({ type: 'varchar', length: 150 })
   name: string;
 
-  /** days allowed to pay the balance after delivery */
+  /** how the manufacturer is paid: an advance on each order, a credit line, or both */
+  @Column({ type: 'jsonb', default: () => `'["Advance"]'` })
+  paymentTerms: ManufacturerTerm[];
+
+  /** credit line: days allowed to clear what is owed after delivery (0 = no limit) */
   @Column({ type: 'int', default: 30 })
   paymentDays: number;
 
-  /** advance paid when an order is placed, % of the order value */
+  /** credit line: the most Zen Foods may owe the manufacturer, in its currency (0 = no limit) */
+  @Column({ type: 'decimal', precision: 16, scale: 2, default: 0, transformer: numeric })
+  creditLimit: number;
+
+  /** advance paid when an order is placed, % of the order value (0 when there is no advance term) */
   @Column({ type: 'decimal', precision: 5, scale: 2, default: 0, transformer: numeric })
   advancePct: number;
 
@@ -149,20 +188,78 @@ export class Manufacturer extends AppEntity {
   files: PartnerFile[];
 }
 
+/** where a distributor sells: Pakistan, abroad, or both */
+export const DISTRIBUTOR_MARKETS = ['Local', 'International', 'Both'] as const;
+export type DistributorMarket = (typeof DISTRIBUTOR_MARKETS)[number];
+
+/**
+ * Active: works normally. Hold: its logins can sign in and look, but change nothing.
+ * Temporary suspend / Permanent suspend: its logins cannot sign in, and no new orders go to it.
+ */
+export const DISTRIBUTOR_STATUS = ['Active', 'Hold', 'Temporary suspend', 'Permanent suspend'] as const;
+export type DistributorStatus = (typeof DISTRIBUTOR_STATUS)[number];
+
+/** a district with the province it is in */
+export interface AreaDistrict {
+  name: string;
+  province: string;
+}
+
+/** a city with its province and district (district empty when unknown) */
+export interface AreaCity {
+  name: string;
+  province: string;
+  district?: string | null;
+}
+
 @Entity('distributors')
 export class Distributor extends AppEntity {
   @Column({ type: 'varchar', length: 150 })
   name: string;
 
-  /** main city (the column keeps its first name) */
+  /** a short territory label for lists, worked out from the areas (first city, else district, else province, else country) */
   @Column({ type: 'varchar', length: 80 })
   region: string;
 
-  /** province or territory of the main city */
+  @Column({ type: 'varchar', length: 14, default: 'Local' })
+  market: DistributorMarket;
+
+  /** provinces covered (Pakistan) */
+  @Column({ type: 'jsonb', default: () => "'[]'" })
+  provinces: string[];
+
+  /** districts covered, each with its province */
+  @Column({ type: 'jsonb', default: () => "'[]'" })
+  districts: AreaDistrict[];
+
+  /** cities covered, each with its province and district */
+  @Column({ type: 'jsonb', default: () => "'[]'" })
+  cities: AreaCity[];
+
+  /** countries covered (an international distributor) */
+  @Column({ type: 'jsonb', default: () => "'[]'" })
+  countries: string[];
+
+  /** exclusive: no other distributor may be given any of these areas */
+  @Column({ default: false })
+  exclusive: boolean;
+
+  @Column({ type: 'varchar', length: 20, default: 'Active' })
+  status: DistributorStatus;
+
+  /** why it is on hold or suspended */
+  @Column({ type: 'varchar', length: 500, nullable: true })
+  statusNote: string | null;
+
+  /** a temporary suspension ends on this date (it is lifted on that day) */
+  @Column({ type: 'date', nullable: true })
+  statusUntil: string | null;
+
+  /** earlier single province, kept so older records can be moved to `provinces` */
   @Column({ type: 'varchar', length: 60, nullable: true })
   province: string | null;
 
-  /** the other cities or areas the distributor covers */
+  /** earlier extra cities, kept so older records can be moved to `cities` */
   @Column({ type: 'jsonb', default: () => "'[]'" })
   areas: string[];
 
@@ -175,14 +272,14 @@ export class Distributor extends AppEntity {
   @Column({ type: 'varchar', length: 40, nullable: true })
   taxNo: string | null;
 
-  /** payment terms in days */
+  /** payment terms in days; 0 = no limit (invoices have no due date) */
   @Column({ type: 'int', default: 30 })
   paymentDays: number;
 
   @Column({ type: 'decimal', precision: 16, scale: 2, default: 0, transformer: numeric })
   creditLimit: number;
 
-  /** days a distributor has to sell a container out, unless the product says otherwise */
+  /** days a distributor has to sell a container out, unless the product says otherwise; 0 = no limit */
   @Column({ type: 'int', default: 30 })
   selloutDays: number;
 

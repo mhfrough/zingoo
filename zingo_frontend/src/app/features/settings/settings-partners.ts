@@ -9,6 +9,7 @@ import { Distributor, Manufacturer } from '../ops/models';
 import { OpsApi } from '../ops/ops.api';
 import { ManufacturerForm } from './manufacturer-form';
 import { RegistrationPanel } from '../distribution/registration-panel';
+import { CommercialPanel } from '../distribution/commercial-panel';
 
 /** "Contract ZF-12 · 3 files" */
 const contractText = (p: { contract?: string | null; files?: unknown[] }) =>
@@ -37,7 +38,7 @@ const STATUS_TONE: Record<string, 'success' | 'warning' | 'danger' | 'neutral'> 
 @Component({
   selector: 'app-settings-partners',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [Btn, DataTable, ManufacturerForm, DistributorForm, RegistrationPanel],
+  imports: [Btn, DataTable, ManufacturerForm, DistributorForm, RegistrationPanel, CommercialPanel],
   template: `
     <div class="stack">
       @if (section() === 'manufacturers') {
@@ -74,6 +75,7 @@ const STATUS_TONE: Record<string, 'success' | 'warning' | 'danger' | 'neutral'> 
     <app-manufacturer-form [(open)]="manufacturerOpen" [manufacturer]="editingManufacturer()" (saved)="reload()" />
     <app-distributor-form [(open)]="distributorOpen" [distributor]="editingDistributor()" [paymentCycles]="store.settings()?.paymentCycles ?? [15, 30, 45, 60]" [defaultSelloutDays]="store.settings()?.defaultSelloutDays ?? 30" [others]="distributors.value() ?? []" [products]="products.value() ?? []" (saved)="reload()" />
     <app-registration-panel [(open)]="registrationOpen" [distributorId]="registering()" (changed)="reload()" />
+    <app-commercial-panel [(open)]="commercialOpen" [distributor]="commercial()" [products]="products.value() ?? []" (changed)="reload()" />
   `,
 })
 export class SettingsPartners {
@@ -92,6 +94,9 @@ export class SettingsPartners {
   /** an international distributor's registration panel */
   protected registrationOpen = signal(false);
   protected registering = signal<string | null>(null);
+  /** an international distributor's credit, bank accounts and price list */
+  protected commercialOpen = signal(false);
+  protected commercial = signal<Distributor | null>(null);
 
   protected manufacturerColumns: TableColumn<Manufacturer>[] = [
     { id: 'name', label: 'Manufacturer', value: (m) => m.name, sub: (m) => m.contact },
@@ -119,7 +124,10 @@ export class SettingsPartners {
       sub: (d) => `sell-out ${d.selloutDays ? d.selloutDays + ' days' : 'no limit'}`,
     },
     {
-      id: 'limit', label: 'Credit limit (PKR)', align: 'end', value: (d) => (Number(d.creditLimit) ? fmtMoney(d.creditLimit) : 'No limit'),
+      id: 'limit', label: 'Credit limit', align: 'end',
+      value: (d) => d.market && d.market !== 'Local'
+        ? (Number(d.creditLimit) ? fmtMoney(d.creditLimit, d.creditCurrency ?? 'PKR') : 'Advance only')
+        : (Number(d.creditLimit) ? fmtMoney(d.creditLimit) : 'No limit'),
       sub: (d) => (d.advancePct ? `${d.advancePct}% advance` : null),
     },
     {
@@ -132,7 +140,7 @@ export class SettingsPartners {
   ];
   protected distributorActions = (d: Distributor): RowAction[] => [
     ...(this.canDistributors() ? [{ id: 'edit', label: 'Edit' }] : []),
-    ...(d.market && d.market !== 'Local' ? [{ id: 'registration', label: 'Registration' }] : []),
+    ...(d.market && d.market !== 'Local' ? [{ id: 'registration', label: 'Registration' }, { id: 'commercial', label: 'Credit & prices' }] : []),
   ];
 
   protected money = fmtMoney;
@@ -161,6 +169,11 @@ export class SettingsPartners {
   }
 
   protected onDistributorAction(e: RowActionEvent<Distributor>) {
+    if (e.id === 'commercial') {
+      this.commercial.set(e.row);
+      this.commercialOpen.set(true);
+      return;
+    }
     if (e.id === 'registration') {
       this.registering.set(e.row.id);
       this.registrationOpen.set(true);

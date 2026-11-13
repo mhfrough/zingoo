@@ -132,9 +132,15 @@ const STATUSES: { value: Distributor['status']; hint: string }[] = [
             <input type="number" formControlName="paymentCustom" min="0" max="365" step="1" />
           </app-field>
         }
-        <app-field label="Credit limit" hint="0 = no limit. Over the limit, dispatch is held for Finance">
-          <app-money-input formControlName="creditLimit" />
-        </app-field>
+        @if (international()) {
+          <app-field label="Credit limit" hint="Approved by Finance under Credit & prices">
+            <input type="text" [value]="creditText()" readonly />
+          </app-field>
+        } @else {
+          <app-field label="Credit limit" hint="0 = no limit. Over the limit, dispatch is held for Finance">
+            <app-money-input formControlName="creditLimit" />
+          </app-field>
+        }
         <app-field label="Advance guide (%)" hint="Share of an order paid up front. 0 = none">
           <input type="number" formControlName="advancePct" min="0" max="100" step="1" />
         </app-field>
@@ -188,6 +194,12 @@ export class DistributorForm extends FormModal {
   /** products, to pick the ones an international distributor may sell */
   readonly products = input<Product[]>([]);
   readonly formId = 'form-distributor';
+  /** an international distributor's approved credit, in words */
+  protected creditText = computed(() => {
+    const d = this.distributor();
+    if (!d || !Number(d.creditLimit)) return 'Advance only (no credit approved)';
+    return `${d.creditCurrency ?? 'PKR'} ${Number(d.creditLimit).toLocaleString()}${d.creditExpiry ? ' until ' + d.creditExpiry : ''}`;
+  });
 
   protected places = inject(PlacesService);
   protected markets: { value: Distributor['market']; hint: string }[] = [

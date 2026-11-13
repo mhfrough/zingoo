@@ -3,8 +3,8 @@ import { AttachmentsService } from '../attachments/attachments.service';
 import { InjectRepository } from '@nestjs/typeorm';
 import { DeepPartial, Repository } from 'typeorm';
 import { CrudService } from '../common/crud.service';
-import { AreaCity, AreaDistrict, Distributor, DistributorAddress, DistributorContact, KycDocument, Manufacturer, PackagingTemplate, PartnerBankAccount, PartnerFile, Product } from './catalog.entities';
-import { Lookup } from '../setup/setup.entities';
+import { AreaCity, AreaDistrict, Distributor, DistributorAddress, DistributorBank, DistributorContact, KycDocument, PaymentMilestone, Manufacturer, PackagingTemplate, PartnerBankAccount, PartnerFile, Product } from './catalog.entities';
+import { Currency, Lookup } from '../setup/setup.entities';
 import { LookupsService } from '../setup/lookups.service';
 import { StockService } from './stock.service';
 
@@ -241,6 +241,7 @@ export class DistributorsService extends CrudService<Distributor> {
         if (!known.has(k.type) && !old.has(k.type)) throw new BadRequestException(`"${k.type}" is not a KYC document type. Add it in Settings & Data.`);
       }
     }
+    await this.commercial(dto, before, market);
     if (dto.classification && dto.classification !== before?.classification) {
       const ok = await this.repo.manager.findOne(Lookup, { where: { list: 'DIST_CLASSIFICATION', code: dto.classification as string, active: true } });
       if (!ok) throw new BadRequestException(`"${dto.classification}" is not a distributor classification. Choose one from Settings & Data.`);
@@ -252,6 +253,56 @@ export class DistributorsService extends CrudService<Distributor> {
         `SELECT name FROM distributors WHERE lower(trim("legalName")) = lower($1) AND lower(trim(country)) = lower($2) AND ($3::uuid IS NULL OR id <> $3::uuid) LIMIT 1`,
         [legal, country, before?.id ?? null]);
       if (dup) throw new ConflictException(`${legal} in ${country} is already registered as ${dup.name}.`);
+    }
+  }
+
+  /**
+   * Pricing and payment terms of an international distributor: a known invoice currency and Incoterm, a payment
+   * plan that adds up to 100%, known remittance methods, one default bank account (changing an account's details
+   * clears its verification). The credit limit is approved by Finance through PUT /distributors/:id/credit.
+   */
+  private async commercial(dto: DeepPartial<Distributor>, before: Distributor | null, market: Distributor['market']) {
+    const em = this.repo.manager;
+    if (market !== 'Local' && dto.creditLimit !== undefined && Number(dto.creditLimit) !== Number(before?.creditLimit ?? 0)) {
+      throw new BadRequestException("An international distributor's credit limit is approved by Finance (Credit & prices).");
+    }
+    const currencies = [dto.invoiceCurrency, ...((dto.bankAccounts ?? []) as DistributorBank[]).map((b) => b.currency)].filter(Boolean) as string[];
+    for (const c of new Set(currencies.map((x) => x.toUpperCase()))) {
+      if (!(await em.findOne(Currency, { where: { code: c } }))) throw new BadRequestException(`${c} is not a currency in Settings & Data.`);
+    }
+    if (dto.invoiceCurrency) dto.invoiceCurrency = (dto.invoiceCurrency as string).toUpperCase();
+    if (dto.incoterm && dto.incoterm !== before?.incoterm) {
+      const ok = await em.findOne(Lookup, { where: { list: 'INCOTERM', code: dto.incoterm as string, active: true } });
+      if (!ok) throw new BadRequestException(`"${dto.incoterm}" is not an Incoterm in Settings & Data.`);
+    }
+    if (dto.settlementMethods) {
+      const known = new Set((await em.find(Lookup, { where: { list: 'REMITTANCE_METHOD' } })).map((l) => l.code));
+      const old = new Set(before?.settlementMethods ?? []);
+      const list = [...new Set(dto.settlementMethods as string[])];
+      for (const m of list) if (!known.has(m) && !old.has(m)) throw new BadRequestException(`"${m}" is not a remittance method. Add it in Settings & Data.`);
+      dto.settlementMethods = list;
+    }
+    const plan = (dto.paymentPlan ?? before?.paymentPlan ?? []) as PaymentMilestone[];
+    if (dto.paymentPlan && plan.length) {
+      const total = plan.reduce((s, m) => s + Number(m.pct), 0);
+      if (Math.abs(total - 100) > 0.001) throw new BadRequestException(`The payment plan adds up to ${Math.round(total * 100) / 100}%; it must be 100%.`);
+    }
+    if ((dto.paymentTermType ?? before?.paymentTermType) === 'Custom schedule' && !plan.length) {
+      throw new BadRequestException('A custom schedule needs its instalments.');
+    }
+    if (dto.bankAccounts) {
+      const key = (b: DistributorBank) => [b.beneficiary, b.bankName, b.account, b.iban ?? '', b.swift ?? '', b.currency ?? ''].map((x) => String(x).trim().toLowerCase()).join('|');
+      const was = new Map((before?.bankAccounts ?? []).map((b) => [key(b), b]));
+      const list = (dto.bankAccounts as DistributorBank[]).map((b) => {
+        const same = was.get(key(b));
+        return { ...b, swift: b.swift?.trim().toUpperCase() || null, iban: b.iban?.replace(/\s+/g, '').toUpperCase() || null, verifiedBy: same?.verifiedBy ?? null, verifiedAt: same?.verifiedAt ?? null };
+      });
+      if (list.filter((b) => b.isDefault).length > 1) throw new BadRequestException('Only one bank account can be the default.');
+      if (list.length && !list.some((b) => b.isDefault)) list[0].isDefault = true;
+      for (const b of list) {
+        if (b.swift && !/^[A-Z]{6}[A-Z0-9]{2}([A-Z0-9]{3})?$/.test(b.swift)) throw new BadRequestException(`${b.swift} is not a SWIFT / BIC code (8 or 11 letters and digits).`);
+      }
+      dto.bankAccounts = list;
     }
   }
 

@@ -32,6 +32,7 @@ export class SettingsApi {
   addCurrency = (body: unknown) => this.api.post('currencies', body);
   updateCurrency = (code: string, body: unknown) => this.api.patch(`currencies/${code}`, body);
   deleteCurrency = (code: string) => this.api.delete(`currencies/${code}`);
+  currencyRates = (code: string) => this.api.get<{ id: string; rate: number; source: string; effectiveOn: string; by: string }[]>(`currencies/${code}/rates`);
   addContainer = (body: unknown) => this.api.post('container-types', body);
   updateContainer = (code: string, body: unknown) => this.api.patch(`container-types/${code}`, body);
   deleteContainer = (code: string) => this.api.delete(`container-types/${code}`);

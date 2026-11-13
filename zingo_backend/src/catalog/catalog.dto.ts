@@ -1,6 +1,9 @@
 import { PartialType } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
 import { ArrayMaxSize, ArrayMinSize, IsArray, IsBoolean, IsDateString, IsEmail, IsIn, IsInt, IsNotEmpty, IsNumber, IsOptional, IsString, IsUUID, Max, MaxLength, Min, ValidateNested } from 'class-validator';
+import {
+  BANK_CHARGES, BankCharges, PAYMENT_TERM_TYPES, PAYMENT_TRIGGERS, PRICE_UNITS, PaymentTermType, PaymentTrigger, PriceUnit,
+} from './catalog.entities';
 import { ADDRESS_TYPES, AGREEMENT_STATUS, AddressType, AgreementStatus, DISTRIBUTOR_MARKETS, DISTRIBUTOR_STATUS, DistributorMarket, DistributorStatus, MANUFACTURER_TERMS, ManufacturerTerm } from './catalog.entities';
 
 /** an uploaded file on a partner (from POST /attachments) */
@@ -119,6 +122,25 @@ export class KycDocumentDto {
   @IsOptional() @IsDateString() expiry?: string | null;
 }
 
+/** one instalment of a payment plan */
+export class PaymentMilestoneDto {
+  @IsString() @IsNotEmpty() @MaxLength(80) label: string;
+  @IsNumber() @Min(0.01) @Max(100) pct: number;
+  @IsIn([...PAYMENT_TRIGGERS]) trigger: PaymentTrigger;
+  @IsInt() @Min(0) @Max(365) days: number;
+}
+
+/** a bank account the distributor pays from (verification is a separate step) */
+export class DistributorBankDto {
+  @IsString() @IsNotEmpty() @MaxLength(150) beneficiary: string;
+  @IsString() @IsNotEmpty() @MaxLength(120) bankName: string;
+  @IsString() @IsNotEmpty() @MaxLength(40) account: string;
+  @IsOptional() @IsString() @MaxLength(40) iban?: string | null;
+  @IsOptional() @IsString() @MaxLength(11) swift?: string | null;
+  @IsOptional() @IsString() @MaxLength(3) currency?: string | null;
+  @IsBoolean() isDefault: boolean;
+}
+
 export class CreateDistributorDto {
   @IsString() @IsNotEmpty() name: string;
   @IsOptional() @IsIn([...DISTRIBUTOR_MARKETS]) market?: DistributorMarket;
@@ -162,6 +184,17 @@ export class CreateDistributorDto {
   @IsOptional() @IsNumber() @Min(0) annualTarget?: number;
   @IsOptional() @IsArray() @ArrayMaxSize(500) @IsUUID(undefined, { each: true }) approvedProductIds?: string[];
   @IsOptional() @IsString() @MaxLength(120) salesChannel?: string | null;
+  // pricing, currency and payment terms (spec sections 3 and 4); an international credit limit is set through /credit
+  @IsOptional() @IsString() @MaxLength(3) invoiceCurrency?: string | null;
+  @IsOptional() @IsString() @MaxLength(10) incoterm?: string | null;
+  @IsOptional() @IsString() @MaxLength(120) incotermPlace?: string | null;
+  @IsOptional() @IsString() @MaxLength(20) incotermVersion?: string;
+  @IsOptional() @IsIn([...PAYMENT_TERM_TYPES]) paymentTermType?: PaymentTermType | null;
+  @IsOptional() @IsArray() @ArrayMaxSize(12) @ValidateNested({ each: true }) @Type(() => PaymentMilestoneDto) paymentPlan?: PaymentMilestoneDto[];
+  @IsOptional() @IsArray() @ArrayMaxSize(10) @IsString({ each: true }) @MaxLength(60, { each: true }) settlementMethods?: string[];
+  @IsOptional() @IsArray() @ArrayMaxSize(10) @ValidateNested({ each: true }) @Type(() => DistributorBankDto) bankAccounts?: DistributorBankDto[];
+  @IsOptional() @IsIn([...BANK_CHARGES]) bankCharges?: BankCharges | null;
+  @IsOptional() @IsNumber() @Min(0) @Max(100) minMarginPct?: number;
   @IsOptional() @IsString() contact?: string;
   @IsOptional() @IsString() address?: string;
   @IsOptional() @IsString() taxNo?: string;
@@ -177,3 +210,32 @@ export class CreateDistributorDto {
   @IsOptional() @IsArray() @ArrayMaxSize(20) @ValidateNested({ each: true }) @Type(() => PartnerFileDto) files?: PartnerFileDto[];
 }
 export class UpdateDistributorDto extends PartialType(CreateDistributorDto) {}
+
+/** Finance approves an international distributor's credit: limit (0 = advance only), currency, expiry, control */
+export class DistributorCreditDto {
+  @IsNumber() @Min(0) creditLimit: number;
+  @IsString() @MaxLength(3) creditCurrency: string;
+  @IsOptional() @IsDateString() creditExpiry?: string | null;
+  @IsIn(['Block', 'Warn']) creditControl: 'Block' | 'Warn';
+}
+
+/** a new price version for one SKU */
+export class CreateDistributorPriceDto {
+  @IsUUID() productId: string;
+  @IsString() @MaxLength(3) currency: string;
+  @IsIn([...PRICE_UNITS]) unit: PriceUnit;
+  /** needed for Pallet and Metric tonne; worked out for the others */
+  @IsOptional() @IsNumber() @Min(0.0001) packsPerUnit?: number;
+  @IsNumber() @Min(0.0001) price: number;
+  @IsOptional() @IsNumber() @Min(0) @Max(100) discountPct?: number;
+  @IsDateString() effectiveFrom: string;
+  @IsOptional() @IsDateString() effectiveTo?: string | null;
+  @IsOptional() @IsNumber() @Min(0) moq?: number;
+  @IsOptional() @IsNumber() @Min(0) increment?: number;
+  @IsOptional() @IsBoolean() promo?: boolean;
+  @IsOptional() @IsString() @MaxLength(300) note?: string | null;
+}
+
+export class PriceDecisionDto {
+  @IsOptional() @IsString() @MaxLength(500) note?: string;
+}

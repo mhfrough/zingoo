@@ -132,6 +132,22 @@ export interface Distributor {
   approvedProductIds?: string[];
   /** Draft, Documents submitted, Under review, Approved, Active, On hold, Suspended, Archived */
   registrationStatus?: string;
+  // pricing, currency and payment terms (the client's spec, sections 3 and 4)
+  invoiceCurrency?: string | null;
+  incoterm?: string | null;
+  incotermPlace?: string | null;
+  incotermVersion?: string;
+  paymentTermType?: 'Advance' | 'Credit days' | 'On shipment' | 'On documents' | 'Custom schedule' | null;
+  paymentPlan?: PaymentMilestone[];
+  creditCurrency?: string | null;
+  creditExpiry?: string | null;
+  creditControl?: 'Block' | 'Warn';
+  creditApprovedBy?: string | null;
+  creditApprovedAt?: string | null;
+  settlementMethods?: string[];
+  bankAccounts?: DistributorBank[];
+  bankCharges?: 'Sender' | 'Receiver' | 'Shared' | null;
+  minMarginPct?: number;
   /** earlier fields, kept for older records */
   province?: string | null;
   areas?: string[];
@@ -279,3 +295,57 @@ export interface Settings {
 
 export const PAY_METHODS = ['Bank Transfer', 'Cash', 'Cheque', 'Other'] as const;
 export const QC_OPTIONS = ['Pending', 'Passed', 'Failed'] as const;
+
+/** one instalment of an international distributor's payment plan (the plan adds up to 100%) */
+export interface PaymentMilestone {
+  label: string;
+  pct: number;
+  trigger: 'On order' | 'Before shipment' | 'On shipment' | 'On documents' | 'On arrival' | 'After invoice';
+  days: number;
+}
+
+/** a bank account an international distributor pays from; Finance verifies it */
+export interface DistributorBank {
+  beneficiary: string;
+  bankName: string;
+  account: string;
+  iban?: string | null;
+  swift?: string | null;
+  currency?: string | null;
+  isDefault: boolean;
+  verifiedBy?: string | null;
+  verifiedAt?: string | null;
+}
+
+/** one version of an international distributor's price for one SKU */
+export interface DistributorPrice {
+  id: string;
+  createdAt: string;
+  distributorId: string;
+  productId: string;
+  product: { id: string; sku: string; name: string };
+  version: number;
+  currency: string;
+  unit: 'Pack' | 'Dozen' | 'Bundle' | 'Container' | 'Pallet' | 'Metric tonne';
+  packsPerUnit: number;
+  price: number;
+  discountPct: number;
+  effectiveFrom: string;
+  effectiveTo: string | null;
+  moq: number;
+  increment: number;
+  promo: boolean;
+  note: string | null;
+  fxRate: number;
+  costPerPack: number;
+  marginPct: number;
+  status: 'Active' | 'Pending approval' | 'Rejected';
+  createdBy: string;
+  decidedBy: string | null;
+  decidedAt: string | null;
+  decisionNote: string | null;
+  /** applies today */
+  current: boolean;
+  netPerUnit: number;
+  pkrPerPack: number;
+}

@@ -246,6 +246,43 @@ export interface KycDocument {
 }
 
 /** a district with the province it is in */
+/** international commercial terms (spec sections 3 and 4) */
+export const PAYMENT_TERM_TYPES = ['Advance', 'Credit days', 'On shipment', 'On documents', 'Custom schedule'] as const;
+export type PaymentTermType = (typeof PAYMENT_TERM_TYPES)[number];
+export const PAYMENT_TRIGGERS = ['On order', 'Before shipment', 'On shipment', 'On documents', 'On arrival', 'After invoice'] as const;
+export type PaymentTrigger = (typeof PAYMENT_TRIGGERS)[number];
+export const BANK_CHARGES = ['Sender', 'Receiver', 'Shared'] as const;
+export type BankCharges = (typeof BANK_CHARGES)[number];
+export const CREDIT_CONTROL = ['Block', 'Warn'] as const;
+export type CreditControl = (typeof CREDIT_CONTROL)[number];
+/** the unit a price is quoted in; packs per unit is the explicit conversion factor */
+export const PRICE_UNITS = ['Pack', 'Dozen', 'Bundle', 'Container', 'Pallet', 'Metric tonne'] as const;
+export type PriceUnit = (typeof PRICE_UNITS)[number];
+export const PRICE_STATUS = ['Active', 'Pending approval', 'Rejected'] as const;
+export type PriceStatus = (typeof PRICE_STATUS)[number];
+
+/** one instalment of an advance / milestone plan; the plan adds up to 100% */
+export interface PaymentMilestone {
+  label: string;
+  pct: number;
+  trigger: PaymentTrigger;
+  /** days after the trigger */
+  days: number;
+}
+
+/** a bank account the distributor pays from; verified by Finance before remittances are matched to it */
+export interface DistributorBank {
+  beneficiary: string;
+  bankName: string;
+  account: string;
+  iban?: string | null;
+  swift?: string | null;
+  currency?: string | null;
+  isDefault: boolean;
+  verifiedBy?: string | null;
+  verifiedAt?: string | null;
+}
+
 export interface AreaDistrict {
   name: string;
   province: string;
@@ -409,6 +446,61 @@ export class Distributor extends AppEntity {
   @Column({ type: 'varchar', length: 22, default: 'Active' })
   registrationStatus: RegistrationStatus;
 
+  // pricing, currency and payment terms (spec sections 3 and 4)
+  /** ISO code from Settings currencies; PKR stays the reporting currency */
+  @Column({ type: 'varchar', length: 3, nullable: true })
+  invoiceCurrency: string | null;
+
+  /** EXW, FOB, CFR, CIF, DAP, DDP ... from the Settings list INCOTERM */
+  @Column({ type: 'varchar', length: 10, nullable: true })
+  incoterm: string | null;
+
+  /** the named port or place */
+  @Column({ type: 'varchar', length: 120, nullable: true })
+  incotermPlace: string | null;
+
+  @Column({ type: 'varchar', length: 20, default: 'Incoterms 2020' })
+  incotermVersion: string;
+
+  @Column({ type: 'varchar', length: 20, nullable: true })
+  paymentTermType: PaymentTermType | null;
+
+  /** advance / milestone plan, adds up to 100% */
+  @Column({ type: 'jsonb', default: () => "'[]'" })
+  paymentPlan: PaymentMilestone[];
+
+  /** the credit limit's currency (creditLimit is in it); approved by Finance */
+  @Column({ type: 'varchar', length: 3, nullable: true })
+  creditCurrency: string | null;
+
+  @Column({ type: 'date', nullable: true })
+  creditExpiry: string | null;
+
+  /** Block or Warn when the limit is passed or an invoice is overdue */
+  @Column({ type: 'varchar', length: 5, default: 'Block' })
+  creditControl: CreditControl;
+
+  @Column({ type: 'varchar', length: 120, nullable: true })
+  creditApprovedBy: string | null;
+
+  @Column({ type: 'timestamptz', nullable: true })
+  creditApprovedAt: Date | null;
+
+  /** bank transfer, SWIFT, documentary collection, LC ... from the Settings list SETTLEMENT_METHOD */
+  @Column({ type: 'jsonb', default: () => "'[]'" })
+  settlementMethods: string[];
+
+  @Column({ type: 'jsonb', default: () => "'[]'" })
+  bankAccounts: DistributorBank[];
+
+  /** who bears the bank charges */
+  @Column({ type: 'varchar', length: 10, nullable: true })
+  bankCharges: BankCharges | null;
+
+  /** margin guardrail: a price below this margin needs Finance approval; 0 = no guardrail */
+  @Column({ type: 'decimal', precision: 5, scale: 2, default: 10, transformer: numeric })
+  minMarginPct: number;
+
   /** earlier single province, kept so older records can be moved to `provinces` */
   @Column({ type: 'varchar', length: 60, nullable: true })
   province: string | null;
@@ -513,4 +605,96 @@ export class DistributorRate extends AppEntity {
 
   @Column({ type: 'decimal', precision: 12, scale: 4, transformer: numeric })
   rate: number;
+}
+
+/**
+ * One version of a distributor's price for one SKU, in a currency and a unit (spec section 3). Prices are never
+ * overwritten: a new version closes the one before it. A price under the distributor's minimum margin waits for
+ * Finance approval.
+ */
+@Entity('distributor_prices')
+export class DistributorPrice extends AppEntity {
+  @ManyToOne(() => Distributor, { nullable: false, onDelete: 'CASCADE' })
+  @JoinColumn({ name: 'distributorId' })
+  distributor: Distributor;
+
+  @Column({ type: 'uuid' })
+  distributorId: string;
+
+  @ManyToOne(() => Product, { nullable: false, onDelete: 'CASCADE' })
+  @JoinColumn({ name: 'productId' })
+  product: Product;
+
+  @Column({ type: 'uuid' })
+  productId: string;
+
+  /** 1, 2, 3 ... per distributor, SKU and unit */
+  @Column({ type: 'int' })
+  version: number;
+
+  @Column({ type: 'varchar', length: 3 })
+  currency: string;
+
+  @Column({ type: 'varchar', length: 14 })
+  unit: PriceUnit;
+
+  /** packs in one unit */
+  @Column({ type: 'decimal', precision: 14, scale: 4, transformer: numeric })
+  packsPerUnit: number;
+
+  /** list price per unit, in the currency */
+  @Column({ type: 'decimal', precision: 14, scale: 4, transformer: numeric })
+  price: number;
+
+  @Column({ type: 'decimal', precision: 5, scale: 2, default: 0, transformer: numeric })
+  discountPct: number;
+
+  @Column({ type: 'date' })
+  effectiveFrom: string;
+
+  /** null = open ended */
+  @Column({ type: 'date', nullable: true })
+  effectiveTo: string | null;
+
+  /** minimum order and order multiple, in units */
+  @Column({ type: 'decimal', precision: 14, scale: 2, default: 0, transformer: numeric })
+  moq: number;
+
+  @Column({ type: 'decimal', precision: 14, scale: 2, default: 0, transformer: numeric })
+  increment: number;
+
+  /** a sample or introductory / promotional price */
+  @Column({ default: false })
+  promo: boolean;
+
+  @Column({ type: 'varchar', length: 300, nullable: true })
+  note: string | null;
+
+  /** PKR per 1 unit of the currency when the price was saved */
+  @Column({ type: 'decimal', precision: 18, scale: 6, transformer: numeric })
+  fxRate: number;
+
+  /** cost per pack in PKR when saved (manufacturer, packaging, printing, inbound, outbound) */
+  @Column({ type: 'decimal', precision: 12, scale: 4, transformer: numeric })
+  costPerPack: number;
+
+  /** margin on the net price, % */
+  @Column({ type: 'decimal', precision: 8, scale: 2, transformer: numeric })
+  marginPct: number;
+
+  @Column({ type: 'varchar', length: 18, default: 'Active' })
+  status: PriceStatus;
+
+  @Column({ type: 'varchar', length: 120 })
+  createdBy: string;
+
+  @Column({ type: 'varchar', length: 120, nullable: true })
+  decidedBy: string | null;
+
+  @Column({ type: 'timestamptz', nullable: true })
+  decidedAt: Date | null;
+
+  /** why a price under the floor was approved or rejected */
+  @Column({ type: 'varchar', length: 500, nullable: true })
+  decisionNote: string | null;
 }

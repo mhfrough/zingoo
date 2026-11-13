@@ -1357,5 +1357,62 @@ ok('archive, then reopen as a draft', (await call(T.owner, 'POST', `/distributor
 ok('a Distributor login cannot read registrations -> 403', (await call(T.dist, 'GET', `/distributors/${dNew.json.id}/registration`)).status === 403);
 ok('KYC types and classifications are Settings lists (two KYC types required)', ((await call(T.owner, 'GET', '/lookups')).json ?? []).filter((l) => l.list === 'KYC_DOC_TYPE' && l.flags?.required).length === 2);
 
+// ── D2 international pricing, currency, payment plans, credit, banking ──
+const eZ = ((await call(T.owner, 'GET', '/distributors')).json ?? []).find((d) => d.name === 'Zayed Gulf Trading');
+ok('sample: AED, CIF Jebel Ali, 30/70 plan, shared charges', eZ?.invoiceCurrency === 'AED' && eZ?.incoterm === 'CIF' && eZ?.paymentPlan?.length === 2 && eZ?.bankCharges === 'Shared', JSON.stringify([eZ?.invoiceCurrency, eZ?.incoterm]));
+const eP = (await call(T.sales, 'GET', `/distributors/${eZ.id}/prices`)).json ?? [];
+ok('sample price: Z20-MAS per bundle in AED, active, margin worked out', eP.length === 1 && eP[0].product.sku === 'Z20-MAS' && eP[0].status === 'Active' && eP[0].current && eP[0].packsPerUnit === 432 && eP[0].marginPct > 10, JSON.stringify(eP[0]));
+ok('an unknown invoice currency -> 400', (await call(T.sales, 'PATCH', `/distributors/${eZ.id}`, { invoiceCurrency: 'XYZ' })).status === 400);
+ok('an Incoterm not in Settings -> 400', (await call(T.sales, 'PATCH', `/distributors/${eZ.id}`, { incoterm: 'ABC' })).status === 400);
+ok('a payment plan that is not 100% -> 400', (await call(T.sales, 'PATCH', `/distributors/${eZ.id}`, { paymentPlan: [{ label: 'Advance', pct: 30, trigger: 'On order', days: 0 }, { label: 'Balance', pct: 60, trigger: 'On documents', days: 30 }] })).status === 400);
+ok('a custom schedule without instalments -> 400', (await call(T.sales, 'PATCH', `/distributors/${eZ.id}`, { paymentPlan: [] })).status === 400);
+ok('a remittance method not in Settings -> 400', (await call(T.sales, 'PATCH', `/distributors/${eZ.id}`, { settlementMethods: ['Barter'] })).status === 400);
+ok('a bad SWIFT code -> 400', (await call(T.sales, 'PATCH', `/distributors/${eZ.id}`, { bankAccounts: [{ beneficiary: 'Z', bankName: 'B', account: '1', swift: '12', isDefault: true }] })).status === 400);
+ok('the credit limit is not changed from the distributor form -> 400', (await call(T.sales, 'PATCH', `/distributors/${eZ.id}`, { creditLimit: 50000 })).status === 400);
+ok('Distribution cannot approve credit -> 403', (await call(T.sales, 'PUT', `/distributors/${eZ.id}/credit`, { creditLimit: 50000, creditCurrency: 'AED', creditControl: 'Block' })).status === 403);
+const eCr = await call(T.finance, 'PUT', `/distributors/${eZ.id}/credit`, { creditLimit: 50000, creditCurrency: 'aed', creditExpiry: '2999-12-31', creditControl: 'Warn' });
+ok('Finance approves credit: limit, currency, expiry, who and when', eCr.json?.creditLimit === 50000 && eCr.json?.creditCurrency === 'AED' && eCr.json?.creditControl === 'Warn' && !!eCr.json?.creditApprovedBy && !!eCr.json?.creditApprovedAt, JSON.stringify(eCr.json?.creditApprovedBy));
+ok('credit for a local distributor -> 400', (await call(T.finance, 'PUT', `/distributors/${dLocal.id}/credit`, { creditLimit: 1, creditCurrency: 'PKR', creditControl: 'Block' })).status === 400);
+ok('Distribution cannot verify a bank account -> 403', (await call(T.sales, 'POST', `/distributors/${eZ.id}/banks/0/verify`)).status === 403);
+const eV = await call(T.finance, 'POST', `/distributors/${eZ.id}/banks/0/verify`);
+ok('Finance verifies the bank account', !!eV.json?.bankAccounts?.[0]?.verifiedAt && !!eV.json?.bankAccounts?.[0]?.verifiedBy);
+ok('verifying twice -> 400', (await call(T.finance, 'POST', `/distributors/${eZ.id}/banks/0/verify`)).status === 400);
+const eB1 = (await call(T.sales, 'PATCH', `/distributors/${eZ.id}`, { bankAccounts: [{ ...eV.json.bankAccounts[0], verifiedAt: undefined, verifiedBy: undefined }, { beneficiary: 'Zayed Gulf Trading LLC', bankName: 'Second bank', account: 'S-2', swift: 'abcdaeadxxx', currency: 'USD', isDefault: false }] })).json;
+ok('an unchanged account keeps its verification; a new one starts unverified', !!eB1?.bankAccounts?.[0]?.verifiedAt && !eB1?.bankAccounts?.[1]?.verifiedAt && eB1?.bankAccounts?.[1]?.swift === 'ABCDAEADXXX', JSON.stringify(eB1?.bankAccounts));
+const eB2 = (await call(T.sales, 'PATCH', `/distributors/${eZ.id}`, { bankAccounts: [{ beneficiary: 'Zayed Gulf Trading LLC', bankName: 'Sample bank', account: 'CHANGED-9', currency: 'AED', isDefault: true }] })).json;
+ok('changing the account number clears its verification', eB2?.bankAccounts?.length === 1 && !eB2.bankAccounts[0].verifiedAt);
+// price list
+const ePrice = (o = {}) => ({ productId: eP[0].productId, currency: 'AED', unit: 'Bundle', price: 70, effectiveFrom: '2999-01-01', ...o });
+ok('a SKU not approved for the distributor -> 400', (await call(T.sales, 'POST', `/distributors/${eZ.id}/prices`, ePrice({ productId: p3P.id }))).status === 400);
+ok('an unknown currency -> 400', (await call(T.sales, 'POST', `/distributors/${eZ.id}/prices`, ePrice({ currency: 'XYZ' }))).status === 400);
+ok('a pallet price needs packs per pallet -> 400', (await call(T.sales, 'POST', `/distributors/${eZ.id}/prices`, ePrice({ unit: 'Pallet' }))).status === 400);
+ok('a minimum order that is not a multiple of the increment -> 400', (await call(T.sales, 'POST', `/distributors/${eZ.id}/prices`, ePrice({ moq: 15, increment: 10 }))).status === 400);
+ok('a price ending before it starts -> 400', (await call(T.sales, 'POST', `/distributors/${eZ.id}/prices`, ePrice({ effectiveTo: '2998-01-01' }))).status === 400);
+ok('a price for a local distributor -> 400', (await call(T.sales, 'POST', `/distributors/${dLocal.id}/prices`, ePrice())).status === 400);
+const eV2 = await call(T.sales, 'POST', `/distributors/${eZ.id}/prices`, ePrice());
+ok('version 2 above the floor is active at once', eV2.status === 201 && eV2.json?.version === 2 && eV2.json?.status === 'Active', JSON.stringify([eV2.status, eV2.json?.version, eV2.json?.status]));
+const eAll = (await call(T.sales, 'GET', `/distributors/${eZ.id}/prices`)).json ?? [];
+ok('version 1 now ends the day before version 2 starts', eAll.find((r) => r.version === 1)?.effectiveTo === '2998-12-31', JSON.stringify(eAll.map((r) => [r.version, r.effectiveTo])));
+ok('a version starting on or before the latest one -> 409', (await call(T.sales, 'POST', `/distributors/${eZ.id}/prices`, ePrice({ effectiveFrom: '2998-06-01' }))).status === 409);
+ok('an active price cannot be deleted -> 400', (await call(T.sales, 'DELETE', `/distributors/${eZ.id}/prices/${eV2.json.id}`)).status === 400);
+const eLow = await call(T.sales, 'POST', `/distributors/${eZ.id}/prices`, ePrice({ unit: 'Pack', price: 0.1, effectiveFrom: '2999-02-01' }));
+ok('a price under the margin floor waits for Finance', eLow.json?.status === 'Pending approval' && eLow.json?.marginPct < 10 && eLow.json?.packsPerUnit === 1, JSON.stringify([eLow.json?.status, eLow.json?.marginPct]));
+ok('Distribution cannot approve it -> 403', (await call(T.sales, 'POST', `/distributors/${eZ.id}/prices/${eLow.json.id}/approve`, {})).status === 403);
+ok('a rejection needs a reason -> 400', (await call(T.finance, 'POST', `/distributors/${eZ.id}/prices/${eLow.json.id}/reject`, {})).status === 400);
+ok('Finance approves it with a note', (await call(T.finance, 'POST', `/distributors/${eZ.id}/prices/${eLow.json.id}/approve`, { note: 'Market entry' })).json?.status === 'Active');
+const ePromo = await call(T.sales, 'POST', `/distributors/${eZ.id}/prices`, ePrice({ unit: 'Dozen', price: 5, promo: true, effectiveFrom: '2999-03-01', effectiveTo: '2999-03-31' }));
+ok('a promotional price always waits for Finance (12 packs a dozen)', ePromo.json?.status === 'Pending approval' && ePromo.json?.packsPerUnit === 12);
+ok('a promotional price needs an end date -> 400', (await call(T.sales, 'POST', `/distributors/${eZ.id}/prices`, ePrice({ unit: 'Dozen', price: 5, promo: true, effectiveFrom: '2999-04-01' }))).status === 400);
+ok('Finance rejects it with a reason; a rejected price can be deleted', (await call(T.finance, 'POST', `/distributors/${eZ.id}/prices/${ePromo.json.id}/reject`, { note: 'Too deep' })).json?.status === 'Rejected'
+  && (await call(T.sales, 'DELETE', `/distributors/${eZ.id}/prices/${ePromo.json.id}`)).status === 200);
+ok('a Distributor login cannot read price lists -> 403', (await call(T.dist, 'GET', `/distributors/${eZ.id}/prices`)).status === 403);
+// exchange rates
+const eFx = await call(T.finance, 'PATCH', '/currencies/AED', { rate: 76.5, source: 'State Bank' });
+ok('Finance overrides a rate; the change is kept with its source', eFx.json?.rate === 76.5 && ((await call(T.audit, 'GET', '/currencies/AED/rates')).json ?? [])[0]?.source === 'State Bank');
+ok('a price keeps the rate it was saved with', ((await call(T.sales, 'GET', `/distributors/${eZ.id}/prices`)).json ?? []).find((r) => r.version === 1)?.fxRate === 76.25);
+await call(T.finance, 'PATCH', '/currencies/AED', { rate: 76.25, source: 'Back to the sample rate' });
+ok('Distribution cannot change rates -> 403', (await call(T.sales, 'PATCH', '/currencies/AED', { rate: 70 })).status === 403);
+ok('a currency used by a distributor cannot be deleted -> 409', (await call(T.owner, 'DELETE', '/currencies/AED')).status === 409);
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

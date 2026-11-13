@@ -3,7 +3,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Subject } from 'rxjs';
 import { EntityManager, Repository } from 'typeorm';
 import { LookupsService } from './lookups.service';
-import { Account, Category, ContainerType, Currency, Lookup, Setting } from './setup.entities';
+import { Account, Category, ContainerType, Currency, CurrencyRate, Lookup, Setting } from './setup.entities';
 import { DEFAULT_SETTINGS, STARTER_ACCOUNTS } from './setup.constants';
 
 @Injectable()
@@ -217,6 +217,7 @@ export class CategoriesService {
 export class CatalogListsService {
   constructor(
     @InjectRepository(Currency) private readonly currencies: Repository<Currency>,
+    @InjectRepository(CurrencyRate) private readonly rates: Repository<CurrencyRate>,
     @InjectRepository(ContainerType) private readonly containers: Repository<ContainerType>,
   ) {}
 
@@ -229,20 +230,31 @@ export class CatalogListsService {
   }
 
   /** add a currency; its rate is PKR per 1 unit */
-  async addCurrency(dto: { code: string; name: string; symbol: string; rate: number }) {
+  async addCurrency(dto: { code: string; name: string; symbol: string; rate: number }, by = 'System') {
     const code = dto.code.trim().toUpperCase();
     if (await this.currencies.findOne({ where: { code } })) throw new ConflictException('This currency already exists.');
-    return this.currencies.save(this.currencies.create({ ...dto, code }));
+    const row = await this.currencies.save(this.currencies.create({ ...dto, code }));
+    await this.rates.save(this.rates.create({ code, rate: dto.rate, source: 'Manual', effectiveOn: new Date().toISOString().slice(0, 10), by }));
+    return row;
+  }
+
+  /** every rate a currency has had, newest first */
+  rateHistory(code: string) {
+    return this.rates.find({ where: { code: code.toUpperCase() }, order: { createdAt: 'DESC' }, take: 100 });
   }
 
   /** change a name, symbol or rate; PKR is the base currency and always 1 */
-  async updateCurrency(code: string, patch: { name?: string; symbol?: string; rate?: number }) {
+  async updateCurrency(code: string, patch: { name?: string; symbol?: string; rate?: number; source?: string }, by = 'System') {
     const c = await this.currencies.findOne({ where: { code } });
     if (!c) throw new NotFoundException('Currency not found');
     if (code === 'PKR' && patch.rate !== undefined && Math.abs(patch.rate - 1) > 0.000001) {
       throw new BadRequestException('PKR is the base currency; its rate is always 1.');
     }
-    return this.currencies.save(this.currencies.merge(c, patch));
+    const { source, ...rest } = patch;
+    if (rest.rate !== undefined && Math.abs(Number(rest.rate) - Number(c.rate)) > 0.0000001) {
+      await this.rates.save(this.rates.create({ code, rate: rest.rate, source: source?.trim() || 'Manual', effectiveOn: new Date().toISOString().slice(0, 10), by }));
+    }
+    return this.currencies.save(this.currencies.merge(c, rest));
   }
 
   /** a currency that documents, products or manufacturers use cannot be deleted */
@@ -253,7 +265,8 @@ export class CatalogListsService {
     const [r] = await this.currencies.query(
       `SELECT (SELECT COUNT(*) FROM accounting_documents WHERE currency = $1) + (SELECT COUNT(*) FROM export_shipments WHERE currency = $1)
             + (SELECT COUNT(*) FROM journal_vouchers WHERE currency = $1) + (SELECT COUNT(*) FROM products WHERE currency = $1)
-            + (SELECT COUNT(*) FROM manufacturers WHERE currency = $1) AS n`,
+            + (SELECT COUNT(*) FROM manufacturers WHERE currency = $1) + (SELECT COUNT(*) FROM distributor_prices WHERE currency = $1)
+            + (SELECT COUNT(*) FROM distributors WHERE "invoiceCurrency" = $1 OR "creditCurrency" = $1) AS n`,
       [code],
     );
     if (Number(r.n)) throw new ConflictException('This currency is used by existing records. Change its rate instead of deleting it.');

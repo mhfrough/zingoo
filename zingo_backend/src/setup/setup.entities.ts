@@ -104,6 +104,27 @@ export class Currency {
   rate: number;
 }
 
+/** Every exchange rate a currency has had: the rate, where it came from, from when, and who set it. */
+@Entity('currency_rates')
+export class CurrencyRate extends AppEntity {
+  @Column({ type: 'varchar', length: 3 })
+  code: string;
+
+  /** PKR per 1 unit */
+  @Column({ type: 'decimal', precision: 18, scale: 6, transformer: numeric })
+  rate: number;
+
+  /** State Bank, commercial bank, manual override ... */
+  @Column({ type: 'varchar', length: 60 })
+  source: string;
+
+  @Column({ type: 'date' })
+  effectiveOn: string;
+
+  @Column({ type: 'varchar', length: 120 })
+  by: string;
+}
+
 /** Chart of accounts. Ledger lines point at `code`. */
 @Entity('accounts')
 export class Account extends AppEntity {

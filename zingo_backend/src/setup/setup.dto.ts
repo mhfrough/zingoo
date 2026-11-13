@@ -89,6 +89,8 @@ export class UpdateCurrencyDto {
   @IsOptional() @IsString() @IsNotEmpty() @MaxLength(60) name?: string;
   @IsOptional() @IsString() @IsNotEmpty() @MaxLength(8) symbol?: string;
   @IsOptional() @IsNumber() @IsPositive() rate?: number;
+  /** where a new rate comes from (State Bank, a commercial bank, manual override) */
+  @IsOptional() @IsString() @MaxLength(60) source?: string;
 }
 
 export class CreateContainerDto {

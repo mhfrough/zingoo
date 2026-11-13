@@ -42,6 +42,16 @@ export const intlDistributors = [
     contacts: [{ name: 'Sample buyer', role: 'Purchasing', email: 'buyer@example.test', phoneCode: '+971', isPrimary: true }],
     addresses: [{ type: 'Registered' as const, line: 'Sample address', city: 'Dubai', country: 'United Arab Emirates', isDefault: true }],
     agreementStart: '2026-12-01', paymentDays: 60, creditLimit: 0, advancePct: 30, selloutDays: 0,
+    // phase D2: pricing in dirhams, CIF Jebel Ali, 30% with the order and 70% 30 days after the documents
+    invoiceCurrency: 'AED', incoterm: 'CIF', incotermPlace: 'Jebel Ali, Dubai', paymentTermType: 'Custom schedule' as const,
+    paymentPlan: [
+      { label: 'Advance', pct: 30, trigger: 'On order' as const, days: 0 },
+      { label: 'Balance', pct: 70, trigger: 'On documents' as const, days: 30 },
+    ],
+    settlementMethods: ['Bank transfer', 'Letter of credit'], bankCharges: 'Shared' as const,
+    bankAccounts: [{ beneficiary: 'Zayed Gulf Trading LLC', bankName: 'Sample bank', account: 'SAMPLE-0001', currency: 'AED', isDefault: true }],
+    /** approved SKU (by product key) and its price list */
+    approved: 'p3', price: { unit: 'Bundle' as const, price: 60, moq: 10, increment: 10 },
   },
 ];
 

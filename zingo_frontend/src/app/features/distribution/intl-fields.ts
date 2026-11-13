@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, computed, inject, input } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, effect, inject, input, signal } from '@angular/core';
 import { FormArray, FormBuilder, FormGroup, ReactiveFormsModule } from '@angular/forms';
 import { AttachmentMeta } from '../../core/attachments.api';
 import { SettingsStore } from '../../core/settings.store';
@@ -10,6 +10,9 @@ import { Distributor, Product } from '../ops/models';
 export const ADDRESS_TYPES = ['Registered', 'Billing', 'Warehouse', 'Consignee', 'Delivery'] as const;
 /** where an agreement stands */
 export const AGREEMENT_STATUSES = ['Draft', 'Under review', 'Signed', 'Expired', 'Terminated'] as const;
+export const PAYMENT_TERM_TYPES = ['Advance', 'Credit days', 'On shipment', 'On documents', 'Custom schedule'] as const;
+export const PAYMENT_TRIGGERS = ['On order', 'Before shipment', 'On shipment', 'On documents', 'On arrival', 'After invoice'] as const;
+export const BANK_CHARGES = ['Sender', 'Receiver', 'Shared'] as const;
 
 /** the international part of the distributor form, as its own form group */
 export function intlGroup(fb: FormBuilder) {
@@ -43,6 +46,16 @@ export function intlGroup(fb: FormBuilder) {
     quarterlyTarget: [0],
     annualTarget: [0],
     approvedProductIds: [[] as string[]],
+    invoiceCurrency: [''],
+    incoterm: [''],
+    incotermPlace: [''],
+    incotermVersion: ['Incoterms 2020'],
+    paymentTermType: [''],
+    paymentPlan: fb.array<FormGroup>([]),
+    settlementMethods: [[] as string[]],
+    bankCharges: [''],
+    minMarginPct: [10],
+    bankAccounts: fb.array<FormGroup>([]),
   });
 }
 export type IntlGroup = ReturnType<typeof intlGroup>;
@@ -59,12 +72,26 @@ const kycGroup = (fb: FormBuilder, k?: Partial<NonNullable<Distributor['kycDocs'
   type: [k?.type ?? ''], file: [(k?.file ?? null) as AttachmentMeta | null], expiry: [k?.expiry ?? ''],
 });
 
+const milestoneGroup = (fb: FormBuilder, m?: Partial<NonNullable<Distributor['paymentPlan']>[number]>) => fb.nonNullable.group({
+  label: [m?.label ?? ''], pct: [m?.pct ?? 0], trigger: [m?.trigger ?? 'On order'], days: [m?.days ?? 0],
+});
+const bankGroup = (fb: FormBuilder, b?: Partial<NonNullable<Distributor['bankAccounts']>[number]>) => fb.nonNullable.group({
+  beneficiary: [b?.beneficiary ?? ''], bankName: [b?.bankName ?? ''], account: [b?.account ?? ''], iban: [b?.iban ?? ''],
+  swift: [b?.swift ?? ''], currency: [b?.currency ?? ''], isDefault: [b?.isDefault ?? false],
+  /** shown only; the server keeps or clears it */
+  verified: [b?.verifiedAt ? `Verified by ${b.verifiedBy ?? 'Finance'}` : ''],
+});
+
 /** fills the international group from a distributor (or empties it) */
 export function intlReset(fb: FormBuilder, g: IntlGroup, d: Distributor | null) {
-  const arr = (name: 'contacts' | 'addresses' | 'kycDocs') => g.controls[name] as FormArray<FormGroup>;
+  const arr = (name: 'contacts' | 'addresses' | 'kycDocs' | 'paymentPlan' | 'bankAccounts') => g.controls[name] as FormArray<FormGroup>;
   arr('contacts').clear();
   arr('addresses').clear();
   arr('kycDocs').clear();
+  arr('paymentPlan').clear();
+  arr('bankAccounts').clear();
+  for (const m of d?.paymentPlan ?? []) arr('paymentPlan').push(milestoneGroup(fb, m));
+  for (const b of d?.bankAccounts ?? []) arr('bankAccounts').push(bankGroup(fb, b));
   for (const c of d?.contacts ?? []) arr('contacts').push(contactGroup(fb, c));
   for (const a of d?.addresses ?? []) arr('addresses').push(addressGroup(fb, a));
   for (const k of d?.kycDocs ?? []) arr('kycDocs').push(kycGroup(fb, k));
@@ -77,7 +104,12 @@ export function intlReset(fb: FormBuilder, g: IntlGroup, d: Distributor | null) 
     renewalNoticeDays: d?.renewalNoticeDays ?? null, noticePeriodDays: d?.noticePeriodDays ?? null, agreementVersion: d?.agreementVersion ?? '',
     agreementStatus: d?.agreementStatus ?? 'Draft', agreementFile: d?.agreementFile ?? null, moq: d?.moq ?? '',
     quarterlyTarget: Number(d?.quarterlyTarget ?? 0), annualTarget: Number(d?.annualTarget ?? 0), approvedProductIds: d?.approvedProductIds ?? [],
+    invoiceCurrency: d?.invoiceCurrency ?? '', incoterm: d?.incoterm ?? '', incotermPlace: d?.incotermPlace ?? '',
+    incotermVersion: d?.incotermVersion ?? 'Incoterms 2020', paymentTermType: d?.paymentTermType ?? '', settlementMethods: d?.settlementMethods ?? [],
+    bankCharges: d?.bankCharges ?? '', minMarginPct: Number(d?.minMarginPct ?? 10),
   });
+  (d?.paymentPlan ?? []).forEach((m, i) => arr('paymentPlan').at(i).reset({ ...milestoneGroup(fb, m).getRawValue() }));
+  (d?.bankAccounts ?? []).forEach((b, i) => arr('bankAccounts').at(i).reset({ ...bankGroup(fb, b).getRawValue() }));
   // reset() above puts the rows back to their first values; set them again
   (d?.contacts ?? []).forEach((c, i) => arr('contacts').at(i).reset({ ...contactGroup(fb, c).getRawValue() }));
   (d?.addresses ?? []).forEach((a, i) => arr('addresses').at(i).reset({ ...addressGroup(fb, a).getRawValue() }));
@@ -111,6 +143,18 @@ export function intlValue(g: IntlGroup) {
     noticePeriodDays: n(v.noticePeriodDays), agreementVersion: t(v.agreementVersion), agreementStatus: v.agreementStatus,
     agreementFile: v.agreementFile, moq: t(v.moq), quarterlyTarget: Number(v.quarterlyTarget) || 0, annualTarget: Number(v.annualTarget) || 0,
     approvedProductIds: v.approvedProductIds,
+    invoiceCurrency: t(v.invoiceCurrency), incoterm: t(v.incoterm), incotermPlace: t(v.incotermPlace),
+    incotermVersion: v.incotermVersion.trim() || 'Incoterms 2020', paymentTermType: t(v.paymentTermType),
+    paymentPlan: (v.paymentPlan as { label: string; pct: number; trigger: string; days: number }[])
+      .filter((m) => m.label.trim() && Number(m.pct) > 0)
+      .map((m) => ({ label: m.label.trim(), pct: Number(m.pct), trigger: m.trigger, days: Number(m.days) || 0 })),
+    settlementMethods: v.settlementMethods, bankCharges: t(v.bankCharges), minMarginPct: Number(v.minMarginPct) || 0,
+    bankAccounts: (v.bankAccounts as Record<string, string | boolean>[])
+      .filter((b) => String(b['beneficiary']).trim() && String(b['bankName']).trim() && String(b['account']).trim())
+      .map((b) => ({
+        beneficiary: String(b['beneficiary']).trim(), bankName: String(b['bankName']).trim(), account: String(b['account']).trim(),
+        iban: t(String(b['iban'])), swift: t(String(b['swift'])), currency: t(String(b['currency'])), isDefault: !!b['isDefault'],
+      })),
   };
 }
 
@@ -151,6 +195,17 @@ export function intlValue(g: IntlGroup) {
       gap: var(--space-2);
       padding-block-end: var(--space-3);
       border-block-end: 1px solid var(--border);
+    }
+
+    .warn {
+      margin: 0;
+      color: var(--danger);
+      font-size: var(--text-sm);
+    }
+
+    /* a payment instalment: everything on one line */
+    .row--plan {
+      grid-template-columns: minmax(0, 2fr) minmax(0, 1fr) minmax(0, 1.5fr) minmax(0, 1fr) auto;
     }
 
     /* a KYC document: type, expiry and remove on one line, the file below at full width */
@@ -279,9 +334,85 @@ export function intlValue(g: IntlGroup) {
       <app-field label="Minimum order" [wide]="true" hint="By SKU, carton, pallet or container"><input type="text" formControlName="moq" maxlength="300" /></app-field>
       <app-field label="Quarterly target (PKR)"><input type="number" formControlName="quarterlyTarget" min="0" step="1" /></app-field>
       <app-field label="Annual target (PKR)"><input type="number" formControlName="annualTarget" min="0" step="1" /></app-field>
-      <app-field label="Approved products" [wide]="true" hint="SKUs this distributor may sell abroad">
+      <app-field label="Approved products" [wide]="true" hint="SKUs this distributor may sell abroad; each gets its price under Credit & prices">
         <app-multi-select formControlName="approvedProductIds" [options]="productOptions()" placeholder="Add a product" />
       </app-field>
+
+      <h4 class="form-section">Currency, Incoterms &amp; payment terms</h4>
+      <app-field label="Invoice currency" hint="PKR stays the reporting currency">
+        <app-select formControlName="invoiceCurrency" [options]="currencyOptions()" placeholder="USD, AED, EUR ..." />
+      </app-field>
+      <app-field label="Incoterm"><app-select formControlName="incoterm" [options]="incoterms()" placeholder="FOB, CIF ..." /></app-field>
+      <app-field label="Named port / place"><input type="text" formControlName="incotermPlace" maxlength="120" placeholder="Jebel Ali, Dubai" /></app-field>
+      <app-field label="Incoterms version"><input type="text" formControlName="incotermVersion" maxlength="20" /></app-field>
+      <app-field label="Payment terms">
+        <select formControlName="paymentTermType">
+          <option value="">Choose terms</option>
+          @for (t of termTypes; track t) {
+            <option [value]="t">{{ t }}</option>
+          }
+        </select>
+      </app-field>
+      <app-field label="Bank charges" hint="Who bears them">
+        <select formControlName="bankCharges">
+          <option value="">Not agreed yet</option>
+          @for (c of bankChargeOptions; track c) {
+            <option [value]="c">{{ c }}</option>
+          }
+        </select>
+      </app-field>
+      <app-field label="Remittance methods" [wide]="true">
+        <app-multi-select formControlName="settlementMethods" [options]="remittanceMethods()" placeholder="Bank transfer, LC ..." />
+      </app-field>
+      <app-field label="Minimum margin (%)" hint="A price under it waits for Finance. 0 = no check">
+        <input type="number" formControlName="minMarginPct" min="0" max="100" step="0.5" />
+      </app-field>
+
+      <h4 class="form-section">Payment plan {{ planTotal() ? '· ' + planTotal() + '%' : '' }}</h4>
+      <div class="rows" formArrayName="paymentPlan">
+        @if (paymentPlan.length && planTotal() !== 100) {
+          <p class="warn">The instalments add up to {{ planTotal() }}%; they must make 100%.</p>
+        }
+        @for (m of paymentPlan.controls; track m; let i = $index) {
+          <div class="row row--plan" [formGroupName]="i">
+            <app-field label="Instalment" [required]="true"><input type="text" formControlName="label" maxlength="80" placeholder="Advance" /></app-field>
+            <app-field label="Share (%)" [required]="true"><input type="number" formControlName="pct" min="0" max="100" step="1" /></app-field>
+            <app-field label="Due">
+              <select formControlName="trigger">
+                @for (t of triggers; track t) {
+                  <option [value]="t">{{ t }}</option>
+                }
+              </select>
+            </app-field>
+            <app-field label="Days after"><input type="number" formControlName="days" min="0" max="365" step="1" /></app-field>
+            <span class="row__end">
+              <button appBtn type="button" variant="ghost" icon="trash" iconOnly (click)="remove(paymentPlan, i)" [attr.aria-label]="'Remove instalment ' + (i + 1)"></button>
+            </span>
+          </div>
+        }
+        <div><button appBtn type="button" size="sm" icon="plus" (click)="addMilestone()">Add instalment</button></div>
+      </div>
+
+      <h4 class="form-section">Distributor bank accounts</h4>
+      <div class="rows" formArrayName="bankAccounts">
+        @for (b of bankAccounts.controls; track b; let i = $index) {
+          <div class="row" [formGroupName]="i">
+            <app-field label="Beneficiary" [required]="true"><input type="text" formControlName="beneficiary" maxlength="150" /></app-field>
+            <app-field label="Bank" [required]="true"><input type="text" formControlName="bankName" maxlength="120" /></app-field>
+            <app-field label="Account no." [required]="true"><input type="text" formControlName="account" maxlength="40" /></app-field>
+            <app-field label="IBAN"><input type="text" formControlName="iban" maxlength="40" /></app-field>
+            <app-field label="SWIFT / BIC"><input type="text" formControlName="swift" maxlength="11" /></app-field>
+            <app-field label="Currency"><app-select formControlName="currency" [options]="currencyOptions()" placeholder="Currency" /></app-field>
+            <span class="row__end">
+              <label><input type="radio" name="default-bank" [checked]="b.value.isDefault" (change)="only(bankAccounts, i, 'isDefault')" /> Default</label>
+              <small class="muted">{{ b.value.verified || 'Not verified' }}</small>
+              <button appBtn type="button" variant="ghost" icon="trash" iconOnly (click)="remove(bankAccounts, i)" [attr.aria-label]="'Remove bank account ' + (i + 1)"></button>
+            </span>
+          </div>
+        }
+        <p class="muted">Finance verifies each account under Credit &amp; prices. Changing an account's details clears its verification.</p>
+        <div><button appBtn type="button" size="sm" icon="plus" (click)="addBank()">Add bank account</button></div>
+      </div>
     </ng-container>
   `,
 })
@@ -299,6 +430,14 @@ export class IntlFields {
   protected agreementStatuses = AGREEMENT_STATUSES;
   protected classifications = computed<SelectOption<string>[]>(() => this.store.options('DIST_CLASSIFICATION').map((c) => ({ value: c, label: c })));
   protected kycTypes = computed(() => this.store.lookups().filter((l) => l.list === 'KYC_DOC_TYPE' && l.active).map((l) => ({ code: l.code, required: !!l.flags?.['required'] })));
+  protected termTypes = PAYMENT_TERM_TYPES;
+  protected triggers = PAYMENT_TRIGGERS;
+  protected bankChargeOptions = BANK_CHARGES;
+  protected currencyOptions = computed<SelectOption<string>[]>(() => this.store.currencies().map((c) => ({ value: c.code, label: `${c.code} · ${c.name}` })));
+  protected incoterms = computed<SelectOption<string>[]>(() => this.store.options('INCOTERM').map((c) => ({ value: c, label: c })));
+  protected remittanceMethods = computed<SelectOption<string>[]>(() => this.store.options('REMITTANCE_METHOD').map((c) => ({ value: c, label: c })));
+  /** the plan's total, kept current as the rows change */
+  protected planTotal = signal(0);
   protected productOptions = computed<SelectOption<string>[]>(() =>
     this.products().map((p) => ({ value: p.id, label: `${p.sku} · ${p.name}`, sub: p.packetSize ?? undefined })));
 
@@ -310,6 +449,33 @@ export class IntlFields {
   }
   protected get kycDocs() {
     return this.group().controls.kycDocs as FormArray<FormGroup>;
+  }
+  protected get paymentPlan() {
+    return this.group().controls.paymentPlan as FormArray<FormGroup>;
+  }
+  protected get bankAccounts() {
+    return this.group().controls.bankAccounts as FormArray<FormGroup>;
+  }
+
+  constructor() {
+    // the plan total follows the rows (the group itself can be swapped)
+    effect((onCleanup) => {
+      const plan = this.group().controls.paymentPlan as FormArray<FormGroup>;
+      const sum = () => this.planTotal.set(Math.round((plan.getRawValue() as { pct: number }[]).reduce((s, m) => s + (Number(m.pct) || 0), 0) * 100) / 100);
+      sum();
+      const sub = plan.valueChanges.subscribe(sum);
+      onCleanup(() => sub.unsubscribe());
+    });
+  }
+
+  protected addMilestone() {
+    const left = Math.max(0, 100 - this.planTotal());
+    this.paymentPlan.push(milestoneGroup(this.fb, { label: this.paymentPlan.length ? 'Balance' : 'Advance', pct: left, trigger: this.paymentPlan.length ? 'On documents' : 'On order' }));
+    this.group().markAsDirty();
+  }
+  protected addBank() {
+    this.bankAccounts.push(bankGroup(this.fb, { beneficiary: this.group().controls.legalName.value, currency: this.group().controls.invoiceCurrency.value, isDefault: this.bankAccounts.length === 0 }));
+    this.group().markAsDirty();
   }
 
   protected addContact() {

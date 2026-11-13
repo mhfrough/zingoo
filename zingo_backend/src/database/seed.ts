@@ -9,6 +9,7 @@ import { NestFactory } from '@nestjs/core';
 import { DataSource } from 'typeorm';
 import { AppModule } from '../app.module';
 import { DistributorsService, ManufacturersService, ProductsService } from '../catalog/catalog.service';
+import { CommercialService } from '../catalog/commercial.service';
 import { Distributor, Manufacturer, Product } from '../catalog/catalog.entities';
 import { CollectionsService, OrdersService } from '../distribution/distribution.service';
 import { AccountingService, FinanceService } from '../finance/finance.service';
@@ -64,11 +65,18 @@ async function run() {
       const { key, ...rest } = d;
       id[key] = ((await app.get(DistributorsService).create(rest)) as Distributor).id;
     }
-    for (const d of data.intlDistributors) await app.get(DistributorsService).create(d);
     // each SKU is assigned its manufacturer and distributor
     for (const p of data.products) {
       const { key, manufacturer, distributor, ...rest } = p;
       id[key] = ((await app.get(ProductsService).create({ ...rest, manufacturerId: id[manufacturer], distributorId: id[distributor] })) as Product).id;
+    }
+    // international distributors: the record, one approved SKU and its price (the registration stays a draft)
+    for (const d of data.intlDistributors) {
+      const { approved, price, ...rest } = d;
+      const row = (await app.get(DistributorsService).create({ ...rest, approvedProductIds: [id[approved]] })) as Distributor;
+      await app.get(CommercialService).addPrice({ id: '', name: 'Export Executive', role: 'Exports' }, row.id, {
+        productId: id[approved], currency: rest.invoiceCurrency, effectiveFrom: new Date().toISOString().slice(0, 10), ...price,
+      });
     }
     for (const u of data.users) {
       await app.get(UsersService).createUser({

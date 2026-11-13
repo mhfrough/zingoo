@@ -1,6 +1,7 @@
-import { Body, Controller, Delete, Get, Param, ParseUUIDPipe, Patch, Post, Query } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, ParseUUIDPipe, Patch, Post, Query, Request } from '@nestjs/common';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
-import { Write } from '../auth/roles.decorator';
+import { Roles, Write } from '../auth/roles.decorator';
+import { STAFF } from '../auth/access';
 import { LookupsService } from './lookups.service';
 import { AccountsService, CatalogListsService, CategoriesService, SettingsService } from './setup.service';
 import {
@@ -111,15 +112,22 @@ export class SetupController {
 
   @Post('currencies')
   @Write('admin')
-  addCurrency(@Body() dto: CreateCurrencyDto) {
-    return this.lists.addCurrency(dto);
+  addCurrency(@Request() req: any, @Body() dto: CreateCurrencyDto) {
+    return this.lists.addCurrency(dto, req.user?.name);
   }
 
   @Patch('currencies/:code')
-  @Write('admin')
-  @ApiOperation({ summary: 'Change a currency name, symbol or exchange rate (PKR per unit)' })
-  editCurrency(@Param('code') code: string, @Body() dto: UpdateCurrencyDto) {
-    return this.lists.updateCurrency(code, dto);
+  @Roles('Admin', 'Finance')
+  @ApiOperation({ summary: 'Change a currency name, symbol or exchange rate (PKR per unit); Finance may override the rate' })
+  editCurrency(@Request() req: any, @Param('code') code: string, @Body() dto: UpdateCurrencyDto) {
+    return this.lists.updateCurrency(code, dto, req.user?.name);
+  }
+
+  @Get('currencies/:code/rates')
+  @Roles(...STAFF)
+  @ApiOperation({ summary: 'Every exchange rate the currency has had, with its source and who set it' })
+  currencyRates(@Param('code') code: string) {
+    return this.lists.rateHistory(code);
   }
 
   @Delete('currencies/:code')

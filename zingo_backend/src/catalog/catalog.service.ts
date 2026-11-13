@@ -3,7 +3,8 @@ import { AttachmentsService } from '../attachments/attachments.service';
 import { InjectRepository } from '@nestjs/typeorm';
 import { DeepPartial, Repository } from 'typeorm';
 import { CrudService } from '../common/crud.service';
-import { AreaCity, AreaDistrict, Distributor, Manufacturer, PackagingTemplate, PartnerBankAccount, PartnerFile, Product } from './catalog.entities';
+import { AreaCity, AreaDistrict, Distributor, DistributorAddress, DistributorContact, KycDocument, Manufacturer, PackagingTemplate, PartnerBankAccount, PartnerFile, Product } from './catalog.entities';
+import { Lookup } from '../setup/setup.entities';
 import { LookupsService } from '../setup/lookups.service';
 import { StockService } from './stock.service';
 
@@ -200,9 +201,71 @@ export class DistributorsService extends CrudService<Distributor> {
   async create(dto: DeepPartial<Distributor>) {
     cleanAreas(dto, null);
     await this.checkExclusive(null, dto, null);
+    await this.international(dto, null);
     const row = await super.create(dto);
-    await linkFiles(this.files, 'DISTRIBUTOR', row.id, row.files);
+    await this.linkAll(row);
     return row;
+  }
+
+  /**
+   * International (or both): a distributor ID (INT-DST-0001) and a registration that starts as a draft; contacts
+   * with one primary, addresses with one default per type, KYC documents of known types; no second record for
+   * the same legal entity in the same country.
+   */
+  private async international(dto: DeepPartial<Distributor>, before: Distributor | null) {
+    const market = (dto.market ?? before?.market ?? 'Local') as Distributor['market'];
+    if (market !== 'Local') {
+      if (!before?.code) dto.code = await this.nextCode();
+      if (!before || before.market === 'Local') dto.registrationStatus = 'Draft';
+    } else if (dto.market === 'Local') {
+      dto.registrationStatus = 'Active';
+    }
+    if (dto.contacts) {
+      const list = (dto.contacts as DistributorContact[]).map((c) => ({ ...c, name: c.name.trim() }));
+      if (list.filter((c) => c.isPrimary).length > 1) throw new BadRequestException('Only one contact can be the primary.');
+      if (list.length && !list.some((c) => c.isPrimary)) list[0].isPrimary = true;
+      dto.contacts = list;
+    }
+    if (dto.addresses) {
+      const list = dto.addresses as DistributorAddress[];
+      for (const t of new Set(list.map((a) => a.type))) {
+        const same = list.filter((a) => a.type === t);
+        if (same.filter((a) => a.isDefault).length > 1) throw new BadRequestException(`Only one ${t.toLowerCase()} address can be the default.`);
+        if (!same.some((a) => a.isDefault)) same[0].isDefault = true;
+      }
+    }
+    if (dto.kycDocs) {
+      const known = new Set((await this.repo.manager.find(Lookup, { where: { list: 'KYC_DOC_TYPE' } })).map((l) => l.code));
+      const old = new Set((before?.kycDocs ?? []).map((k) => k.type));
+      for (const k of dto.kycDocs as KycDocument[]) {
+        if (!known.has(k.type) && !old.has(k.type)) throw new BadRequestException(`"${k.type}" is not a KYC document type. Add it in Settings & Data.`);
+      }
+    }
+    if (dto.classification && dto.classification !== before?.classification) {
+      const ok = await this.repo.manager.findOne(Lookup, { where: { list: 'DIST_CLASSIFICATION', code: dto.classification as string, active: true } });
+      if (!ok) throw new BadRequestException(`"${dto.classification}" is not a distributor classification. Choose one from Settings & Data.`);
+    }
+    const legal = norm(dto.legalName ?? before?.legalName);
+    const country = norm(dto.country ?? before?.country);
+    if (legal && country && (dto.legalName !== undefined || dto.country !== undefined)) {
+      const [dup] = await this.repo.manager.query(
+        `SELECT name FROM distributors WHERE lower(trim("legalName")) = lower($1) AND lower(trim(country)) = lower($2) AND ($3::uuid IS NULL OR id <> $3::uuid) LIMIT 1`,
+        [legal, country, before?.id ?? null]);
+      if (dup) throw new ConflictException(`${legal} in ${country} is already registered as ${dup.name}.`);
+    }
+  }
+
+  /** the next INT-DST-0001 */
+  private async nextCode() {
+    const [r] = await this.repo.manager.query(`SELECT MAX(CAST(SUBSTRING(code FROM '([0-9]+)$') AS INT)) AS n FROM distributors WHERE code LIKE 'INT-DST-%'`);
+    return `INT-DST-${String((Number(r?.n) || 0) + 1).padStart(4, '0')}`;
+  }
+
+  /** contract files, KYC documents and the signed agreement belong to the distributor */
+  private async linkAll(row: Distributor) {
+    await linkFiles(this.files, 'DISTRIBUTOR', row.id, [
+      ...(row.files ?? []), ...(row.kycDocs ?? []).map((k) => k.file), ...(row.agreementFile ? [row.agreementFile] : []),
+    ]);
   }
 
   /**
@@ -237,8 +300,9 @@ export class DistributorsService extends CrudService<Distributor> {
     cleanAreas(dto, before);
     await this.checkExclusive(id, dto, before);
     if (dto.status && dto.status !== 'Temporary suspend') dto.statusUntil = null;
+    await this.international(dto, before);
     const row = await super.update(id, dto);
-    await linkFiles(this.files, 'DISTRIBUTOR', row.id, row.files);
+    await this.linkAll(row);
     return row;
   }
 }

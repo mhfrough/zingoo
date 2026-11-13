@@ -64,6 +64,7 @@ async function run() {
       const { key, ...rest } = d;
       id[key] = ((await app.get(DistributorsService).create(rest)) as Distributor).id;
     }
+    for (const d of data.intlDistributors) await app.get(DistributorsService).create(d);
     // each SKU is assigned its manufacturer and distributor
     for (const p of data.products) {
       const { key, manufacturer, distributor, ...rest } = p;

@@ -7,7 +7,8 @@ import { Area, areasOf, holds } from '../../shared/areas';
 import { countryOptions } from '../../shared/countries';
 import { Btn, Field, FilesInput, MoneyInput, MultiSelect, Offcanvas, SelectOption } from '../../ui';
 import { FormModal } from '../ops/form-modal';
-import { Distributor } from '../ops/models';
+import { Distributor, Product } from '../ops/models';
+import { IntlFields, intlGroup, intlReset, intlValue } from './intl-fields';
 
 /** the statuses a distributor can have, and what each means for its logins */
 const STATUSES: { value: Distributor['status']; hint: string }[] = [
@@ -27,7 +28,7 @@ const STATUSES: { value: Distributor['status']; hint: string }[] = [
 @Component({
   selector: 'app-distributor-form',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [FilesInput, MoneyInput, ReactiveFormsModule, Offcanvas, Field, Btn, MultiSelect],
+  imports: [FilesInput, MoneyInput, ReactiveFormsModule, Offcanvas, Field, Btn, MultiSelect, IntlFields],
   styles: `
     .form-section {
       grid-column: 1 / -1;
@@ -92,7 +93,7 @@ const STATUSES: { value: Distributor['status']; hint: string }[] = [
           </app-field>
         }
         @if (international()) {
-          <app-field label="Countries" [wide]="true" hint="International markets. The full international set-up comes in a later phase">
+          <app-field label="Countries" [wide]="true" hint="Assigned territories abroad">
             <app-multi-select formControlName="countries" [options]="countryList()" placeholder="Add a country" />
           </app-field>
         }
@@ -106,6 +107,10 @@ const STATUSES: { value: Distributor['status']; hint: string }[] = [
             <option value="true">Exclusive</option>
           </select>
         </app-field>
+
+        @if (international()) {
+          <app-intl-fields [group]="form.controls.intl" [products]="products()" [code]="distributor()?.code ?? null" />
+        }
 
         <h4 class="form-section">Contact</h4>
         <app-field label="Contact or phone"><input type="text" formControlName="contact" /></app-field>
@@ -180,6 +185,8 @@ export class DistributorForm extends FormModal {
   readonly paymentCycles = input<number[]>([15, 30, 45, 60]);
   /** sell-out days for a new distributor (Settings) */
   readonly defaultSelloutDays = input(30);
+  /** products, to pick the ones an international distributor may sell */
+  readonly products = input<Product[]>([]);
   readonly formId = 'form-distributor';
 
   protected places = inject(PlacesService);
@@ -214,6 +221,7 @@ export class DistributorForm extends FormModal {
     contract: [''],
     terms: [''],
     files: [[] as AttachmentMeta[]],
+    intl: intlGroup(this.fb),
   });
 
   private value = toSignal(this.form.valueChanges, { initialValue: this.form.getRawValue() });
@@ -297,10 +305,12 @@ export class DistributorForm extends FormModal {
         creditLimit: 0, advancePct: 0, selloutDays: this.defaultSelloutDays(), status: 'Active', statusNote: '', statusUntil: '',
         poc: '', contract: '', terms: '', files: [],
       });
+    intlReset(this.fb, this.form.controls.intl, d);
   }
 
   protected request() {
     const v = this.form.getRawValue();
+    const intl = v.market !== 'Local' ? intlValue(this.form.controls.intl) : {};
     const local = v.market !== 'International';
     const international = v.market !== 'Local';
     const paymentDays = v.paymentChoice === 'custom' ? Number(v.paymentCustom) : Number(v.paymentChoice);
@@ -318,6 +328,7 @@ export class DistributorForm extends FormModal {
         statusUntil: v.status === 'Temporary suspend' && v.statusUntil ? v.statusUntil : null,
       } : {}),
       poc: v.poc, contract: v.contract, terms: v.terms, files: v.files,
+      ...intl,
     });
   }
 

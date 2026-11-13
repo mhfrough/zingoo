@@ -1,7 +1,7 @@
 import { PartialType } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
-import { ArrayMaxSize, ArrayMinSize, IsArray, IsBoolean, IsDateString, IsIn, IsInt, IsNotEmpty, IsNumber, IsOptional, IsString, IsUUID, Max, MaxLength, Min, ValidateNested } from 'class-validator';
-import { DISTRIBUTOR_MARKETS, DISTRIBUTOR_STATUS, DistributorMarket, DistributorStatus, MANUFACTURER_TERMS, ManufacturerTerm } from './catalog.entities';
+import { ArrayMaxSize, ArrayMinSize, IsArray, IsBoolean, IsDateString, IsEmail, IsIn, IsInt, IsNotEmpty, IsNumber, IsOptional, IsString, IsUUID, Max, MaxLength, Min, ValidateNested } from 'class-validator';
+import { ADDRESS_TYPES, AGREEMENT_STATUS, AddressType, AgreementStatus, DISTRIBUTOR_MARKETS, DISTRIBUTOR_STATUS, DistributorMarket, DistributorStatus, MANUFACTURER_TERMS, ManufacturerTerm } from './catalog.entities';
 
 /** an uploaded file on a partner (from POST /attachments) */
 export class PartnerFileDto {
@@ -90,6 +90,35 @@ export class AreaCityDto {
   @IsOptional() @IsString() @MaxLength(80) district?: string | null;
 }
 
+/** one person at the distributor */
+export class DistributorContactDto {
+  @IsString() @IsNotEmpty() @MaxLength(120) name: string;
+  @IsOptional() @IsString() @MaxLength(80) role?: string;
+  @IsOptional() @IsEmail() @MaxLength(150) email?: string;
+  @IsOptional() @IsString() @MaxLength(8) phoneCode?: string;
+  @IsOptional() @IsString() @MaxLength(30) mobile?: string;
+  @IsOptional() @IsString() @MaxLength(30) whatsapp?: string;
+  @IsBoolean() isPrimary: boolean;
+}
+
+/** one address of the distributor */
+export class DistributorAddressDto {
+  @IsIn([...ADDRESS_TYPES]) type: AddressType;
+  @IsString() @IsNotEmpty() @MaxLength(300) line: string;
+  @IsOptional() @IsString() @MaxLength(80) city?: string;
+  @IsOptional() @IsString() @MaxLength(80) region?: string;
+  @IsOptional() @IsString() @MaxLength(20) postalCode?: string;
+  @IsString() @IsNotEmpty() @MaxLength(80) country: string;
+  @IsBoolean() isDefault: boolean;
+}
+
+/** one KYC document */
+export class KycDocumentDto {
+  @IsString() @IsNotEmpty() @MaxLength(80) type: string;
+  @ValidateNested() @Type(() => PartnerFileDto) file: PartnerFileDto;
+  @IsOptional() @IsDateString() expiry?: string | null;
+}
+
 export class CreateDistributorDto {
   @IsString() @IsNotEmpty() name: string;
   @IsOptional() @IsIn([...DISTRIBUTOR_MARKETS]) market?: DistributorMarket;
@@ -103,6 +132,36 @@ export class CreateDistributorDto {
   @IsOptional() @IsIn([...DISTRIBUTOR_STATUS]) status?: DistributorStatus;
   @IsOptional() @IsString() @MaxLength(500) statusNote?: string | null;
   @IsOptional() @IsDateString() statusUntil?: string | null;
+  // international distributor (spec sections 1 and 2)
+  @IsOptional() @IsString() @MaxLength(200) legalName?: string | null;
+  @IsOptional() @IsString() @MaxLength(200) website?: string | null;
+  @IsOptional() @IsString() @MaxLength(80) classification?: string | null;
+  @IsOptional() @IsString() @MaxLength(80) country?: string | null;
+  @IsOptional() @IsString() @MaxLength(80) registrationNo?: string | null;
+  @IsOptional() @IsString() @MaxLength(150) registrationAuthority?: string | null;
+  @IsOptional() @IsDateString() registrationExpiry?: string | null;
+  @IsOptional() @IsString() @MaxLength(150) taxTreatment?: string | null;
+  @IsOptional() @IsString() @MaxLength(80) licenceNo?: string | null;
+  @IsOptional() @IsString() @MaxLength(150) licenceAuthority?: string | null;
+  @IsOptional() @IsDateString() licenceIssued?: string | null;
+  @IsOptional() @IsDateString() licenceExpiry?: string | null;
+  @IsOptional() @IsString() @MaxLength(120) accountManager?: string | null;
+  @IsOptional() @IsString() @MaxLength(120) salesTeam?: string | null;
+  @IsOptional() @IsArray() @ArrayMaxSize(30) @ValidateNested({ each: true }) @Type(() => DistributorContactDto) contacts?: DistributorContactDto[];
+  @IsOptional() @IsArray() @ArrayMaxSize(30) @ValidateNested({ each: true }) @Type(() => DistributorAddressDto) addresses?: DistributorAddressDto[];
+  @IsOptional() @IsArray() @ArrayMaxSize(30) @ValidateNested({ each: true }) @Type(() => KycDocumentDto) kycDocs?: KycDocumentDto[];
+  @IsOptional() @IsDateString() agreementStart?: string | null;
+  @IsOptional() @IsDateString() agreementEnd?: string | null;
+  @IsOptional() @IsInt() @Min(0) @Max(3650) renewalNoticeDays?: number | null;
+  @IsOptional() @IsInt() @Min(0) @Max(3650) noticePeriodDays?: number | null;
+  @IsOptional() @IsString() @MaxLength(40) agreementVersion?: string | null;
+  @IsOptional() @IsIn([...AGREEMENT_STATUS]) agreementStatus?: AgreementStatus;
+  @IsOptional() @ValidateNested() @Type(() => PartnerFileDto) agreementFile?: PartnerFileDto | null;
+  @IsOptional() @IsString() @MaxLength(300) moq?: string | null;
+  @IsOptional() @IsNumber() @Min(0) quarterlyTarget?: number;
+  @IsOptional() @IsNumber() @Min(0) annualTarget?: number;
+  @IsOptional() @IsArray() @ArrayMaxSize(500) @IsUUID(undefined, { each: true }) approvedProductIds?: string[];
+  @IsOptional() @IsString() @MaxLength(120) salesChannel?: string | null;
   @IsOptional() @IsString() contact?: string;
   @IsOptional() @IsString() address?: string;
   @IsOptional() @IsString() taxNo?: string;

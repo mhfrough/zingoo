@@ -97,6 +97,41 @@ export interface Distributor {
   status?: 'Active' | 'Hold' | 'Temporary suspend' | 'Permanent suspend';
   statusNote?: string | null;
   statusUntil?: string | null;
+  // international distributor (the client's spec)
+  /** INT-DST-0001 */
+  code?: string | null;
+  legalName?: string | null;
+  website?: string | null;
+  classification?: string | null;
+  /** country of registration */
+  country?: string | null;
+  registrationNo?: string | null;
+  registrationAuthority?: string | null;
+  registrationExpiry?: string | null;
+  taxTreatment?: string | null;
+  licenceNo?: string | null;
+  licenceAuthority?: string | null;
+  licenceIssued?: string | null;
+  licenceExpiry?: string | null;
+  accountManager?: string | null;
+  salesTeam?: string | null;
+  salesChannel?: string | null;
+  contacts?: { name: string; role?: string; email?: string; phoneCode?: string; mobile?: string; whatsapp?: string; isPrimary: boolean }[];
+  addresses?: { type: 'Registered' | 'Billing' | 'Warehouse' | 'Consignee' | 'Delivery'; line: string; city?: string; region?: string; postalCode?: string; country: string; isDefault: boolean }[];
+  kycDocs?: { type: string; file: { id: string; name: string; mime: string; size: number }; expiry?: string | null }[];
+  agreementStart?: string | null;
+  agreementEnd?: string | null;
+  renewalNoticeDays?: number | null;
+  noticePeriodDays?: number | null;
+  agreementVersion?: string | null;
+  agreementStatus?: 'Draft' | 'Under review' | 'Signed' | 'Expired' | 'Terminated';
+  agreementFile?: { id: string; name: string; mime: string; size: number } | null;
+  moq?: string | null;
+  quarterlyTarget?: number;
+  annualTarget?: number;
+  approvedProductIds?: string[];
+  /** Draft, Documents submitted, Under review, Approved, Active, On hold, Suspended, Archived */
+  registrationStatus?: string;
   /** earlier fields, kept for older records */
   province?: string | null;
   areas?: string[];

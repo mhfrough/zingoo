@@ -30,6 +30,21 @@ export const distributors = [
   { key: 'd3', name: 'Upper Sindh Supply', region: 'Sukkur', market: 'Local' as const, provinces: ['Sindh'], districts: [{ name: 'Sukkur', province: 'Sindh' }, { name: 'Shikarpur', province: 'Sindh' }], cities: [{ name: 'Sukkur', province: 'Sindh', district: 'Sukkur' }, { name: 'Rohri', province: 'Sindh', district: 'Sukkur' }, { name: 'Shikarpur', province: 'Sindh', district: 'Shikarpur' }], contact: 'Demo contact', address: 'Sukkur, Sindh, Pakistan', taxNo: '', paymentDays: 60, creditLimit: 200000, advancePct: 10, selloutDays: 30 },
 ];
 
+/**
+ * Scope v2 phase D: one international distributor, registration still a draft (no documents uploaded yet).
+ * Illustrative only: the name, registration number and contact are made up.
+ */
+export const intlDistributors = [
+  {
+    name: 'Zayed Gulf Trading', market: 'International' as const, countries: ['United Arab Emirates', 'Oman'],
+    legalName: 'Zayed Gulf Trading LLC', classification: 'Importer', country: 'United Arab Emirates',
+    registrationNo: 'SAMPLE-DXB-0001', registrationAuthority: 'Sample authority', accountManager: 'Export Executive',
+    contacts: [{ name: 'Sample buyer', role: 'Purchasing', email: 'buyer@example.test', phoneCode: '+971', isPrimary: true }],
+    addresses: [{ type: 'Registered' as const, line: 'Sample address', city: 'Dubai', country: 'United Arab Emirates', isDefault: true }],
+    agreementStart: '2026-12-01', paymentDays: 60, creditLimit: 0, advancePct: 30, selloutDays: 0,
+  },
+];
+
 /** users: the client's 7 roles plus one demo distributor login */
 export const users = [
   { name: 'Admin', email: 'admin@zingo.pk', role: 'Admin', seat: 'Both' },

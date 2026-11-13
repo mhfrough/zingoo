@@ -8,6 +8,7 @@ import { DistributorForm } from '../distribution/distributor-form';
 import { Distributor, Manufacturer } from '../ops/models';
 import { OpsApi } from '../ops/ops.api';
 import { ManufacturerForm } from './manufacturer-form';
+import { RegistrationPanel } from '../distribution/registration-panel';
 
 /** "Contract ZF-12 · 3 files" */
 const contractText = (p: { contract?: string | null; files?: unknown[] }) =>
@@ -36,7 +37,7 @@ const STATUS_TONE: Record<string, 'success' | 'warning' | 'danger' | 'neutral'> 
 @Component({
   selector: 'app-settings-partners',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [Btn, DataTable, ManufacturerForm, DistributorForm],
+  imports: [Btn, DataTable, ManufacturerForm, DistributorForm, RegistrationPanel],
   template: `
     <div class="stack">
       @if (section() === 'manufacturers') {
@@ -71,7 +72,8 @@ const STATUS_TONE: Record<string, 'success' | 'warning' | 'danger' | 'neutral'> 
     </div>
 
     <app-manufacturer-form [(open)]="manufacturerOpen" [manufacturer]="editingManufacturer()" (saved)="reload()" />
-    <app-distributor-form [(open)]="distributorOpen" [distributor]="editingDistributor()" [paymentCycles]="store.settings()?.paymentCycles ?? [15, 30, 45, 60]" [defaultSelloutDays]="store.settings()?.defaultSelloutDays ?? 30" [others]="distributors.value() ?? []" (saved)="reload()" />
+    <app-distributor-form [(open)]="distributorOpen" [distributor]="editingDistributor()" [paymentCycles]="store.settings()?.paymentCycles ?? [15, 30, 45, 60]" [defaultSelloutDays]="store.settings()?.defaultSelloutDays ?? 30" [others]="distributors.value() ?? []" [products]="products.value() ?? []" (saved)="reload()" />
+    <app-registration-panel [(open)]="registrationOpen" [distributorId]="registering()" (changed)="reload()" />
   `,
 })
 export class SettingsPartners {
@@ -86,6 +88,10 @@ export class SettingsPartners {
   private tick = signal(0);
   protected manufacturers = rxResource({ params: () => this.tick(), stream: () => this.ops.manufacturers() });
   protected distributors = rxResource({ params: () => this.tick(), stream: () => this.ops.distributors() });
+  protected products = rxResource({ stream: () => this.ops.products() });
+  /** an international distributor's registration panel */
+  protected registrationOpen = signal(false);
+  protected registering = signal<string | null>(null);
 
   protected manufacturerColumns: TableColumn<Manufacturer>[] = [
     { id: 'name', label: 'Manufacturer', value: (m) => m.name, sub: (m) => m.contact },
@@ -106,8 +112,8 @@ export class SettingsPartners {
   protected manufacturerActions = (): RowAction[] => !this.canManufacturers() ? [] : [{ id: 'edit', label: 'Edit' }];
 
   protected distributorColumns: TableColumn<Distributor>[] = [
-    { id: 'name', label: 'Distributor', value: (d) => d.name, sub: (d) => `${d.market ?? 'Local'} · ${areaText(d)}` },
-    { id: 'contact', label: 'Contact', value: (d) => d.poc || d.contact, sub: (d) => contractText(d) ?? d.address, priority: 3 },
+    { id: 'name', label: 'Distributor', value: (d) => (d.code ? `${d.name} · ${d.code}` : d.name), sub: (d) => `${d.market ?? 'Local'} · ${areaText(d)}` },
+    { id: 'contact', label: 'Contact', value: (d) => d.poc || d.contact || primaryContact(d), sub: (d) => contractText(d) ?? (d.address || defaultAddress(d)), priority: 3 },
     {
       id: 'days', label: 'Payment terms', align: 'end', priority: 2, value: (d) => (d.paymentDays ? `${d.paymentDays} days` : 'No limit'),
       sub: (d) => `sell-out ${d.selloutDays ? d.selloutDays + ' days' : 'no limit'}`,
@@ -118,10 +124,16 @@ export class SettingsPartners {
     },
     {
       id: 'status', label: 'Status', kind: 'tag', value: (d) => d.status ?? 'Active', tone: (d) => STATUS_TONE[d.status ?? 'Active'],
-      sub: (d) => (d.status === 'Temporary suspend' && d.statusUntil ? `until ${d.statusUntil}` : d.statusNote ?? null), priority: 2,
+      sub: (d) => [
+        d.market && d.market !== 'Local' ? `Registration: ${d.registrationStatus ?? 'Draft'}` : null,
+        d.status === 'Temporary suspend' && d.statusUntil ? `until ${d.statusUntil}` : d.statusNote ?? null,
+      ].filter(Boolean).join(' · ') || null, priority: 2,
     },
   ];
-  protected distributorActions = (): RowAction[] => !this.canDistributors() ? [] : [{ id: 'edit', label: 'Edit' }];
+  protected distributorActions = (d: Distributor): RowAction[] => [
+    ...(this.canDistributors() ? [{ id: 'edit', label: 'Edit' }] : []),
+    ...(d.market && d.market !== 'Local' ? [{ id: 'registration', label: 'Registration' }] : []),
+  ];
 
   protected money = fmtMoney;
 
@@ -149,6 +161,23 @@ export class SettingsPartners {
   }
 
   protected onDistributorAction(e: RowActionEvent<Distributor>) {
+    if (e.id === 'registration') {
+      this.registering.set(e.row.id);
+      this.registrationOpen.set(true);
+      return;
+    }
     this.openDistributor(e.row);
   }
+}
+
+/** an international distributor's primary contact: name and email */
+function primaryContact(d: Distributor) {
+  const c = (d.contacts ?? []).find((x) => x.isPrimary);
+  return c ? [c.name, c.email].filter(Boolean).join(' · ') : null;
+}
+
+/** an international distributor's default registered address */
+function defaultAddress(d: Distributor) {
+  const a = (d.addresses ?? []).find((x) => x.type === 'Registered' && x.isDefault) ?? d.addresses?.[0];
+  return a ? [a.city, a.country].filter(Boolean).join(', ') : null;
 }

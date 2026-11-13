@@ -33,6 +33,8 @@ const LIST_TEXT: Record<LookupList, { word: string; use: string; code: string; m
   DELIVERY_STATUS: { word: 'delivery status', use: 'Offered on every income invoice: where the goods are (dispatched, delivered, accepted ...).', code: 'Name', meaning: 'Meaning' },
   FLAVOUR: { word: 'flavour', use: 'Offered on every product / SKU.', code: 'Name', meaning: 'Meaning' },
   PACKET_SIZE: { word: 'packet size', use: 'Offered on every product / SKU (weight or price tier).', code: 'Name', meaning: 'Meaning' },
+  DIST_CLASSIFICATION: { word: 'distributor classification', use: 'Offered on every international distributor: importer, master distributor, wholesaler ...', code: 'Name', meaning: 'Meaning' },
+  KYC_DOC_TYPE: { word: 'KYC document type', use: 'The documents an international distributor gives. A required one must be uploaded before its documents can be submitted.', code: 'Name', meaning: 'Meaning' },
   ORDER_STAGE: { word: 'production stage', use: 'The steps a manufacturer reports on an order, in this order. Steps only move forward.', code: 'Name', meaning: 'Meaning' },
   BANK: { word: 'bank', use: 'Offered on every manufacturer bank account. Payment invoices go to that bank.', code: 'Name', meaning: 'Meaning' },
   BANK_ACCOUNT: { word: 'bank or cash account', use: 'The account that took or paid the money. It is recorded on the entry; the books keep one Cash & Bank account.', code: 'Name', meaning: 'Details' },
@@ -85,6 +87,9 @@ const LIST_TEXT: Record<LookupList, { word: string; use: string; code: string; m
             </div>
           </div>
         }
+        @if (list() === 'KYC_DOC_TYPE') {
+          <label class="check field--wide"><input type="checkbox" formControlName="required" /> Required before an international distributor's documents are submitted</label>
+        }
         @if (list() === 'STREAM_TYPE') {
           <label class="check field--wide"><input type="checkbox" formControlName="depreciable" /> Loses value over time (the stream carries a depreciation rate)</label>
         }
@@ -135,6 +140,7 @@ export class LookupForm extends FormModal {
     liability: [false],
     advance: [false],
     depreciable: [false],
+    required: [false],
     investor: [true],
     owner: [false],
     company: [''],
@@ -150,7 +156,7 @@ export class LookupForm extends FormModal {
       code: e?.code ?? '', description: e?.description ?? '', active: String(e?.active ?? true),
       origin: !!e?.flags?.['origin'], ocean: !!e?.flags?.['ocean'], insurance: !!e?.flags?.['insurance'],
       destination: !!e?.flags?.['destination'], duty: !!e?.flags?.['duty'],
-      liability: !!e?.flags?.['liability'], advance: !!e?.flags?.['advance'], depreciable: !!e?.flags?.['depreciable'],
+      liability: !!e?.flags?.['liability'], advance: !!e?.flags?.['advance'], depreciable: !!e?.flags?.['depreciable'], required: !!e?.flags?.['required'],
       investor: e ? !!e.flags?.['investor'] : true, owner: !!e?.flags?.['owner'],
       company: e?.meta?.['company'] ?? '', poc: e?.meta?.['poc'] ?? '',
     });
@@ -165,6 +171,7 @@ export class LookupForm extends FormModal {
       list === 'INCOTERM' ? { origin: v.origin, ocean: v.ocean, insurance: v.insurance, destination: v.destination, duty: v.duty }
       : list === 'CAPITAL_SOURCE' ? { liability: v.liability, advance: v.liability && v.advance }
       : list === 'STREAM_TYPE' ? { depreciable: v.depreciable }
+      : list === 'KYC_DOC_TYPE' ? { required: v.required }
       : list === 'PERSON' ? { investor: v.investor, owner: v.owner }
       : {};
     const meta = list === 'PERSON' ? { company: v.company, poc: v.poc } : undefined;

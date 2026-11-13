@@ -91,7 +91,7 @@ export const CAPITAL_SOURCE_DEFAULTS: { code: string; description: string; liabi
  * Starting entries of the simple pick-lists behind the loan and advance forms (the client prototype's choices),
  * plus the company's bank and cash accounts. Every one is editable on Settings & Data.
  */
-export const SIMPLE_LIST_DEFAULTS: Record<'LOAN_TENURE' | 'REPAY_PLAN' | 'REPAY_FREQUENCY' | 'ADVANCE_PURPOSE' | 'SETTLEMENT_METHOD' | 'BANK_ACCOUNT' | 'DELIVERY_STATUS' | 'BILL_TYPE' | 'BILL_TREATMENT' | 'APPROVER' | 'FLAVOUR' | 'PACKET_SIZE' | 'BANK' | 'ORDER_STAGE', string[]> = {
+export const SIMPLE_LIST_DEFAULTS: Record<'LOAN_TENURE' | 'REPAY_PLAN' | 'REPAY_FREQUENCY' | 'ADVANCE_PURPOSE' | 'SETTLEMENT_METHOD' | 'BANK_ACCOUNT' | 'DELIVERY_STATUS' | 'BILL_TYPE' | 'BILL_TREATMENT' | 'APPROVER' | 'FLAVOUR' | 'PACKET_SIZE' | 'BANK' | 'ORDER_STAGE' | 'DIST_CLASSIFICATION' | 'KYC_DOC_TYPE', string[]> = {
   LOAN_TENURE: ['Short-term (up to 12 months)', 'Long-term (over 12 months)', 'On demand'],
   REPAY_PLAN: ['Lump sum', 'Installments', 'On demand'],
   REPAY_FREQUENCY: ['Monthly', 'Quarterly', 'Half-yearly', 'Custom'],
@@ -107,9 +107,16 @@ export const SIMPLE_LIST_DEFAULTS: Record<'LOAN_TENURE' | 'REPAY_PLAN' | 'REPAY_
   PACKET_SIZE: ['Rs 10 pack', 'Rs 20 pack'],
   // the steps a manufacturer reports while it works on an order, in order; editable
   ORDER_STAGE: ['Preparation', 'In production', 'Quality check', 'Ready to ship'],
+  // what kind of business an international distributor is; editable
+  DIST_CLASSIFICATION: ['Importer', 'Master distributor', 'Wholesaler', 'Retail chain', 'Other'],
+  // the KYC documents an international distributor gives (the required ones are in KYC_REQUIRED); editable
+  KYC_DOC_TYPE: ['Registration certificate', 'Tax proof', 'Authorized signatory', 'Bank confirmation', 'Import / food licence'],
   // banks a partner can be paid at; editable
   BANK: ['HBL', 'Meezan Bank', 'UBL', 'MCB Bank', 'Allied Bank', 'Bank Alfalah', 'Bank Al Habib', 'Faysal Bank', 'Standard Chartered', 'National Bank of Pakistan'],
 };
+
+/** KYC documents required before an international distributor's documents can be submitted (editable in Settings) */
+export const KYC_REQUIRED = ['Registration certificate', 'Authorized signatory'];
 
 /** Starting types of investment stream. A depreciable type carries a depreciation rate. Editable on Settings & Data. */
 export const STREAM_TYPE_DEFAULTS: { code: string; description: string; depreciable: boolean }[] = [

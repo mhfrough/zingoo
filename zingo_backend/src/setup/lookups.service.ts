@@ -1,11 +1,11 @@
 import { BadRequestException, ConflictException, Injectable, NotFoundException, OnApplicationBootstrap } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { EntityManager, Repository } from 'typeorm';
-import { CAPITAL_SOURCE_DEFAULTS, INCOTERM_DEFAULTS, PAYMENT_METHODS, SIMPLE_LIST_DEFAULTS, STREAM_TYPE_DEFAULTS } from './setup.constants';
+import { CAPITAL_SOURCE_DEFAULTS, INCOTERM_DEFAULTS, KYC_REQUIRED, PAYMENT_METHODS, SIMPLE_LIST_DEFAULTS, STREAM_TYPE_DEFAULTS } from './setup.constants';
 import { Lookup } from './setup.entities';
 
 /** The simple pick-lists of the loan and advance forms: just a name (and a note), no switches. */
-export const SIMPLE_LISTS = ['LOAN_TENURE', 'REPAY_PLAN', 'REPAY_FREQUENCY', 'ADVANCE_PURPOSE', 'SETTLEMENT_METHOD', 'BANK_ACCOUNT', 'DELIVERY_STATUS', 'BILL_TYPE', 'BILL_TREATMENT', 'APPROVER', 'FLAVOUR', 'PACKET_SIZE', 'BANK', 'ORDER_STAGE'] as const;
+export const SIMPLE_LISTS = ['LOAN_TENURE', 'REPAY_PLAN', 'REPAY_FREQUENCY', 'ADVANCE_PURPOSE', 'SETTLEMENT_METHOD', 'BANK_ACCOUNT', 'DELIVERY_STATUS', 'BILL_TYPE', 'BILL_TREATMENT', 'APPROVER', 'FLAVOUR', 'PACKET_SIZE', 'BANK', 'ORDER_STAGE', 'DIST_CLASSIFICATION', 'KYC_DOC_TYPE'] as const;
 
 /** The pick-lists the client can edit on Settings & Data. */
 export const LOOKUP_LISTS = ['PAY_METHOD', 'INCOTERM', 'CAPITAL_SOURCE', 'STREAM_TYPE', 'PERSON', ...SIMPLE_LISTS] as const;
@@ -16,7 +16,7 @@ const LIST_LABEL: Record<LookupList, string> = {
   PAY_METHOD: 'payment method', INCOTERM: 'Incoterm', CAPITAL_SOURCE: 'capital source', STREAM_TYPE: 'stream type', PERSON: 'investor account',
   LOAN_TENURE: 'loan tenure', REPAY_PLAN: 'repayment plan', REPAY_FREQUENCY: 'repayment frequency', ADVANCE_PURPOSE: 'advance purpose',
   SETTLEMENT_METHOD: 'settlement method', BANK_ACCOUNT: 'bank or cash account', DELIVERY_STATUS: 'delivery status', BILL_TYPE: 'bill type', BILL_TREATMENT: 'accounting treatment', APPROVER: 'approver',
-  FLAVOUR: 'flavour', PACKET_SIZE: 'packet size', BANK: 'bank', ORDER_STAGE: 'production stage',
+  FLAVOUR: 'flavour', PACKET_SIZE: 'packet size', BANK: 'bank', ORDER_STAGE: 'production stage', DIST_CLASSIFICATION: 'distributor classification', KYC_DOC_TYPE: 'KYC document type',
 };
 
 /** The cost lines an Incoterm can put on the seller. Bank charges and other costs are always the seller's. */
@@ -34,7 +34,9 @@ const LIST_FLAGS: Record<LookupList, readonly string[]> = {
   STREAM_TYPE: ['depreciable'],
   // an investor account is an investor, a business owner, or both
   PERSON: ['investor', 'owner'],
-  LOAN_TENURE: [], REPAY_PLAN: [], REPAY_FREQUENCY: [], ADVANCE_PURPOSE: [], SETTLEMENT_METHOD: [], BANK_ACCOUNT: [], DELIVERY_STATUS: [], BILL_TYPE: [], BILL_TREATMENT: [], APPROVER: [], FLAVOUR: [], PACKET_SIZE: [], BANK: [], ORDER_STAGE: [],
+  LOAN_TENURE: [], REPAY_PLAN: [], REPAY_FREQUENCY: [], ADVANCE_PURPOSE: [], SETTLEMENT_METHOD: [], BANK_ACCOUNT: [], DELIVERY_STATUS: [], BILL_TYPE: [], BILL_TREATMENT: [], APPROVER: [], FLAVOUR: [], PACKET_SIZE: [], BANK: [], ORDER_STAGE: [], DIST_CLASSIFICATION: [],
+  // a KYC document type can be required before an international distributor's documents are submitted
+  KYC_DOC_TYPE: ['required'],
 };
 
 /**
@@ -69,6 +71,12 @@ export class LookupsService implements OnApplicationBootstrap {
       ...SIMPLE_LISTS.flatMap((list) => (have.has(list) ? [] : SIMPLE_LIST_DEFAULTS[list].map((code, i) => this.repo.create({ list, code, sortOrder: i })))),
     ];
     if (rows.length) await this.repo.save(rows);
+    // the starting KYC document types the spec makes mandatory
+    if (!have.has('KYC_DOC_TYPE')) {
+      const kyc = await this.repo.find({ where: { list: 'KYC_DOC_TYPE' } });
+      for (const k of kyc) k.flags = { required: KYC_REQUIRED.includes(k.code) };
+      if (kyc.length) await this.repo.save(kyc);
+    }
     // capital sources made before the "advance" switch existed: the Partner Advance default is an advance
     const olds = (await this.repo.find({ where: { list: 'CAPITAL_SOURCE' } })).filter((r) => r.flags?.['advance'] === undefined);
     for (const r of olds) r.flags = { ...r.flags, advance: r.code === 'Partner Advance' };

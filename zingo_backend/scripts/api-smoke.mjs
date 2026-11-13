@@ -1298,5 +1298,64 @@ ok('a production order picks a packaging template', cOrder.json?.packaging === '
 ok('a template the product does not have -> 400', (await call(T.factory, 'POST', '/production-orders', { date: p6Day, productId: cMas.id, containers: 1, packaging: 'Jumbo' })).status === 400);
 ok('no template given: the default', (await call(T.factory, 'POST', '/production-orders', { date: p6Day, productId: cMas.id, containers: 1 })).json?.packaging === 'Standard');
 
+// ── D1 international distributor: identity, KYC, agreement, registration workflow ──
+const dZayed = ((await call(T.owner, 'GET', '/distributors')).json ?? []).find((d) => d.name === 'Zayed Gulf Trading');
+ok('sample international distributor: an ID and a draft registration', /^INT-DST-\d{4}$/.test(dZayed?.code) && dZayed?.registrationStatus === 'Draft', JSON.stringify([dZayed?.code, dZayed?.registrationStatus]));
+const dLocal = ((await call(T.owner, 'GET', '/distributors')).json ?? []).find((d) => d.name === 'Sindh Central Distributors');
+ok('a local distributor needs no registration', dLocal?.registrationStatus === 'Active' && !dLocal?.code && (await call(T.owner, 'POST', `/distributors/${dLocal.id}/registration/submit`)).status === 400);
+const dBody = (o = {}) => ({ name: `D Intl ${Date.now() % 100000}`, market: 'International', countries: ['Qatar'], ...o });
+const dNew = await call(T.sales, 'POST', '/distributors', dBody({ legalName: 'Doha Crisps WLL', country: 'Qatar' }));
+ok('a new international distributor gets the next ID and starts as a draft', dNew.status === 201 && /^INT-DST-\d{4}$/.test(dNew.json?.code) && dNew.json?.code !== dZayed.code && dNew.json?.registrationStatus === 'Draft', JSON.stringify(dNew.json?.code));
+ok('the same legal entity in the same country twice -> 409', (await call(T.sales, 'POST', '/distributors', dBody({ legalName: ' doha crisps wll ', country: 'qatar', countries: ['Bahrain'] }))).status === 409);
+ok('a classification not in Settings -> 400', (await call(T.sales, 'PATCH', `/distributors/${dNew.json.id}`, { classification: 'Smuggler' })).status === 400);
+ok('two primary contacts -> 400', (await call(T.sales, 'PATCH', `/distributors/${dNew.json.id}`, { contacts: [{ name: 'A', isPrimary: true }, { name: 'B', isPrimary: true }] })).status === 400);
+ok('a KYC document type not in Settings -> 400', (await call(T.sales, 'PATCH', `/distributors/${dNew.json.id}`, { kycDocs: [{ type: 'Horoscope', file: pfFiles[0] }] })).status === 400);
+let dReg = (await call(T.sales, 'GET', `/distributors/${dNew.json.id}/registration`)).json;
+ok('the registration lists what is missing', dReg?.missingToSubmit?.includes('business registration no.') && dReg?.missingToSubmit?.includes('KYC document: Registration certificate'), JSON.stringify(dReg?.missingToSubmit));
+ok('submitting with gaps -> 400', (await call(T.sales, 'POST', `/distributors/${dNew.json.id}/registration/submit`)).status === 400);
+const dKyc1 = await pfUpload('registration.pdf');
+const dKyc2 = await pfUpload('signatory.pdf');
+const dAgr = await pfUpload('agreement.pdf');
+const fileOf = (f) => ({ id: f.id, name: f.name, mime: f.mime, size: f.size });
+const dFill = await call(T.sales, 'PATCH', `/distributors/${dNew.json.id}`, {
+  classification: 'Importer', registrationNo: 'QA-998877', contacts: [{ name: 'Omar', email: 'omar@example.test', isPrimary: false }, { name: 'Lina', isPrimary: false }],
+  addresses: [{ type: 'Registered', line: 'Street 1', country: 'Qatar', isDefault: false }, { type: 'Delivery', line: 'Warehouse 4', country: 'Qatar', isDefault: false }],
+  kycDocs: [{ type: 'Registration certificate', file: fileOf(dKyc1) }, { type: 'Authorized signatory', file: fileOf(dKyc2), expiry: '2999-01-01' }],
+  agreementStart: '2026-01-01',
+});
+ok('contacts get a primary and addresses a default per type', dFill.json?.contacts?.[0]?.isPrimary === true && dFill.json?.addresses?.every((a) => a.isDefault), JSON.stringify(dFill.json?.contacts));
+ok('submit documents (Distribution)', (await call(T.sales, 'POST', `/distributors/${dNew.json.id}/registration/submit`)).json?.status === 'Documents submitted');
+ok('Distribution cannot start the review -> 403', (await call(T.sales, 'POST', `/distributors/${dNew.json.id}/registration/review`)).status === 403);
+ok('Finance starts the review', (await call(T.finance, 'POST', `/distributors/${dNew.json.id}/registration/review`)).json?.status === 'Under review');
+ok('Finance cannot give the Compliance sign-off -> 403', (await call(T.finance, 'POST', `/distributors/${dNew.json.id}/registration/approve`, { step: 'Compliance' })).status === 403);
+ok('Sales sign-off (Distribution)', !!(await call(T.sales, 'POST', `/distributors/${dNew.json.id}/registration/approve`, { step: 'Sales', note: 'Good market' })).json?.approvals?.Sales);
+ok('the same sign-off twice -> 400', (await call(T.sales, 'POST', `/distributors/${dNew.json.id}/registration/approve`, { step: 'Sales' })).status === 400);
+ok('a rejection needs a reason -> 400', (await call(T.finance, 'POST', `/distributors/${dNew.json.id}/registration/reject`, { reason: '' })).status === 400);
+dReg = (await call(T.finance, 'POST', `/distributors/${dNew.json.id}/registration/reject`, { reason: 'Tax proof unclear' })).json;
+ok('a rejection sends it back to draft and clears the sign-offs', dReg?.status === 'Draft' && !dReg?.approvals?.Sales, JSON.stringify(dReg?.approvals));
+await call(T.sales, 'POST', `/distributors/${dNew.json.id}/registration/submit`);
+await call(T.finance, 'POST', `/distributors/${dNew.json.id}/registration/review`);
+await call(T.sales, 'POST', `/distributors/${dNew.json.id}/registration/approve`, { step: 'Sales' });
+await call(T.finance, 'POST', `/distributors/${dNew.json.id}/registration/approve`, { step: 'Finance' });
+dReg = (await call(T.owner, 'POST', `/distributors/${dNew.json.id}/registration/approve`, { step: 'Compliance' })).json;
+ok('the third sign-off approves it', dReg?.status === 'Approved', dReg?.status);
+ok('activation needs a signed agreement and approved products', dReg?.missingToActivate?.some((m) => /signed agreement/.test(m)) && dReg?.missingToActivate?.includes('at least one approved product'), JSON.stringify(dReg?.missingToActivate));
+ok('activating with gaps -> 400', (await call(T.owner, 'POST', `/distributors/${dNew.json.id}/registration/activate`)).status === 400);
+await call(T.sales, 'PATCH', `/distributors/${dNew.json.id}`, { agreementStatus: 'Signed', agreementFile: fileOf(dAgr), agreementEnd: '2999-12-31', approvedProductIds: [p3P.id] });
+ok('Finance cannot activate -> 403', (await call(T.finance, 'POST', `/distributors/${dNew.json.id}/registration/activate`)).status === 403);
+ok('Admin activates it', (await call(T.owner, 'POST', `/distributors/${dNew.json.id}/registration/activate`)).json?.status === 'Active');
+ok('hold needs a reason -> 400', (await call(T.finance, 'POST', `/distributors/${dNew.json.id}/registration/state`, { to: 'On hold' })).status === 400);
+ok('Finance puts it on hold, then resumes it', (await call(T.finance, 'POST', `/distributors/${dNew.json.id}/registration/state`, { to: 'On hold', reason: 'Overdue' })).json?.status === 'On hold'
+  && (await call(T.finance, 'POST', `/distributors/${dNew.json.id}/registration/state`, { to: 'Active' })).json?.status === 'Active');
+await call(T.sales, 'PATCH', `/distributors/${dNew.json.id}`, { agreementEnd: '2000-01-01' });
+await call(T.finance, 'POST', `/distributors/${dNew.json.id}/registration/state`, { to: 'Suspended', reason: 'Agreement lapsed' });
+ok('an expired agreement blocks resuming -> 400', (await call(T.finance, 'POST', `/distributors/${dNew.json.id}/registration/state`, { to: 'Active' })).status === 400);
+const dTrail = (await call(T.audit, 'GET', `/distributors/${dNew.json.id}/registration`)).json;
+ok('every step is on the trail, with who and why', dTrail?.events?.length >= 10 && dTrail.events.some((e) => e.action === 'Rejected' && e.note === 'Tax proof unclear' && e.role === 'Finance'), JSON.stringify(dTrail?.events?.map((e) => e.action)));
+ok('archive, then reopen as a draft', (await call(T.owner, 'POST', `/distributors/${dNew.json.id}/registration/state`, { to: 'Archived', reason: 'Closed' })).json?.status === 'Archived'
+  && (await call(T.owner, 'POST', `/distributors/${dNew.json.id}/registration/reopen`)).json?.status === 'Draft');
+ok('a Distributor login cannot read registrations -> 403', (await call(T.dist, 'GET', `/distributors/${dNew.json.id}/registration`)).status === 403);
+ok('KYC types and classifications are Settings lists (two KYC types required)', ((await call(T.owner, 'GET', '/lookups')).json ?? []).filter((l) => l.list === 'KYC_DOC_TYPE' && l.flags?.required).length === 2);
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

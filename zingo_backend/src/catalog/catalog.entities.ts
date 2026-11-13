@@ -199,6 +199,52 @@ export type DistributorMarket = (typeof DISTRIBUTOR_MARKETS)[number];
 export const DISTRIBUTOR_STATUS = ['Active', 'Hold', 'Temporary suspend', 'Permanent suspend'] as const;
 export type DistributorStatus = (typeof DISTRIBUTOR_STATUS)[number];
 
+/**
+ * Registration of an international distributor (the client's spec, section 1 and 8):
+ * Draft -> Documents submitted -> Under review -> Approved -> Active; and On hold, Suspended, Archived.
+ * A local distributor is Active from the start.
+ */
+export const REGISTRATION_STATUS = ['Draft', 'Documents submitted', 'Under review', 'Approved', 'Active', 'On hold', 'Suspended', 'Archived'] as const;
+export type RegistrationStatus = (typeof REGISTRATION_STATUS)[number];
+
+/** where the agreement stands; Expired is worked out from the end date */
+export const AGREEMENT_STATUS = ['Draft', 'Under review', 'Signed', 'Expired', 'Terminated'] as const;
+export type AgreementStatus = (typeof AGREEMENT_STATUS)[number];
+
+/** kinds of address a distributor keeps */
+export const ADDRESS_TYPES = ['Registered', 'Billing', 'Warehouse', 'Consignee', 'Delivery'] as const;
+export type AddressType = (typeof ADDRESS_TYPES)[number];
+
+/** one person to deal with at the distributor */
+export interface DistributorContact {
+  name: string;
+  role?: string;
+  email?: string;
+  /** country calling code, e.g. +971 */
+  phoneCode?: string;
+  mobile?: string;
+  whatsapp?: string;
+  isPrimary: boolean;
+}
+
+/** one address of the distributor; one default per type */
+export interface DistributorAddress {
+  type: AddressType;
+  line: string;
+  city?: string;
+  region?: string;
+  postalCode?: string;
+  country: string;
+  isDefault: boolean;
+}
+
+/** one KYC document: its kind (Settings list KYC_DOC_TYPE), the file, and an expiry when it has one */
+export interface KycDocument {
+  type: string;
+  file: PartnerFile;
+  expiry?: string | null;
+}
+
 /** a district with the province it is in */
 export interface AreaDistrict {
   name: string;
@@ -255,6 +301,114 @@ export class Distributor extends AppEntity {
   @Column({ type: 'date', nullable: true })
   statusUntil: string | null;
 
+  // ───── international distributor (the client's spec, sections 1, 2 and 8) ─────
+
+  /** distributor ID, e.g. INT-DST-0001 (international or both; given when first saved) */
+  @Column({ type: 'varchar', length: 20, nullable: true, unique: true })
+  code: string | null;
+
+  /** exact registered legal name, used on invoices and export documents */
+  @Column({ type: 'varchar', length: 200, nullable: true })
+  legalName: string | null;
+
+  /** display / trading name (the record's `name`) is separate; the website goes here */
+  @Column({ type: 'varchar', length: 200, nullable: true })
+  website: string | null;
+
+  /** importer, master distributor, wholesaler, retail chain ... (Settings list DIST_CLASSIFICATION) */
+  @Column({ type: 'varchar', length: 80, nullable: true })
+  classification: string | null;
+
+  /** country of registration and head office */
+  @Column({ type: 'varchar', length: 80, nullable: true })
+  country: string | null;
+
+  @Column({ type: 'varchar', length: 80, nullable: true })
+  registrationNo: string | null;
+
+  @Column({ type: 'varchar', length: 150, nullable: true })
+  registrationAuthority: string | null;
+
+  @Column({ type: 'date', nullable: true })
+  registrationExpiry: string | null;
+
+  /** how the destination taxes the distributor (VAT registered, exempt ...), kept apart from the tax number */
+  @Column({ type: 'varchar', length: 150, nullable: true })
+  taxTreatment: string | null;
+
+  @Column({ type: 'varchar', length: 80, nullable: true })
+  licenceNo: string | null;
+
+  @Column({ type: 'varchar', length: 150, nullable: true })
+  licenceAuthority: string | null;
+
+  @Column({ type: 'date', nullable: true })
+  licenceIssued: string | null;
+
+  @Column({ type: 'date', nullable: true })
+  licenceExpiry: string | null;
+
+  /** the Zen Foods relationship manager and sales team */
+  @Column({ type: 'varchar', length: 120, nullable: true })
+  accountManager: string | null;
+
+  @Column({ type: 'varchar', length: 120, nullable: true })
+  salesTeam: string | null;
+
+  @Column({ type: 'jsonb', default: () => "'[]'" })
+  contacts: DistributorContact[];
+
+  @Column({ type: 'jsonb', default: () => "'[]'" })
+  addresses: DistributorAddress[];
+
+  @Column({ type: 'jsonb', default: () => "'[]'" })
+  kycDocs: KycDocument[];
+
+  /** agreement: dates, notice, version, its status and the signed copy */
+  @Column({ type: 'date', nullable: true })
+  agreementStart: string | null;
+
+  @Column({ type: 'date', nullable: true })
+  agreementEnd: string | null;
+
+  /** days before the end date to start the renewal talk */
+  @Column({ type: 'int', nullable: true })
+  renewalNoticeDays: number | null;
+
+  /** days of notice to end the agreement */
+  @Column({ type: 'int', nullable: true })
+  noticePeriodDays: number | null;
+
+  @Column({ type: 'varchar', length: 40, nullable: true })
+  agreementVersion: string | null;
+
+  @Column({ type: 'varchar', length: 14, default: 'Draft' })
+  agreementStatus: AgreementStatus;
+
+  @Column({ type: 'jsonb', nullable: true })
+  agreementFile: PartnerFile | null;
+
+  /** minimum order and targets, in words and figures */
+  @Column({ type: 'varchar', length: 300, nullable: true })
+  moq: string | null;
+
+  @Column({ type: 'decimal', precision: 16, scale: 2, default: 0, transformer: numeric })
+  quarterlyTarget: number;
+
+  @Column({ type: 'decimal', precision: 16, scale: 2, default: 0, transformer: numeric })
+  annualTarget: number;
+
+  /** SKUs the distributor may sell (empty = none approved yet) */
+  @Column({ type: 'jsonb', default: () => "'[]'" })
+  approvedProductIds: string[];
+
+  /** modern trade, general trade, online ... */
+  @Column({ type: 'varchar', length: 120, nullable: true })
+  salesChannel: string | null;
+
+  @Column({ type: 'varchar', length: 22, default: 'Active' })
+  registrationStatus: RegistrationStatus;
+
   /** earlier single province, kept so older records can be moved to `provinces` */
   @Column({ type: 'varchar', length: 60, nullable: true })
   province: string | null;
@@ -304,6 +458,40 @@ export class Distributor extends AppEntity {
   files: PartnerFile[];
 }
 
+
+/** One step of an international distributor's registration: submitted, approved by Finance, put on hold ... */
+@Entity('distributor_registration_events')
+export class DistributorRegistrationEvent extends AppEntity {
+  @ManyToOne(() => Distributor, { nullable: false, onDelete: 'CASCADE' })
+  @JoinColumn({ name: 'distributorId' })
+  distributor: Distributor;
+
+  @Column({ type: 'uuid' })
+  distributorId: string;
+
+  /** Submitted, Review started, Approved, Rejected, Activated, On hold, Suspended, Archived, Resumed */
+  @Column({ type: 'varchar', length: 30 })
+  action: string;
+
+  /** for an approval: which sign-off (Sales, Finance, Compliance) */
+  @Column({ type: 'varchar', length: 20, nullable: true })
+  step: string | null;
+
+  @Column({ type: 'varchar', length: 22 })
+  fromStatus: string;
+
+  @Column({ type: 'varchar', length: 22 })
+  toStatus: string;
+
+  @Column({ type: 'varchar', length: 500, nullable: true })
+  note: string | null;
+
+  @Column({ type: 'varchar', length: 120 })
+  by: string;
+
+  @Column({ type: 'varchar', length: 20 })
+  role: string;
+}
 
 /** Price per pack agreed with one distributor for one SKU (overrides Product.rate). */
 @Entity('distributor_rates')

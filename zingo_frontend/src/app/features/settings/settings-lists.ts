@@ -186,6 +186,8 @@ export class SettingsLists {
     { list: 'REPAY_FREQUENCY', title: 'Repayment frequency', sub: 'For a loan paid in installments', add: 'Add frequency' },
     { list: 'ADVANCE_PURPOSE', title: 'Advance purpose', sub: 'Why a partner advances money', add: 'Add purpose' },
     { list: 'SETTLEMENT_METHOD', title: 'Settlement method', sub: 'How an advance is expected to be settled', add: 'Add method' },
+    { list: 'DIST_CLASSIFICATION', title: 'Distributor classifications', sub: 'What kind of business an international distributor is', add: 'Add classification' },
+    { list: 'KYC_DOC_TYPE', title: 'KYC document types', sub: 'Documents an international distributor gives; required ones are checked on submission', add: 'Add document type' },
     { list: 'ORDER_STAGE', title: 'Production stages', sub: 'Steps a manufacturer reports on an order, in order', add: 'Add stage' },
     { list: 'BANK', title: 'Banks', sub: 'Banks a manufacturer can be paid at', add: 'Add bank' },
     { list: 'BANK_ACCOUNT', title: 'Bank and cash accounts', sub: 'Which account took or paid the money. A label on each entry', add: 'Add account' },
@@ -202,7 +204,7 @@ export class SettingsLists {
     return out;
   });
   protected simpleColumns: TableColumn<Lookup>[] = [
-    { id: 'code', label: 'Name', value: (l) => l.code, sub: (l) => l.description || null },
+    { id: 'code', label: 'Name', value: (l) => l.code, sub: (l) => [l.flags?.['required'] ? 'Required' : null, l.description || null].filter(Boolean).join(' · ') || null },
     { id: 'status', label: 'Status', kind: 'tag', value: (l) => (l.active ? 'Active' : 'Switched off'), tone: (l): Tone => (l.active ? 'success' : 'neutral') },
   ];
 

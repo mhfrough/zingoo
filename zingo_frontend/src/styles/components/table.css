@@ -91,6 +91,11 @@
       font-weight: var(--weight-semibold);
     }
 
+    /* codes and references (SKU, MO-001 ...) stay on one line */
+    & td .cell__main.mono {
+      white-space: nowrap;
+    }
+
     & .cell__sub {
       margin-block-start: 2px;
       font-size: var(--text-xs);

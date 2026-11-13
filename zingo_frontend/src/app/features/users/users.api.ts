@@ -14,6 +14,8 @@ export interface UserRow {
   distributorName: string | null;
   manufacturerId?: string | null;
   manufacturerName?: string | null;
+  /** a distributor login's role in the portal */
+  portalRole?: string;
 }
 
 /** Which page each role can open and which kind of change it can make. */

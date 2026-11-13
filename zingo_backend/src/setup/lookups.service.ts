@@ -5,7 +5,7 @@ import { CAPITAL_SOURCE_DEFAULTS, INCOTERM_DEFAULTS, KYC_REQUIRED, PAYMENT_METHO
 import { Lookup } from './setup.entities';
 
 /** The simple pick-lists of the loan and advance forms: just a name (and a note), no switches. */
-export const SIMPLE_LISTS = ['LOAN_TENURE', 'REPAY_PLAN', 'REPAY_FREQUENCY', 'ADVANCE_PURPOSE', 'SETTLEMENT_METHOD', 'BANK_ACCOUNT', 'DELIVERY_STATUS', 'BILL_TYPE', 'BILL_TREATMENT', 'APPROVER', 'FLAVOUR', 'PACKET_SIZE', 'BANK', 'ORDER_STAGE', 'DIST_CLASSIFICATION', 'KYC_DOC_TYPE', 'REMITTANCE_METHOD'] as const;
+export const SIMPLE_LISTS = ['LOAN_TENURE', 'REPAY_PLAN', 'REPAY_FREQUENCY', 'ADVANCE_PURPOSE', 'SETTLEMENT_METHOD', 'BANK_ACCOUNT', 'DELIVERY_STATUS', 'BILL_TYPE', 'BILL_TREATMENT', 'APPROVER', 'FLAVOUR', 'PACKET_SIZE', 'BANK', 'ORDER_STAGE', 'DIST_CLASSIFICATION', 'KYC_DOC_TYPE', 'REMITTANCE_METHOD', 'CERT_TYPE', 'EXPORT_DOC_TYPE'] as const;
 
 /** The pick-lists the client can edit on Settings & Data. */
 export const LOOKUP_LISTS = ['PAY_METHOD', 'INCOTERM', 'CAPITAL_SOURCE', 'STREAM_TYPE', 'PERSON', ...SIMPLE_LISTS] as const;
@@ -16,7 +16,7 @@ const LIST_LABEL: Record<LookupList, string> = {
   PAY_METHOD: 'payment method', INCOTERM: 'Incoterm', CAPITAL_SOURCE: 'capital source', STREAM_TYPE: 'stream type', PERSON: 'investor account',
   LOAN_TENURE: 'loan tenure', REPAY_PLAN: 'repayment plan', REPAY_FREQUENCY: 'repayment frequency', ADVANCE_PURPOSE: 'advance purpose',
   SETTLEMENT_METHOD: 'settlement method', BANK_ACCOUNT: 'bank or cash account', DELIVERY_STATUS: 'delivery status', BILL_TYPE: 'bill type', BILL_TREATMENT: 'accounting treatment', APPROVER: 'approver',
-  FLAVOUR: 'flavour', PACKET_SIZE: 'packet size', BANK: 'bank', ORDER_STAGE: 'production stage', DIST_CLASSIFICATION: 'distributor classification', KYC_DOC_TYPE: 'KYC document type', REMITTANCE_METHOD: 'remittance method',
+  FLAVOUR: 'flavour', PACKET_SIZE: 'packet size', BANK: 'bank', ORDER_STAGE: 'production stage', DIST_CLASSIFICATION: 'distributor classification', KYC_DOC_TYPE: 'KYC document type', REMITTANCE_METHOD: 'remittance method', CERT_TYPE: 'certificate type', EXPORT_DOC_TYPE: 'export document type',
 };
 
 /** The cost lines an Incoterm can put on the seller. Bank charges and other costs are always the seller's. */
@@ -38,6 +38,8 @@ const LIST_FLAGS: Record<LookupList, readonly string[]> = {
   // a KYC document type can be required before an international distributor's documents are submitted
   KYC_DOC_TYPE: ['required'],
   REMITTANCE_METHOD: [],
+  CERT_TYPE: [],
+  EXPORT_DOC_TYPE: [],
 };
 
 /**

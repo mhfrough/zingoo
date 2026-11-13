@@ -8,8 +8,9 @@ import { PostingService } from '../ledger/posting.service';
 import { LookupsService } from '../setup/lookups.service';
 import { Currency } from '../setup/setup.entities';
 import { SettingsService } from '../setup/setup.service';
+import { AttachmentsService } from '../attachments/attachments.service';
 import { AllocationDto, RemittanceDto } from './exports.dto';
-import { DistributorRemittance, ExportReceipt, ExportShipment } from './exports.entities';
+import { DistributorRemittance, ExportClaim, ExportReceipt, ExportShipment, RemittanceAdvice } from './exports.entities';
 import { ActingUser, ExportsService } from './exports.service';
 
 const today = () => new Date().toISOString().slice(0, 10);
@@ -27,6 +28,7 @@ export class DistributorAccountService {
     private readonly posting: PostingService,
     private readonly lookups: LookupsService,
     private readonly settings: SettingsService,
+    private readonly files: AttachmentsService,
   ) {}
 
   async account(id: string) {
@@ -46,6 +48,10 @@ export class DistributorAccountService {
       : [];
     const direct = shipments.length
       ? (await em.find(ExportReceipt, { where: { shipmentId: In(shipments.map((s) => s.id)) }, relations: ['shipment'] })).filter((r) => !r.remittanceId)
+      : [];
+
+    const claims = shipments.length
+      ? await em.find(ExportClaim, { where: { shipmentId: In(shipments.map((s) => s.id)) }, relations: ['shipment'], order: { date: 'DESC', refNo: 'DESC' } })
       : [];
 
     // per currency: invoiced, collected, open, overdue, money not applied, aging
@@ -94,6 +100,10 @@ export class DistributorAccountService {
         date: r.date, ref: r.refNo, text: `Remittance · ${r.method}${r.bankRef ? ' · ' + r.bankRef : ''}`, currency: r.currency, debit: 0, credit: Number(r.amount),
       })),
       ...direct.map((r) => ({ date: r.date, ref: r.refNo, text: `Receipt · ${r.shipment.refNo}`, currency: r.shipment.currency, debit: 0, credit: Number(r.foreignAmount) })),
+      ...claims.filter((c) => c.status === 'Approved' && Number(c.creditApplied) > 0).map((c) => ({
+        date: c.date, ref: c.creditNoteRef ?? c.refNo, text: `Credit note · ${c.kind} claim ${c.refNo} · ${c.shipment.refNo}`,
+        currency: c.shipment.currency, debit: 0, credit: Number(c.creditApplied),
+      })),
     ].sort((a, b) => a.date.localeCompare(b.date) || a.ref.localeCompare(b.ref));
     const running = new Map<string, number>();
     for (const l of lines) {
@@ -112,6 +122,8 @@ export class DistributorAccountService {
       currencies,
       orders,
       remittances: remView,
+      claims: claims.map(({ shipment, ...c }) => ({ ...c, shipment: { id: shipment.id, refNo: shipment.refNo, currency: shipment.currency } })),
+      advices: await em.find(RemittanceAdvice, { where: { distributorId: id }, order: { date: 'DESC', refNo: 'DESC' } }),
       statement: lines,
     };
   }
@@ -145,6 +157,13 @@ export class DistributorAccountService {
       }));
       await this.posting.syncRemittance(em, r.id);
       if (dto.allocations?.length) await this.apply(em, r, dto.allocations);
+      if (dto.adviceId) {
+        const a = await em.findOne(RemittanceAdvice, { where: { id: dto.adviceId, distributorId: d.id } });
+        if (!a) throw new NotFoundException('Remittance advice not found');
+        if (a.status !== 'Submitted') throw new BadRequestException(`Advice ${a.refNo} is already ${a.status.toLowerCase()}.`);
+        Object.assign(a, { status: 'Recorded', remittanceId: r.id, reviewNote: `Recorded as ${r.refNo} by ${user.name}` });
+        await em.save(a);
+      }
       return r;
     }).then(() => this.account(id));
   }
@@ -180,6 +199,85 @@ export class DistributorAccountService {
       await this.posting.syncExportReceipt(em, rec.id);
       left = round2(left - amount);
     }
+  }
+
+  /** the distributor sends proof that it paid */
+  async advise(user: ActingUser & { distributorId?: string | null }, dto: import('./exports.dto').RemittanceAdviceDto) {
+    return this.db.transaction(async (em) => {
+      const d = await this.load(em, user.distributorId ?? '');
+      if (d.market === 'Local') throw new BadRequestException('This is for international distributors.');
+      if (dto.date > today()) throw new BadRequestException('The payment cannot be in the future.');
+      if (!(await em.findOne(Currency, { where: { code: dto.currency.toUpperCase() } }))) throw new BadRequestException(`${dto.currency} is not a currency we take.`);
+      const row = await em.save(em.create(RemittanceAdvice, {
+        refNo: await nextRef(em, RemittanceAdvice, 'RA', 3), date: dto.date, distributorId: d.id, currency: dto.currency.toUpperCase(),
+        amount: dto.amount, method: dto.method ?? null, bankRef: dto.bankRef?.trim() || null, forInvoices: dto.forInvoices?.trim() || null,
+        proof: dto.proof, note: dto.note?.trim() || null, sentBy: user.name, status: 'Submitted',
+      }));
+      await this.files.attach(dto.proof.id, 'REMITTANCE_ADVICE', row.id, em);
+      return row;
+    });
+  }
+
+  async rejectAdvice(user: ActingUser, id: string, note: string) {
+    const em = this.db.manager;
+    const a = await em.findOne(RemittanceAdvice, { where: { id } });
+    if (!a) throw new NotFoundException('Remittance advice not found');
+    if (a.status !== 'Submitted') throw new BadRequestException(`Advice ${a.refNo} is already ${a.status.toLowerCase()}.`);
+    Object.assign(a, { status: 'Rejected', reviewNote: `${note.trim()} (${user.name})` });
+    return em.save(a);
+  }
+
+  /**
+   * What the distributor's own portal shows: its account without Zen Foods' costs, margins or internal notes, its
+   * current prices, and its notifications.
+   */
+  async portalAccount(distributorId: string) {
+    const acc = await this.account(distributorId);
+    const hide = ['unitCost', 'cogs', 'costs', 'sellerCostPKR', 'net', 'grossProfit', 'margin', 'fobEquivalent', 'costPaid', 'costDue',
+      'creditNote', 'creditOverrideBy', 'creditOverrideRole', 'creditOverrideReason', 'creditOverrideAt', 'priceId', 'revenuePKR', 'fxRate',
+      'inland', 'origin', 'documentation', 'ocean', 'insurance', 'destination', 'duty', 'bankFees', 'otherCosts'];
+    return {
+      ...acc,
+      distributor: { ...acc.distributor, bankAccounts: acc.distributor.bankAccounts },
+      orders: acc.orders.map((o) => Object.fromEntries(Object.entries(o).filter(([k]) => !hide.includes(k)))),
+      currencies: acc.currencies.map(({ openPKR: _a, unappliedPKR: _b, ...c }) => c),
+      remittances: acc.remittances.map(({ fxRate: _r, by: _by, ...r }) => r),
+      claims: acc.claims.map(({ inspection: _i, ...c }) => c),
+    };
+  }
+
+  async portalPrices(distributorId: string) {
+    const t = today();
+    const rows: any[] = await this.db.manager.query(
+      `SELECT p.sku, p.name, d.unit, d."packsPerUnit"::float8 AS "packsPerUnit", d.currency, d.price::float8 AS price, d."discountPct"::float8 AS "discountPct",
+              d."effectiveFrom"::text AS "effectiveFrom", d."effectiveTo"::text AS "effectiveTo", d.moq::float8 AS moq, d.increment::float8 AS increment, d.promo
+         FROM distributor_prices d JOIN products p ON p.id = d."productId"
+        WHERE d."distributorId" = $1 AND d.status = 'Active' AND (d."effectiveTo" IS NULL OR d."effectiveTo" >= $2)
+        ORDER BY p.sku, d.unit, d."effectiveFrom"`, [distributorId, t]);
+    return rows;
+  }
+
+  /** order shipped or arrived, payment due within 7 days, overdue, claim decided, money recorded, advice rejected (last 30 days) */
+  async notifications(distributorId: string) {
+    const acc = await this.account(distributorId);
+    const t = today();
+    const recent = (d?: string | Date | null) => !!d && daysBetween(String(d instanceof Date ? d.toISOString() : d).slice(0, 10), t) <= 30;
+    const out: { kind: string; date: string; title: string; text: string }[] = [];
+    for (const o of acc.orders) {
+      if (o.status === 'Shipped' && recent(o.shipDate)) out.push({ kind: 'shipped', date: o.shipDate!, title: `Shipped · ${o.refNo}`, text: `${o.cartons} bundles of ${o.product.sku}${o.blNo ? ' · BL ' + o.blNo : ''}${o.eta ? ' · ETA ' + o.eta : ''}` });
+      if (o.shippingStatus === 'Arrived' || o.shippingStatus === 'Delivered') out.push({ kind: 'arrived', date: o.eta ?? o.shipDate ?? o.date, title: `${o.shippingStatus} · ${o.refNo}`, text: `Confirm what arrived and raise a claim if anything is wrong.` });
+      if (o.status === 'Shipped' && o.due > 0.004 && o.dueDate && !o.overdue && daysBetween(t, o.dueDate) <= 7) out.push({ kind: 'due', date: o.dueDate, title: `Payment due · ${o.refNo}`, text: `${o.currency} ${o.due} by ${o.dueDate}` });
+      if (o.overdue) out.push({ kind: 'overdue', date: o.dueDate!, title: `Overdue · ${o.refNo}`, text: `${o.currency} ${o.due} was due on ${o.dueDate}` });
+    }
+    for (const c of acc.claims) {
+      if (c.status !== 'Submitted' && recent(c.decidedAt)) {
+        out.push({ kind: 'claim', date: String(c.decidedAt instanceof Date ? c.decidedAt.toISOString() : c.decidedAt).slice(0, 10), title: `Claim ${c.status.toLowerCase()} · ${c.refNo}`,
+          text: c.status === 'Approved' ? (c.creditAmount > 0 ? `Credit note ${c.creditNoteRef}: ${c.shipment.currency} ${c.creditAmount}` : `${c.resolution}`) : (c.decisionNote ?? '') });
+      }
+    }
+    for (const r of acc.remittances) if (recent(r.date)) out.push({ kind: 'payment', date: r.date, title: `Payment received · ${r.refNo}`, text: `${r.currency} ${r.amount}${r.unapplied > 0.004 ? ` · ${r.unapplied} kept as your credit` : ''}` });
+    for (const a of acc.advices) if (a.status === 'Rejected') out.push({ kind: 'advice', date: a.date, title: `Payment advice rejected · ${a.refNo}`, text: a.reviewNote ?? '' });
+    return out.sort((a, b) => b.date.localeCompare(a.date));
   }
 
   private async load(em: EntityManager, id: string) {

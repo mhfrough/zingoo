@@ -50,6 +50,13 @@ import { ROLE_LIST, UserRow, UsersApi } from './users.api';
             </select>
           </app-field>
         }
+        @if (isDistributor()) {
+          <app-field label="Portal role" hint="Owner does everything; Sales orders and claims; Finance payments; Warehouse receipts and claims; Read-only looks">
+            <select formControlName="portalRole">
+              @for (r of portalRoles; track r) { <option [value]="r">{{ r }}</option> }
+            </select>
+          </app-field>
+        }
         @if (isManufacturer()) {
           <app-field label="Manufacturer" [required]="true" [error]="invalid('manufacturerId') ? 'Choose the manufacturer' : null">
             <select formControlName="manufacturerId">
@@ -90,6 +97,7 @@ export class UserForm extends FormModal {
   protected roles = ROLE_LIST;
   private usersApi = inject(UsersApi);
 
+  protected portalRoles = ['Owner', 'Sales', 'Finance', 'Warehouse', 'Read-only'];
   readonly form = this.fb.nonNullable.group({
     name: ['', Validators.required],
     email: ['', [Validators.required, Validators.email]],
@@ -97,6 +105,7 @@ export class UserForm extends FormModal {
     seat: ['None'],
     distributorId: [''],
     manufacturerId: [''],
+    portalRole: ['Owner'],
     status: ['Active'],
     password: ['', [Validators.required, Validators.minLength(8)]],
   });
@@ -111,7 +120,7 @@ export class UserForm extends FormModal {
     const u = this.user();
     this.form.reset({
       name: u?.name ?? '', email: u?.email ?? '', role: u?.role ?? 'Viewer', seat: u?.seat ?? 'None',
-      distributorId: u?.distributorId ?? '', manufacturerId: u?.manufacturerId ?? '', status: u?.status ?? 'Active', password: '',
+      distributorId: u?.distributorId ?? '', manufacturerId: u?.manufacturerId ?? '', portalRole: u?.portalRole ?? 'Owner', status: u?.status ?? 'Active', password: '',
     });
     const editing = !!u;
     // an existing login keeps its email; a password is only asked for when adding
@@ -135,10 +144,10 @@ export class UserForm extends FormModal {
     const distributorId = this.isDistributor() ? v.distributorId : null;
     const manufacturerId = this.isManufacturer() ? v.manufacturerId : null;
     return u
-      ? this.usersApi.update(u.id, { name: v.name, ...(u.isRoot ? {} : { role: v.role, status: v.status }), seat, distributorId, manufacturerId })
+      ? this.usersApi.update(u.id, { name: v.name, ...(u.isRoot ? {} : { role: v.role, status: v.status }), seat, distributorId, manufacturerId, ...(distributorId ? { portalRole: v.portalRole } : {}) })
       : this.usersApi.create({
         name: v.name, email: v.email, password: v.password, role: v.role, seat,
-        ...(distributorId ? { distributorId } : {}), ...(manufacturerId ? { manufacturerId } : {}),
+        ...(distributorId ? { distributorId, portalRole: v.portalRole } : {}), ...(manufacturerId ? { manufacturerId } : {}),
       });
   }
 

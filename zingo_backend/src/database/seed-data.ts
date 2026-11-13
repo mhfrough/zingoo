@@ -68,6 +68,8 @@ export const users = [
   { name: 'Investor (Demo)', email: 'investor@example.test', role: 'Investor', seat: 'None' },
   { name: 'Hyderabad Distributor (Demo)', email: 'distributor@demo.local', role: 'Distributor', seat: 'None', distributor: 'd1' },
   { name: 'Brand Choice (Demo)', email: 'manufacturer@demo.local', role: 'Manufacturer', seat: 'None', manufacturer: 'm1' },
+  // the international sample distributor's portal Owner (phase D4)
+  { name: 'Zayed Gulf Trading (Demo)', email: 'intl-distributor@demo.local', role: 'Distributor', seat: 'None', distributor: 'intl:Zayed Gulf Trading' },
 ] as const;
 
 export const batches = [

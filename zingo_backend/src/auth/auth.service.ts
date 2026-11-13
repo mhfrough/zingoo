@@ -20,7 +20,7 @@ export class AuthService {
   private profile(u: User) {
     return {
       id: u.id, email: u.email, name: u.name, role: u.role, seat: u.seat,
-      distributorId: u.distributorId, manufacturerId: u.manufacturerId, isRoot: u.isRoot, pages: ROLE_PAGES[u.role],
+      distributorId: u.distributorId, manufacturerId: u.manufacturerId, portalRole: u.role === 'Distributor' ? u.portalRole : undefined, isRoot: u.isRoot, pages: ROLE_PAGES[u.role],
     };
   }
 

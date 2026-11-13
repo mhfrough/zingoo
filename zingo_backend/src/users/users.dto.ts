@@ -1,5 +1,5 @@
 import { IsEmail, IsIn, IsNotEmpty, IsOptional, IsString, IsUUID, MaxLength, MinLength } from 'class-validator';
-import { ROLES, Role, SEATS, Seat, USER_STATUS } from '../common/enums';
+import { PORTAL_ROLES, PortalRole, ROLES, Role, SEATS, Seat, USER_STATUS } from '../common/enums';
 
 /** A new login. A Distributor or Manufacturer login must also say which company it belongs to. */
 export class CreateUserDto {
@@ -10,6 +10,8 @@ export class CreateUserDto {
   @IsOptional() @IsIn([...SEATS]) seat?: Seat;
   @IsOptional() @IsUUID() distributorId?: string;
   @IsOptional() @IsUUID() manufacturerId?: string;
+  /** a distributor login's role in the portal */
+  @IsOptional() @IsIn([...PORTAL_ROLES]) portalRole?: PortalRole;
 }
 
 export class UpdateUserDto {
@@ -19,6 +21,7 @@ export class UpdateUserDto {
   @IsOptional() @IsIn([...USER_STATUS]) status?: 'Active' | 'Disabled';
   @IsOptional() @IsUUID() distributorId?: string | null;
   @IsOptional() @IsUUID() manufacturerId?: string | null;
+  @IsOptional() @IsIn([...PORTAL_ROLES]) portalRole?: PortalRole;
 }
 
 export class ResetPasswordDto {

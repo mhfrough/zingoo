@@ -316,6 +316,7 @@ export class DistributorsService extends CrudService<Distributor> {
   private async linkAll(row: Distributor) {
     await linkFiles(this.files, 'DISTRIBUTOR', row.id, [
       ...(row.files ?? []), ...(row.kycDocs ?? []).map((k) => k.file), ...(row.agreementFile ? [row.agreementFile] : []),
+      ...(row.recallSopFile ? [row.recallSopFile] : []),
     ]);
   }
 

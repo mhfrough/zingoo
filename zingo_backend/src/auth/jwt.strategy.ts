@@ -29,7 +29,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     return {
       readOnly: standing === 'hold',
       id: user.id, email: user.email, name: user.name, role: user.role, seat: user.seat,
-      distributorId: user.distributorId, manufacturerId: user.manufacturerId, viewAs: payload.viewer ?? null,
+      distributorId: user.distributorId, manufacturerId: user.manufacturerId, portalRole: user.portalRole, viewAs: payload.viewer ?? null,
     };
   }
 }

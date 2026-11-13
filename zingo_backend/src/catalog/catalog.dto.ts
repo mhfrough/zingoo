@@ -195,6 +195,22 @@ export class CreateDistributorDto {
   @IsOptional() @IsArray() @ArrayMaxSize(10) @ValidateNested({ each: true }) @Type(() => DistributorBankDto) bankAccounts?: DistributorBankDto[];
   @IsOptional() @IsIn([...BANK_CHARGES]) bankCharges?: BankCharges | null;
   @IsOptional() @IsNumber() @Min(0) @Max(100) minMarginPct?: number;
+  // logistics preferences and recall contact (spec sections 5 and 6)
+  @IsOptional() @IsString() @MaxLength(120) originPort?: string | null;
+  @IsOptional() @IsString() @MaxLength(120) dischargePort?: string | null;
+  @IsOptional() @IsString() @MaxLength(120) finalDestination?: string | null;
+  @IsOptional() @IsIn(['Sea', 'Air', 'Road', null]) shippingMode?: string | null;
+  @IsOptional() @IsString() @MaxLength(200) containerPreference?: string | null;
+  @IsOptional() @IsString() @MaxLength(200) importerOfRecord?: string | null;
+  @IsOptional() @IsString() @MaxLength(200) notifyParty?: string | null;
+  @IsOptional() @IsBoolean() freightConfirmed?: boolean;
+  @IsOptional() @IsString() @MaxLength(150) forwarderName?: string | null;
+  @IsOptional() @IsString() @MaxLength(200) forwarderContact?: string | null;
+  @IsOptional() @IsString() @MaxLength(80) forwarderRef?: string | null;
+  @IsOptional() @IsString() @MaxLength(120) recallContactName?: string | null;
+  @IsOptional() @IsEmail() @MaxLength(150) recallContactEmail?: string | null;
+  @IsOptional() @IsString() @MaxLength(40) recallContactPhone?: string | null;
+  @IsOptional() @ValidateNested() @Type(() => PartnerFileDto) recallSopFile?: PartnerFileDto | null;
   @IsOptional() @IsString() contact?: string;
   @IsOptional() @IsString() address?: string;
   @IsOptional() @IsString() taxNo?: string;

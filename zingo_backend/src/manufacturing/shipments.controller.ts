@@ -1,6 +1,6 @@
 import { Body, Controller, Get, Param, ParseUUIDPipe, Post, Query, Request } from '@nestjs/common';
 import { ApiOperation, ApiQuery, ApiTags } from '@nestjs/swagger';
-import { Read, Roles } from '../auth/roles.decorator';
+import { Permit, Read, Roles } from '../auth/roles.decorator';
 import { ReceiveDto, ShipDto } from './shipments.dto';
 import { ShipmentsService } from './shipments.service';
 
@@ -46,6 +46,7 @@ export class ShipmentsController {
 
   @Post(':id/receive')
   @Roles('Admin', 'Manufacturing', 'Distribution', 'Distributor')
+  @Permit('receipts')
   @ApiOperation({ summary: 'Confirm what arrived: it is owed to the manufacturer and becomes stock' })
   receive(@Request() req: any, @Param('id', ParseUUIDPipe) id: string, @Body() dto: ReceiveDto) {
     return this.service.receive(req.user, id, dto);

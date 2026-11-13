@@ -23,6 +23,7 @@ import {
 import { ReasonForm } from './reason-form';
 import { ReceiptForm } from './receipt-form';
 import { RequestForm } from './request-form';
+import { IntlPortal } from './intl-portal';
 
 const STATUS_TONE: Record<string, Tone> = {
   Paid: 'success', Confirmed: 'success', Accepted: 'success', Approved: 'success', Open: 'info', 'Part paid': 'info',
@@ -39,7 +40,7 @@ const tone = (s: string): Tone => STATUS_TONE[s] ?? 'neutral';
   selector: 'app-portal',
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [
-    Btn, DataTable, Kpi, PageHeader, Tag, Tabs, TabPanel, RequestForm, ReceiptForm, AdviceForm, AcceptForm, ReasonForm, ShipmentsPanel, InvoicesPanel, TrailPanel,
+    Btn, DataTable, Kpi, PageHeader, Tag, Tabs, TabPanel, RequestForm, ReceiptForm, AdviceForm, AcceptForm, ReasonForm, ShipmentsPanel, InvoicesPanel, TrailPanel, IntlPortal,
   ],
   templateUrl: './portal.html',
   styleUrl: './portal.css',
@@ -100,7 +101,10 @@ export class Portal {
     });
   }
 
+  /** an international distributor's own login: its export account in the portal */
+  protected international = computed(() => this.isDistributor() && !!this.profile.value() && (this.profile.value()?.distributor as { market?: string } | undefined)?.market !== 'Local');
   protected tabs = computed<TabItem[]>(() => [
+    ...(this.international() ? [{ id: 'intl', label: 'Export account', icon: 'container' as const }] : []),
     { id: 'dashboard', label: 'Dashboard', icon: 'dashboard' },
     { id: 'orders', label: 'My orders', icon: 'package', count: this.orders.value()?.length ?? 0 },
     { id: 'stock', label: 'Deliveries & stock', icon: 'boxes', count: this.toConfirm() || null },

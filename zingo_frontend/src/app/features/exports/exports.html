@@ -124,10 +124,41 @@
         </div>
       </div>
     </ng-template>
+    <ng-template appTabPanel="approvals">
+      <div class="card" data-flush>
+        <div class="card__head">
+          <div><h2>Market approvals</h2><p>A product ships to a distributor's country only with an approved, unexpired approval for that market. The Admin reviews.</p></div>
+          @if (canApprovals()) {
+            <button appBtn icon="plus" (click)="newApproval()">New approval</button>
+          }
+        </div>
+        <div class="card__body">
+          <app-data-table [columns]="approvalColumns" [rows]="approvals.value() ?? []" [actions]="approvalActions" [loading]="approvals.isLoading()"
+            searchPlaceholder="Search approvals" emptyTitle="No market approvals yet" (action)="onApprovalAction($event)" />
+        </div>
+      </div>
+    </ng-template>
+
+    <ng-template appTabPanel="claims">
+      <div class="card" data-flush>
+        <div class="card__head">
+          <div><h2>Claims &amp; credit notes</h2><p>Damage, shortage, quality and returns. A credit note lowers the invoice; beyond it, the credit is owed back.</p></div>
+        </div>
+        <div class="card__body">
+          <app-data-table [columns]="claimColumns" [rows]="claims.value() ?? []" [actions]="claimActions" [loading]="claims.isLoading()"
+            searchPlaceholder="Search claims" emptyTitle="No claims" (action)="onClaimAction($event)" />
+        </div>
+      </div>
+    </ng-template>
   </app-tabs>
 </div>
 
 <app-account-panel [(open)]="accountOpen" [distributorId]="accountOf()" (changed)="reload()" />
+<app-logistics-form [(open)]="logisticsOpen" [shipment]="target()" (saved)="reload()" />
+<app-claim-form [(open)]="claimOpen" [shipment]="target()" (saved)="reload()" />
+<app-claim-decision-form [(open)]="decideOpen" [claim]="deciding()" [shipment]="decidingShipment()" (saved)="reload()" />
+<app-market-approval-form [(open)]="approvalOpen" [approval]="approvalEditing()" [products]="products.value() ?? []" (saved)="reload()" />
+<app-reason-form [(open)]="reasonOpen" heading="Reject market approval" [subject]="reasonSubject()" actionLabel="Reject" [run]="reasonRun()" (saved)="reload()" />
 <app-export-form [(open)]="quoteOpen" [quote]="editing()" [distributors]="intlDistributors()" [products]="products.value() ?? []" [containers]="containers.value() ?? []"
   [currencies]="currencies.value() ?? []" [defaultContainer]="settings.value()?.containerSize ?? '40HC'"
   [defaultIncoterm]="settings.value()?.defaultIncoterm ?? 'FOB'" [packsPerCarton]="settings.value()?.packsPerCarton ?? 432"

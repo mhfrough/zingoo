@@ -40,7 +40,7 @@ export class RegistrationService {
     return {
       id: d.id, code: d.code, name: d.name, status: d.registrationStatus, market: d.market,
       missingToSubmit: await this.missingToSubmit(em, d),
-      missingToActivate: this.missingToActivate(d, this.approvals(events)),
+      missingToActivate: this.missingToActivate(d, this.approvals(events), await this.hasOwner(em, id)),
       approvals: this.approvals(events),
       agreementStatus: effectiveAgreement(d),
       events,
@@ -88,7 +88,7 @@ export class RegistrationService {
   async activate(user: RegistrationUser, id: string) {
     return this.move(user, id, ['Approved'], 'Active', 'Activated', null, async (em, d) => {
       const events = await em.find(DistributorRegistrationEvent, { where: { distributorId: id }, order: { createdAt: 'ASC' } });
-      const missing = this.missingToActivate(d, this.approvals(events));
+      const missing = this.missingToActivate(d, this.approvals(events), await this.hasOwner(em, id));
       if (missing.length) throw new BadRequestException(`Before activating: ${missing.join('; ')}.`);
     }, ['Admin']);
   }
@@ -139,8 +139,10 @@ export class RegistrationService {
   }
 
   /** what activation needs on top of the three sign-offs */
-  private missingToActivate(d: Distributor, approvals: Partial<Record<ApprovalStep, unknown>>): string[] {
+  private missingToActivate(d: Distributor, approvals: Partial<Record<ApprovalStep, unknown>>, hasOwner: boolean): string[] {
     const m: string[] = [];
+    if (!d.recallContactName?.trim() || !d.recallContactEmail?.trim()) m.push('a recall contact (name and email)');
+    if (!hasOwner) m.push('a portal admin: an active distributor login with the Owner role');
     for (const s of Object.keys(APPROVAL_STEPS) as ApprovalStep[]) if (!approvals[s]) m.push(`${s} sign-off`);
     const ag = effectiveAgreement(d);
     if (ag !== 'Signed') m.push(`a signed agreement (it is ${ag.toLowerCase()})`);
@@ -179,6 +181,13 @@ export class RegistrationService {
       await em.save(d);
     });
     return this.state(id);
+  }
+
+  /** an active portal login with the Owner role (spec section 7: a portal admin is needed to activate) */
+  private async hasOwner(em: EntityManager, id: string) {
+    const [r] = await em.query(
+      `SELECT 1 FROM users WHERE "distributorId" = $1 AND role = 'Distributor' AND status = 'Active' AND "portalRole" = 'Owner' LIMIT 1`, [id]);
+    return !!r;
   }
 
   private async load(em: EntityManager, id: string) {

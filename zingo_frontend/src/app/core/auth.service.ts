@@ -20,6 +20,8 @@ export interface AuthUser {
   /** a Distributor login: its distributor; a Manufacturer login: its manufacturer */
   distributorId?: string | null;
   manufacturerId?: string | null;
+  /** a distributor login's role in the portal: Owner, Sales, Finance, Warehouse, Read-only */
+  portalRole?: string;
 }
 
 /** a login an Admin can preview the app as */

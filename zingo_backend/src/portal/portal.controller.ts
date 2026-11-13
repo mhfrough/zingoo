@@ -1,6 +1,6 @@
 import { Body, Controller, Get, Param, ParseUUIDPipe, Post, Query, Request } from '@nestjs/common';
 import { ApiOperation, ApiQuery, ApiTags } from '@nestjs/swagger';
-import { Read, Roles } from '../auth/roles.decorator';
+import { Permit, Read, Roles } from '../auth/roles.decorator';
 import {
   AcceptRequestDto, CreateAdviceDto, CreateReceiptDto, CreateRequestDto, ReviewDto,
 } from './portal.dto';
@@ -87,6 +87,7 @@ export class PortalController {
 
   @Post('requests')
   @Read('portal')
+  @Permit('orders')
   @ApiOperation({ summary: 'Ask for stock; Zingoo reviews it before a sales order is made' })
   createRequest(@Body() dto: CreateRequestDto, @Request() req: any) {
     return this.service.createRequest(dto, req.user);
@@ -94,6 +95,7 @@ export class PortalController {
 
   @Post('receipts')
   @Read('portal')
+  @Permit('receipts')
   @ApiOperation({ summary: 'Proof of delivery with good / damaged / missing cartons' })
   createReceipt(@Body() dto: CreateReceiptDto, @Request() req: any) {
     return this.service.createReceipt(dto, req.user);
@@ -101,6 +103,7 @@ export class PortalController {
 
   @Post('advices')
   @Read('portal')
+  @Permit('payments')
   @ApiOperation({ summary: 'Tell Zingo about a payment; it becomes cash only when staff confirm it' })
   createAdvice(@Body() dto: CreateAdviceDto, @Request() req: any) {
     return this.service.createAdvice(dto, req.user);

@@ -406,6 +406,27 @@ export class ReportsService {
         kind: 'batch', page: 'manufacturing', title: `Batch awaiting release · ${b.refNo}`,
         text: `${b.targetCartons} target bundles · ${b.qc} QC`,
       })),
+      ...(await this.intlAlerts()),
+    ];
+  }
+
+  /** international distributors: claims, market approvals and payment advices to decide, export invoices overdue */
+  private async intlAlerts() {
+    const q = (sql: string) => this.db.query(sql) as Promise<any[]>;
+    const [claims, approvals, advices, overdue] = await Promise.all([
+      q(`SELECT c."refNo", c.kind, c.quantity, x."refNo" AS ship, COALESCE(d.name, x.buyer) AS who FROM export_claims c JOIN export_shipments x ON x.id = c."shipmentId"
+           LEFT JOIN distributors d ON d.id = c."distributorId" WHERE c.status = 'Submitted' ORDER BY c.date`),
+      q(`SELECT a.country, p.sku FROM product_market_approvals a JOIN products p ON p.id = a."productId" WHERE a.status = 'Pending' ORDER BY a."createdAt"`),
+      q(`SELECT a."refNo", a.currency, a.amount::float8 AS amount, d.name FROM remittance_advices a JOIN distributors d ON d.id = a."distributorId" WHERE a.status = 'Submitted' ORDER BY a.date`),
+      q(`SELECT x."refNo", x."dueDate"::text AS due, d.name FROM export_shipments x JOIN distributors d ON d.id = x."distributorId"
+           WHERE x.status = 'Shipped' AND x."dueDate" < CURRENT_DATE ORDER BY x."dueDate"`),
+    ]);
+    const open = new Set((await this.exportsSvc.list()).filter((x) => x.overdue).map((x) => x.refNo));
+    return [
+      ...claims.map((c) => ({ kind: 'claim', page: 'exports', title: `Claim to decide · ${c.refNo}`, text: `${c.who}: ${c.kind.toLowerCase()}, ${c.quantity} bundle(s) of ${c.ship}` })),
+      ...approvals.map((a) => ({ kind: 'approval', page: 'exports', title: `Market approval to review · ${a.sku}`, text: `${a.sku} for ${a.country}` })),
+      ...advices.map((a) => ({ kind: 'payment', page: 'exports', title: `Payment advice · ${a.refNo}`, text: `${a.name} says it paid ${a.currency} ${a.amount}` })),
+      ...overdue.filter((x) => open.has(x.refNo)).map((x) => ({ kind: 'receivable', page: 'exports', title: `Export invoice overdue · ${x.refNo}`, text: `${x.name} · due ${x.due}` })),
     ];
   }
 

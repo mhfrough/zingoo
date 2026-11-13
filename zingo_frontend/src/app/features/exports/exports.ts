@@ -14,6 +14,10 @@ import { ExportCollectForm } from './export-collect-form';
 import { ExportCostForm } from './export-cost-form';
 import { ExportForm } from './export-form';
 import { AccountPanel } from './account-panel';
+import { ClaimDecisionForm, ClaimForm, LogisticsForm, MarketApprovalForm } from './compliance-forms';
+import { ReasonForm } from '../portal/reason-form';
+import { ApiService } from '../../core/api.service';
+import { ExportClaim, MarketApproval } from './models';
 import { ExportsApi } from './exports.api';
 import { ContainerType, ExportCostPayment, ExportReceipt, ExportRow } from './models';
 
@@ -31,7 +35,7 @@ const CHECKLIST = [
 @Component({
   selector: 'app-exports',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [Btn, DataTable, Kpi, PageHeader, Tabs, TabPanel, ExportForm, ExportCollectForm, ExportCostForm, AccountPanel],
+  imports: [Btn, DataTable, Kpi, PageHeader, Tabs, TabPanel, ExportForm, ExportCollectForm, ExportCostForm, AccountPanel, LogisticsForm, ClaimForm, ClaimDecisionForm, MarketApprovalForm, ReasonForm],
   templateUrl: './exports.html',
   styleUrl: './exports.css',
 })
@@ -54,6 +58,22 @@ export class Exports {
   private distributorsRes = rxResource({ params: () => this.tick(), stream: () => this.ops.distributors() });
   /** international distributors an order can be for */
   protected intlDistributors = computed(() => (this.distributorsRes.value() ?? []).filter((d) => d.market && d.market !== 'Local'));
+  private http = inject(ApiService);
+  protected approvals = rxResource({ params: () => this.tick(), stream: () => this.http.get<MarketApproval[]>('market-approvals') });
+  protected claims = rxResource({ params: () => this.tick(), stream: () => this.http.get<ExportClaim[]>('export-claims') });
+  protected isAdmin = computed(() => this.auth.user()?.role === 'Admin');
+  protected canFinance = computed(() => ['Admin', 'Finance'].includes(this.auth.user()?.role ?? ''));
+  protected canApprovals = computed(() => ['Admin', 'Exports', 'Distribution'].includes(this.auth.user()?.role ?? ''));
+  protected logisticsOpen = signal(false);
+  protected claimOpen = signal(false);
+  protected decideOpen = signal(false);
+  protected deciding = signal<ExportClaim | null>(null);
+  protected decidingShipment = computed(() => this.all().find((x) => x.id === this.deciding()?.shipmentId) ?? null);
+  protected approvalOpen = signal(false);
+  protected approvalEditing = signal<MarketApproval | null>(null);
+  protected reasonOpen = signal(false);
+  protected reasonSubject = signal('');
+  protected reasonRun = signal<((note: string) => import('rxjs').Observable<unknown>) | undefined>(undefined);
   /** the distributor whose account panel is open */
   protected accountOpen = signal(false);
   protected accountOf = signal<string | null>(null);
@@ -83,7 +103,65 @@ export class Exports {
     { id: 'shipments', label: 'Shipments & quotes', icon: 'container', count: this.all().length },
     { id: 'terms', label: 'Trade terms & costing', icon: 'scale' },
     { id: 'collections', label: 'Collections & costs', icon: 'banknote', count: this.receipts.value()?.length ?? 0 },
+    { id: 'approvals', label: 'Market approvals', icon: 'shield-check', count: (this.approvals.value() ?? []).filter((a) => a.status === 'Pending').length || null },
+    { id: 'claims', label: 'Claims & credit notes', icon: 'file', count: (this.claims.value() ?? []).filter((c) => c.status === 'Submitted').length || null },
   ]);
+
+  protected approvalColumns: TableColumn<MarketApproval>[] = [
+    { id: 'sku', label: 'Product / market', value: (a) => `${a.product.sku} · ${a.country}`, sub: (a) => (a.labelVersion ? `Label ${a.labelVersion}${a.labelLanguages ? ' · ' + a.labelLanguages : ''}` : null) },
+    { id: 'reg', label: 'Registration', value: (a) => a.registrationNo ?? '-', sub: (a) => (a.registrationExpiry ? `expires ${fmtDate(a.registrationExpiry)}` : a.registrationAuthority), priority: 2 },
+    { id: 'certs', label: 'Certificates', value: (a) => a.certificates.map((c) => c.type).join(', ') || '-', priority: 3 },
+    { id: 'shelf', label: 'Min shelf life', kind: 'number', align: 'end', value: (a) => a.minShelfLifeDays, sub: () => 'days', priority: 3 },
+    {
+      id: 'status', label: 'Status', kind: 'tag', value: (a) => a.status, tone: (a) => (a.status === 'Approved' ? 'success' : a.status === 'Rejected' ? 'danger' : 'warning'),
+      sub: (a) => (a.reviewedBy ? `${a.reviewedBy}${a.reviewNote ? ' · ' + a.reviewNote : ''}` : `entered by ${a.createdBy}`),
+    },
+  ];
+  protected approvalActions = (a: MarketApproval): RowAction[] => [
+    ...(this.canApprovals() ? [{ id: 'edit', label: 'Edit' }] : []),
+    ...(a.status === 'Pending' && this.isAdmin() ? [{ id: 'approve', label: 'Approve', tone: 'success' as const }, { id: 'reject', label: 'Reject', tone: 'danger' as const }] : []),
+  ];
+
+  protected claimColumns: TableColumn<ExportClaim>[] = [
+    { id: 'ref', label: 'Claim', value: (c) => c.refNo, sub: (c) => fmtDate(c.date) },
+    { id: 'ship', label: 'Container', value: (c) => c.shipment.refNo, sub: (c) => c.raisedBy, priority: 2 },
+    { id: 'what', label: 'What', value: (c) => `${c.kind} · ${c.quantity} bundle(s)`, sub: (c) => c.description },
+    {
+      id: 'credit', label: 'Credit', kind: 'mono', align: 'end', value: (c) => (c.creditAmount ? `${c.shipment.currency} ${fmtAmount2(c.creditAmount)}` : '-'),
+      sub: (c) => c.creditNoteRef ?? c.resolution, priority: 2,
+    },
+    {
+      id: 'status', label: 'Status', kind: 'tag', value: (c) => c.status, tone: (c) => (c.status === 'Approved' ? 'success' : c.status === 'Rejected' ? 'danger' : 'warning'),
+      sub: (c) => (c.decidedBy ? `${c.decidedBy}${c.decisionNote ? ' · ' + c.decisionNote : ''}` : null),
+    },
+  ];
+  protected claimActions = (c: ExportClaim): RowAction[] => (c.status === 'Submitted' && this.canFinance() ? [{ id: 'decide', label: 'Decide', tone: 'success' }] : []);
+
+  protected onApprovalAction(ev: RowActionEvent<MarketApproval>) {
+    const a = ev.row;
+    if (ev.id === 'edit') { this.approvalEditing.set(a); this.approvalOpen.set(true); return; }
+    if (ev.id === 'approve') {
+      this.http.post(`market-approvals/${a.id}/review`, { decision: 'Approve' }).subscribe({
+        next: () => { this.toast.success(`${a.product.sku} approved for ${a.country}.`); this.reload(); },
+        error: (err) => this.toast.error(errorText(err)),
+      });
+      return;
+    }
+    if (ev.id === 'reject') {
+      this.reasonSubject.set(`${a.product.sku} for ${a.country}`);
+      this.reasonRun.set((note) => this.http.post(`market-approvals/${a.id}/review`, { decision: 'Reject', note }));
+      this.reasonOpen.set(true);
+    }
+  }
+
+  protected onClaimAction(ev: RowActionEvent<ExportClaim>) {
+    if (ev.id === 'decide') { this.deciding.set(ev.row); this.decideOpen.set(true); }
+  }
+
+  protected newApproval() {
+    this.approvalEditing.set(null);
+    this.approvalOpen.set(true);
+  }
 
   // ───────────── shipments table ─────────────
   private shipTone = (e: ExportRow): Tone => (e.status === 'Quote' ? 'info' : e.due > 0 ? 'warning' : 'success');
@@ -119,6 +197,8 @@ export class Exports {
   protected actions = (e: ExportRow): RowAction[] => {
     const account: RowAction[] = e.distributorId ? [{ id: 'account', label: 'Distributor account' }] : [];
     if (!this.canWrite()) return account;
+    account.unshift({ id: 'logistics', label: 'Logistics & documents' });
+    if (e.status === 'Shipped') account.push({ id: 'claim', label: 'Raise claim' });
     if (e.status === 'Quote') {
       return [{ id: 'ship', label: 'Ship', tone: 'success' }, { id: 'edit', label: 'Edit' }, ...account, { id: 'delete', label: 'Delete', tone: 'danger' }];
     }
@@ -178,6 +258,8 @@ export class Exports {
     const e = ev.row;
     if (ev.id === 'edit') return this.openQuote(e);
     if (ev.id === 'account') { this.accountOf.set(e.distributorId ?? null); this.accountOpen.set(true); return; }
+    if (ev.id === 'logistics') { this.target.set(e); this.logisticsOpen.set(true); return; }
+    if (ev.id === 'claim') { this.target.set(e); this.claimOpen.set(true); return; }
     if (ev.id === 'collect') { this.target.set(e); this.collectOpen.set(true); return; }
     if (ev.id === 'costs') { this.target.set(e); this.costOpen.set(true); return; }
 

@@ -3,6 +3,7 @@ import { InjectDataSource } from '@nestjs/typeorm';
 import { DataSource, EntityManager } from 'typeorm';
 import { Distributor, DistributorPrice, Product } from '../catalog/catalog.entities';
 import { effectiveAgreement } from '../catalog/registration.service';
+import { checkMarket } from './market-check';
 import { StockService } from '../catalog/stock.service';
 import { round2 } from '../common/numeric.transformer';
 import { nextRef } from '../common/ref';
@@ -75,9 +76,11 @@ export class ExportsService {
     const m = shipmentMath(x, packs, unitCost, flagsFor(await this.lookups.incotermFlags(em), x.incoterm));
     const [paid] = await em.query(`SELECT COALESCE(SUM("foreignAmount"), 0)::float8 AS v FROM export_receipts WHERE "shipmentId" = $1`, [x.id]);
     const [costPaid] = await em.query(`SELECT COALESCE(SUM(amount), 0)::float8 AS v FROM export_cost_payments WHERE "shipmentId" = $1`, [x.id]);
+    const [cr] = await em.query(`SELECT COALESCE(SUM("creditApplied"), 0)::float8 AS v FROM export_claims WHERE "shipmentId" = $1 AND status = 'Approved'`, [x.id]);
+    const credited = round2(cr.v);
     const collected = round2(paid.v);
     const costsSettled = round2(costPaid.v);
-    const due = Math.max(0, round2(m.revenueForeign - collected));
+    const due = Math.max(0, round2(m.revenueForeign - collected - credited));
     const d = x.distributorId ? (x.distributor ?? (await em.findOne(Distributor, { where: { id: x.distributorId } }))) : null;
     return {
       ...x,
@@ -87,6 +90,7 @@ export class ExportsService {
       ...m,
       unitCost,
       collected,
+      credited,
       due,
       costPaid: costsSettled,
       costDue: Math.max(0, round2(m.sellerCostPKR - costsSettled)),
@@ -148,7 +152,7 @@ export class ExportsService {
    * country, port, Incoterm, currency, today's rate, payment terms) and its price list; the distributor itself is
    * not changed. The SKU must be approved for it, and the quantity must meet the price's minimum and multiple.
    */
-  private async fromDistributor(em: EntityManager, dto: CreateExportDto): Promise<CreateExportDto & { priceId?: string | null }> {
+  private async fromDistributor(em: EntityManager, dto: CreateExportDto): Promise<CreateExportDto & { priceId?: string | null; dischargePort?: string | null; shippingMode?: string | null }> {
     const d = await em.findOne(Distributor, { where: { id: dto.distributorId! } });
     if (!d) throw new NotFoundException('Distributor not found');
     if (d.market === 'Local') throw new BadRequestException(`${d.name} is a local distributor; export orders are for international ones.`);
@@ -182,6 +186,8 @@ export class ExportsService {
       buyer: dto.buyer ?? d.legalName ?? d.name,
       country: dto.country ?? d.country ?? d.countries?.[0] ?? '',
       port: dto.port ?? d.incotermPlace ?? undefined,
+      dischargePort: d.dischargePort ?? null,
+      shippingMode: d.shippingMode ?? null,
       incoterm: dto.incoterm ?? d.incoterm ?? undefined,
       currency,
       fxRate: dto.fxRate ?? Number(cur.rate),
@@ -254,7 +260,7 @@ export class ExportsService {
    * Before an order for a distributor ships (spec section 8): the distributor is active, its agreement is signed and
    * in date, its licence and KYC documents have not expired, the SKU is approved, and the credit check passes.
    */
-  private async eligible(em: EntityManager, x: ExportShipment, revenueForeign: number) {
+  private async eligible(em: EntityManager, x: ExportShipment, revenueForeign: number, shipDate: string) {
     const d = await em.findOneOrFail(Distributor, { where: { id: x.distributorId! } });
     const t = today();
     if (d.registrationStatus !== 'Active') throw new BadRequestException(`${d.name} is ${d.registrationStatus.toLowerCase()}; only an active distributor's order can ship.`);
@@ -264,6 +270,7 @@ export class ExportsService {
     const lapsed = (d.kycDocs ?? []).filter((k) => k.expiry && k.expiry < t).map((k) => k.type);
     if (lapsed.length) throw new BadRequestException(`${d.name}'s KYC documents have expired: ${lapsed.join(', ')}.`);
     if (!(d.approvedProductIds ?? []).includes(x.productId)) throw new BadRequestException(`This SKU is not on ${d.name}'s approved products.`);
+    await checkMarket(em, x, shipDate);
     const c = await this.creditPosition(em, d, { amount: revenueForeign, currency: x.currency });
     if (!c.problems.length) return null;
     const text = `Credit check: ${c.problems.join('; ')}.`;
@@ -315,7 +322,7 @@ export class ExportsService {
       }
       const s = await this.settings.get(em);
       const packs = x.product.packsPerCarton ?? s.packsPerCarton;
-      if (x.distributorId) x.creditNote = await this.eligible(em, x, round2(x.cartons * packs * Number(x.rate)));
+      if (x.distributorId) x.creditNote = await this.eligible(em, x, round2(x.cartons * packs * Number(x.rate)), shipDate ?? today());
       x.packsPerCarton = packs;
       x.unitCost = await this.planningUnitCost(em, x.product, packs);
       x.shipDate = shipDate ?? today();

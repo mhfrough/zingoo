@@ -187,6 +187,8 @@ export class SettingsLists {
     { list: 'ADVANCE_PURPOSE', title: 'Advance purpose', sub: 'Why a partner advances money', add: 'Add purpose' },
     { list: 'SETTLEMENT_METHOD', title: 'Settlement method', sub: 'How an advance is expected to be settled', add: 'Add method' },
     { list: 'DIST_CLASSIFICATION', title: 'Distributor classifications', sub: 'What kind of business an international distributor is', add: 'Add classification' },
+    { list: 'CERT_TYPE', title: 'Certificate types', sub: 'Certificates a market can ask for on a product', add: 'Add certificate type' },
+    { list: 'EXPORT_DOC_TYPE', title: 'Export document types', sub: 'Documents kept on an export shipment', add: 'Add document type' },
     { list: 'REMITTANCE_METHOD', title: 'Remittance methods', sub: 'How international distributors may pay', add: 'Add method' },
     { list: 'KYC_DOC_TYPE', title: 'KYC document types', sub: 'Documents an international distributor gives; required ones are checked on submission', add: 'Add document type' },
     { list: 'ORDER_STAGE', title: 'Production stages', sub: 'Steps a manufacturer reports on an order, in order', add: 'Add stage' },

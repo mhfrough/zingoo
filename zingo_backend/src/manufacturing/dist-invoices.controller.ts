@@ -1,6 +1,6 @@
 import { Body, Controller, Get, Param, ParseUUIDPipe, Post, Query, Request } from '@nestjs/common';
 import { ApiOperation, ApiQuery, ApiTags } from '@nestjs/swagger';
-import { Read, Roles } from '../auth/roles.decorator';
+import { Permit, Read, Roles } from '../auth/roles.decorator';
 import { CreateDistInvoiceDto, DistInvoicePayDto } from './dist-invoices.dto';
 import { DistInvoicesService } from './dist-invoices.service';
 import { ReasonDto } from './production-orders.dto';
@@ -26,6 +26,7 @@ export class DistInvoicesController {
 
   @Post()
   @Roles('Admin', 'Distribution', 'Distributor')
+  @Permit('orders')
   @ApiOperation({ summary: 'Report containers distributed: a sales invoice, delivery by delivery' })
   create(@Request() req: any, @Body() dto: CreateDistInvoiceDto) {
     return this.service.create(req.user, dto);

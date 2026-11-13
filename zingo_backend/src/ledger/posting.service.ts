@@ -7,7 +7,7 @@ import { Collection, SalesOrder } from '../distribution/distribution.entities';
 import { CreditNote } from '../portal/portal.entities';
 import { flagsFor, shipmentMath } from '../exports/export-math';
 import { LookupsService } from '../setup/lookups.service';
-import { DistributorRemittance, ExportCostPayment, ExportReceipt, ExportShipment } from '../exports/exports.entities';
+import { DistributorRemittance, ExportClaim, ExportCostPayment, ExportReceipt, ExportShipment } from '../exports/exports.entities';
 import { AccountingDocument, AccountingSettlement, Approval, FinanceEntry, FundingRepayment } from '../finance/finance.entities';
 import { ManufacturerPayment, ProductionBatch } from '../manufacturing/manufacturing.entities';
 import { MfrPaymentRequest, MfrRequestPayment } from '../manufacturing/payment-requests.entities';
@@ -438,6 +438,28 @@ export class PostingService implements OnModuleInit {
       ...this.pair(r.date, 'Exports', r.refNo, desc, ACC.CASH, ACC.CUSTOMER_ADVANCES, gross - fees, fx),
       ...(fees > 0 ? this.pair(r.date, 'Exports', r.refNo, `Bank charges deducted · ${r.refNo}`, ACC.BANK_CHARGES, ACC.CUSTOMER_ADVANCES, fees, fx) : []),
     ]);
+  }
+
+  /**
+   * An approved export claim settled by a credit note: Sales Returns & Allowances at the invoice rate, against the
+   * receivable up to the invoice balance and Distributor Credit Payable for any part beyond it.
+   */
+  async syncExportClaim(em: EntityManager, id: string) {
+    const c = await em.findOne(ExportClaim, { where: { id }, relations: ['shipment'] });
+    if (!c) return;
+    let rows: LedgerRow[] = [];
+    if (c.status === 'Approved' && Number(c.creditAmount) > 0) {
+      const rate = Number(c.shipment.fxRate);
+      const fx = { currency: c.shipment.currency, fxRate: rate };
+      const ref = c.creditNoteRef ?? c.refNo;
+      const ar = round2(Number(c.creditApplied) * rate);
+      const owed = round2((Number(c.creditAmount) - Number(c.creditApplied)) * rate);
+      rows = [
+        ...(ar > 0 ? this.pair(c.date, 'Exports', ref, `Credit note · ${c.kind} claim ${c.refNo} · ${c.shipment.refNo}`, ACC.SALES_RETURNS, ACC.AR, ar, fx) : []),
+        ...(owed > 0 ? this.pair(c.date, 'Exports', ref, `Credit owed back · ${c.refNo} · ${c.shipment.refNo}`, ACC.SALES_RETURNS, ACC.DIST_CREDIT_PAYABLE, owed, fx) : []),
+      ];
+    }
+    await this.ledger.replace(em, 'EXPORT_CLAIM', id, rows);
   }
 
   /** Paying the accrued logistics: the cost was booked at shipping, so this only moves cash against the payable. */

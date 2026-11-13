@@ -3,7 +3,7 @@ import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
 import * as bcrypt from 'bcrypt';
 import { Repository } from 'typeorm';
-import { Role, Seat } from '../common/enums';
+import { PortalRole, Role, Seat } from '../common/enums';
 import { User } from './user.entity';
 
 @Injectable()
@@ -69,7 +69,7 @@ export class UsersService implements OnApplicationBootstrap {
   }
 
   /** a login made from the users screen */
-  async add(dto: { name: string; email: string; password: string; role: Role; seat?: Seat; distributorId?: string; manufacturerId?: string }) {
+  async add(dto: { name: string; email: string; password: string; role: Role; seat?: Seat; distributorId?: string; manufacturerId?: string; portalRole?: PortalRole }) {
     const email = dto.email.trim().toLowerCase();
     if (await this.findByEmail(email)) throw new ConflictException('A user with this email already exists.');
     if (dto.role === 'Distributor' && !dto.distributorId) throw new BadRequestException('Choose which distributor this login belongs to.');
@@ -79,6 +79,7 @@ export class UsersService implements OnApplicationBootstrap {
       seat: dto.role === 'Admin' || dto.role === 'Finance' ? dto.seat : 'None',
       distributorId: dto.role === 'Distributor' ? dto.distributorId : null,
       manufacturerId: dto.role === 'Manufacturer' ? dto.manufacturerId : null,
+      portalRole: dto.role === 'Distributor' ? (dto.portalRole ?? 'Owner') : 'Owner',
     });
     return this.view(u);
   }
@@ -87,7 +88,7 @@ export class UsersService implements OnApplicationBootstrap {
    * Change a login. The root account keeps its role, seat and active status, nobody can switch off or demote
    * their own account here, and at least one active Admin always remains.
    */
-  async edit(id: string, patch: { name?: string; role?: Role; seat?: Seat; status?: 'Active' | 'Disabled'; distributorId?: string | null; manufacturerId?: string | null }, actorId: string) {
+  async edit(id: string, patch: { name?: string; role?: Role; seat?: Seat; status?: 'Active' | 'Disabled'; distributorId?: string | null; manufacturerId?: string | null; portalRole?: PortalRole }, actorId: string) {
     const u = await this.repo.findOne({ where: { id } });
     if (!u) throw new NotFoundException('User not found');
     const role = patch.role ?? u.role;
@@ -115,6 +116,7 @@ export class UsersService implements OnApplicationBootstrap {
       seat: role === 'Admin' || role === 'Finance' ? (patch.seat ?? u.seat) : 'None',
       distributorId: role === 'Distributor' ? (patch.distributorId ?? u.distributorId) : null,
       manufacturerId: role === 'Manufacturer' ? (patch.manufacturerId ?? u.manufacturerId) : null,
+      portalRole: patch.portalRole ?? u.portalRole,
     });
     return this.view(await this.repo.save(u));
   }
@@ -142,6 +144,7 @@ export class UsersService implements OnApplicationBootstrap {
 
   async createUser(data: {
     email: string; name: string; password: string; role: Role; seat?: Seat; distributorId?: string | null; manufacturerId?: string | null;
+    portalRole?: PortalRole;
   }) {
     const password = await bcrypt.hash(data.password, 10);
     return this.repo.save(

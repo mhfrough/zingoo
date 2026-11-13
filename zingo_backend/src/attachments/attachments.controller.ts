@@ -3,12 +3,13 @@ import { FileInterceptor } from '@nestjs/platform-express';
 import { ApiBody, ApiConsumes, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { IsIn, IsOptional, IsString, IsUUID, MaxLength } from 'class-validator';
 import type { Response } from 'express';
+import { Role } from '../common/enums';
 import { STAFF } from '../auth/access';
-import { Roles } from '../auth/roles.decorator';
+import { Permit, Roles } from '../auth/roles.decorator';
 import { MAX_ATTACHMENT_BYTES, AttachmentsService } from './attachments.service';
 
 /** Roles that may add files (everyone inside the company except the read-only reviewer). */
-const UPLOADERS = STAFF.filter((r) => r !== 'Viewer' && r !== 'Investor');
+const UPLOADERS: Role[] = [...STAFF.filter((r) => r !== 'Viewer' && r !== 'Investor'), 'Distributor'];
 
 /** Optional: what the file will belong to. */
 class UploadMeta {
@@ -27,6 +28,7 @@ export class AttachmentsController {
 
   @Post()
   @Roles(...UPLOADERS)
+  @Permit('uploads')
   @ApiOperation({ summary: 'Upload a file (image, PDF or Word document, 5 MB at most)' })
   @ApiConsumes('multipart/form-data')
   @ApiBody({ schema: { type: 'object', properties: { file: { type: 'string', format: 'binary' } } } })

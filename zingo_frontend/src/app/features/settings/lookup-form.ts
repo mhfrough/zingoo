@@ -34,6 +34,8 @@ const LIST_TEXT: Record<LookupList, { word: string; use: string; code: string; m
   FLAVOUR: { word: 'flavour', use: 'Offered on every product / SKU.', code: 'Name', meaning: 'Meaning' },
   PACKET_SIZE: { word: 'packet size', use: 'Offered on every product / SKU (weight or price tier).', code: 'Name', meaning: 'Meaning' },
   DIST_CLASSIFICATION: { word: 'distributor classification', use: 'Offered on every international distributor: importer, master distributor, wholesaler ...', code: 'Name', meaning: 'Meaning' },
+  CERT_TYPE: { word: 'certificate type', use: 'Certificates a market can ask for on a product: halal, health, laboratory ...', code: 'Name', meaning: 'Meaning' },
+  EXPORT_DOC_TYPE: { word: 'export document type', use: 'Documents kept on an export shipment: commercial invoice, packing list, bill of lading ...', code: 'Name', meaning: 'Meaning' },
   REMITTANCE_METHOD: { word: 'remittance method', use: 'How an international distributor may pay: bank transfer, SWIFT, documentary collection, letter of credit ...', code: 'Name', meaning: 'Meaning' },
   KYC_DOC_TYPE: { word: 'KYC document type', use: 'The documents an international distributor gives. A required one must be uploaded before its documents can be submitted.', code: 'Name', meaning: 'Meaning' },
   ORDER_STAGE: { word: 'production stage', use: 'The steps a manufacturer reports on an order, in this order. Steps only move forward.', code: 'Name', meaning: 'Meaning' },

@@ -21,10 +21,14 @@ export const CATEGORY_KINDS = ['COST_CENTER', 'INCOME', 'EXPENSE'] as const;
 export const INCOTERMS = ['EXW', 'FOB', 'CFR', 'CIF', 'DAP', 'DDP'] as const;
 export const EXPORT_STATUS = ['Quote', 'Shipped'] as const;
 
+/** a distributor login's role in the portal (spec section 7) */
+export const PORTAL_ROLES = ['Owner', 'Sales', 'Finance', 'Warehouse', 'Read-only'] as const;
+export type PortalRole = (typeof PORTAL_ROLES)[number];
+
 /** What a ledger line came from (used to replace the lines when the document changes). */
 export type RefType =
   | 'BATCH' | 'MFR_PAYMENT' | 'ORDER' | 'COLLECTION' | 'FINANCE' | 'ACC_DOC' | 'ACC_SETTLEMENT'
-  | 'EXPORT' | 'EXPORT_RECEIPT' | 'EXPORT_COST' | 'VOUCHER' | 'CREDIT_NOTE' | 'FUNDING_REPAY' | 'MFR_REQ_PAY' | 'SHIPMENT' | 'MFR_ADV_APPLY' | 'DIST_INVOICE' | 'DIST_RECEIPT' | 'REMITTANCE';
+  | 'EXPORT' | 'EXPORT_RECEIPT' | 'EXPORT_COST' | 'VOUCHER' | 'CREDIT_NOTE' | 'FUNDING_REPAY' | 'MFR_REQ_PAY' | 'SHIPMENT' | 'MFR_ADV_APPLY' | 'DIST_INVOICE' | 'DIST_RECEIPT' | 'REMITTANCE' | 'EXPORT_CLAIM';
 
 export type JournalSource =
   | 'Manufacturing' | 'Distribution' | 'Investment' | 'Accounting' | 'Exports' | 'Manual Voucher' | 'Distributor Portal';

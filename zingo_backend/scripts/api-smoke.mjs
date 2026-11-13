@@ -464,7 +464,7 @@ ok('a Viewer can download it, byte for byte, as an attachment', dl.status === 20
 ok('a download needs a login -> 401', (await fetch(`${BASE}/attachments/${up1.json.id}`)).status === 401);
 ok('the file details are readable', (await call(T.audit, 'GET', `/attachments/${up1.json.id}/meta`)).json?.name === 'slip one.png');
 ok('a Viewer cannot upload -> 403', (await upload(T.audit, PNG, 'x.png', 'image/png')).status === 403);
-ok('a distributor cannot upload here -> 403', (await upload(T.dist, PNG, 'x.png', 'image/png')).status === 403);
+ok('a distributor portal login can upload (claim photos, payment proof)', (await upload(T.dist, PNG, 'x.png', 'image/png')).status === 201);
 ok('a program renamed to .png is refused -> 400', (await upload(T.finance, Buffer.from('MZ\x90\x00 not an image'), 'virus.png', 'image/png')).status === 400);
 ok('a type that does not match the extension is refused -> 400', (await upload(T.finance, PNG, 'photo.pdf', 'image/png')).status === 400);
 ok('a text file is refused -> 400', (await upload(T.finance, Buffer.from('hello'), 'notes.txt', 'text/plain')).status === 400);
@@ -1341,7 +1341,9 @@ dReg = (await call(T.owner, 'POST', `/distributors/${dNew.json.id}/registration/
 ok('the third sign-off approves it', dReg?.status === 'Approved', dReg?.status);
 ok('activation needs a signed agreement and approved products', dReg?.missingToActivate?.some((m) => /signed agreement/.test(m)) && dReg?.missingToActivate?.includes('at least one approved product'), JSON.stringify(dReg?.missingToActivate));
 ok('activating with gaps -> 400', (await call(T.owner, 'POST', `/distributors/${dNew.json.id}/registration/activate`)).status === 400);
-await call(T.sales, 'PATCH', `/distributors/${dNew.json.id}`, { agreementStatus: 'Signed', agreementFile: fileOf(dAgr), agreementEnd: '2999-12-31', approvedProductIds: [p3P.id] });
+await call(T.sales, 'PATCH', `/distributors/${dNew.json.id}`, { agreementStatus: 'Signed', agreementFile: fileOf(dAgr), agreementEnd: '2999-12-31', approvedProductIds: [p3P.id], recallContactName: 'QA lead', recallContactEmail: 'recall@example.test' });
+ok('activation also needs a portal Owner login', ((await call(T.owner, 'GET', `/distributors/${dNew.json.id}/registration`)).json?.missingToActivate ?? []).some((m) => /portal admin/.test(m)));
+await call(T.owner, 'POST', '/users', { name: 'Doha owner', email: `doha-owner-${Date.now()}@example.test`, password: PW, role: 'Distributor', distributorId: dNew.json.id, portalRole: 'Owner' });
 ok('Finance cannot activate -> 403', (await call(T.finance, 'POST', `/distributors/${dNew.json.id}/registration/activate`)).status === 403);
 ok('Admin activates it', (await call(T.owner, 'POST', `/distributors/${dNew.json.id}/registration/activate`)).json?.status === 'Active');
 ok('hold needs a reason -> 400', (await call(T.finance, 'POST', `/distributors/${dNew.json.id}/registration/state`, { to: 'On hold' })).status === 400);
@@ -1438,9 +1440,14 @@ const fD = (await call(T.sales, 'POST', '/distributors', {
   kycDocs: [{ type: 'Registration certificate', file: fFile(fK1) }, { type: 'Authorized signatory', file: fFile(fK2) }],
   agreementStart: fAgo(30), agreementEnd: '2999-12-31', agreementStatus: 'Signed', agreementFile: fFile(fAg), approvedProductIds: [fStockP.id],
   invoiceCurrency: 'USD', incoterm: 'FOB', incotermPlace: 'Karachi', paymentDays: 30, settlementMethods: ['SWIFT'],
+  recallContactName: 'Achieng', recallContactEmail: 'recall-ke@example.test',
   bankAccounts: [{ beneficiary: 'Nairobi Snacks Ltd', bankName: 'Sample KE bank', account: 'KE-001', currency: 'USD', isDefault: true }],
 })).json;
 ok('the Kenyan distributor is saved as a draft', fD?.registrationStatus === 'Draft', JSON.stringify(fD).slice(0, 200));
+await call(T.owner, 'POST', '/users', { name: 'Nairobi owner', email: `ke-owner-${Date.now()}@example.test`, password: PW, role: 'Distributor', distributorId: fD.id, portalRole: 'Owner' });
+const fMa = (await call(T.sales, 'POST', '/market-approvals', { productId: fStockP.id, country: 'Kenya', labelVersion: 'v1', minShelfLifeDays: 0 })).json;
+await call(T.owner, 'POST', `/market-approvals/${fMa.id}/review`, { decision: 'Approve' });
+const fLot = (id) => call(T.exporter, 'PATCH', `/exports/${id}/logistics`, { batchRef: 'LOT-KE-1' });
 const fCost = Number(fStockP.manufacturerRate) + Number(fStockP.packagingRate) + Number(fStockP.printingRate) + Number(fStockP.inboundRate) + Number(fStockP.outboundRate ?? 0);
 const fBundle = Math.ceil(((fCost * 1.5 * fStockP.packsPerCarton) / 280) * 100) / 100;
 const fPr = await call(T.sales, 'POST', `/distributors/${fD.id}/prices`, { productId: fStockP.id, currency: 'USD', unit: 'Bundle', price: fBundle, effectiveFrom: fAgo(60), moq: 5, increment: 5 });
@@ -1449,6 +1456,7 @@ const fQ = (o = {}) => ({ date: fToday, distributorId: fD.id, container: '20GP',
 ok('under the minimum order -> 400', (await call(T.exporter, 'POST', '/exports', fQ({ cartons: 3 }))).status === 400);
 ok('not a multiple of the order increment -> 400', (await call(T.exporter, 'POST', '/exports', fQ({ cartons: 7 }))).status === 400);
 const fQ1 = (await call(T.exporter, 'POST', '/exports', fQ())).json;
+await fLot(fQ1.id);
 ok('the order takes the distributor defaults (FOB Karachi, USD, 30 days) and its price per pack', fQ1?.incoterm === 'FOB' && fQ1?.port === 'Karachi' && fQ1?.currency === 'USD'
   && fQ1?.paymentDays === 30 && Math.abs(fQ1?.rate - fBundle / fStockP.packsPerCarton) < 1e-5 && fQ1?.buyer === fD.legalName, JSON.stringify([fQ1?.incoterm, fQ1?.rate, fQ1?.buyer]));
 const fQx = (await call(T.exporter, 'POST', '/exports', fQ({ incoterm: 'CIF', rate: 0.5, paymentDays: 10, port: 'Mombasa' }))).json;
@@ -1471,6 +1479,7 @@ const fS1 = (await call(T.exporter, 'POST', `/exports/${fQ1.id}/ship`, { shipDat
 ok('it ships on the override; the note and the due date (ship + 30 days) are kept', fS1?.status === 'Shipped' && /override/.test(fS1?.creditNote ?? '') && fS1?.dueDate === new Date(Date.now() + 30 * 86400000).toISOString().slice(0, 10), JSON.stringify([fS1?.creditNote, fS1?.dueDate]));
 await call(T.finance, 'PUT', `/distributors/${fD.id}/credit`, { creditLimit: 1000000, creditCurrency: 'USD', creditControl: 'Warn' });
 const fQ2 = (await call(T.exporter, 'POST', '/exports', fQ())).json;
+await fLot(fQ2.id);
 const fS2 = (await call(T.exporter, 'POST', `/exports/${fQ2.id}/ship`, { shipDate: fToday })).json;
 ok('within the approved credit it ships with no note', fS2?.status === 'Shipped' && !fS2?.creditNote, JSON.stringify(fS2?.creditNote));
 // remittances
@@ -1499,18 +1508,136 @@ const fLast = fAcc2?.statement?.filter((l) => l.currency === 'USD').at(-1);
 ok('the statement runs to the same balance', Math.abs(fLast?.balance - fUsd?.balance) < 0.01, JSON.stringify(fLast));
 // an overdue invoice
 const fQ3 = (await call(T.exporter, 'POST', '/exports', fQ({ date: fAgo(45), paymentDays: 0 }))).json;
+await fLot(fQ3.id);
 const fS3 = (await call(T.exporter, 'POST', `/exports/${fQ3.id}/ship`, { shipDate: fAgo(45) })).json;
 ok('an invoice due 45 days ago is overdue', fS3?.overdue === true, JSON.stringify([fS3?.dueDate, fS3?.overdue]));
 const fAcc3 = (await call(T.owner, 'GET', `/distributors/${fD.id}/account`)).json;
 ok('aging puts it in 31-60 and the credit check sees it', fAcc3?.agingLabels?.[2] === '31-60' && fAcc3?.currencies?.[0]?.aging?.[2] > 0 && fAcc3?.credit?.overdue === 1, JSON.stringify([fAcc3?.agingLabels, fAcc3?.currencies?.[0]?.aging]));
 const fQ4 = (await call(T.exporter, 'POST', '/exports', fQ())).json;
+await fLot(fQ4.id);
 ok('Warn: it ships with an overdue note', /overdue/.test((await call(T.exporter, 'POST', `/exports/${fQ4.id}/ship`, {})).json?.creditNote ?? ''));
 await call(T.finance, 'PUT', `/distributors/${fD.id}/credit`, { creditLimit: 1000000, creditCurrency: 'USD', creditControl: 'Block' });
 const fQ5 = (await call(T.exporter, 'POST', '/exports', fQ())).json;
+await fLot(fQ5.id);
 ok('Block: with an invoice overdue the next order cannot ship -> 400', (await call(T.exporter, 'POST', `/exports/${fQ5.id}/ship`, {})).status === 400);
 await call(T.exporter, 'DELETE', `/exports/${fQ5.id}`);
 ok('a Distributor login cannot read the account -> 403', (await call(T.dist, 'GET', `/distributors/${fD.id}/account`)).status === 403);
 ok('ledger still balanced after the distributor exports', (await call(T.owner, 'GET', '/reports/trial-balance')).json?.balanced === true);
+
+// ── D4 food compliance, logistics, claims and credit notes ──
+const gIn = (n) => new Date(Date.now() + n * 86400000).toISOString().slice(0, 10);
+ok('a second open approval for the same product and market -> 409', (await call(T.sales, 'POST', '/market-approvals', { productId: fStockP.id, country: 'kenya' })).status === 409 || (await call(T.sales, 'POST', '/market-approvals', { productId: fStockP.id, country: 'Kenya' })).status === 409);
+const gCert = await pfUpload('halal.pdf');
+ok('a certificate type not in Settings -> 400', (await call(T.sales, 'POST', '/market-approvals', { productId: fStockP.id, country: 'Uganda', certificates: [{ type: 'Astrology', file: fFile(gCert) }] })).status === 400);
+const gUg = (await call(T.sales, 'POST', '/market-approvals', { productId: fStockP.id, country: 'Uganda', certificates: [{ type: 'Halal', file: fFile(gCert), expiry: '2000-01-01' }] })).json;
+ok('Distribution cannot review a market approval -> 403', (await call(T.sales, 'POST', `/market-approvals/${gUg.id}/review`, { decision: 'Approve' })).status === 403);
+ok('an expired certificate cannot be approved -> 400', (await call(T.owner, 'POST', `/market-approvals/${gUg.id}/review`, { decision: 'Approve' })).status === 400);
+ok('a rejection needs a reason -> 400', (await call(T.owner, 'POST', `/market-approvals/${gUg.id}/review`, { decision: 'Reject' })).status === 400);
+ok('the reviewer rejects it with a reason', (await call(T.owner, 'POST', `/market-approvals/${gUg.id}/review`, { decision: 'Reject', note: 'Halal lapsed' })).json?.status === 'Rejected');
+await call(T.finance, 'PUT', `/distributors/${fD.id}/credit`, { creditLimit: 1000000, creditCurrency: 'USD', creditControl: 'Warn' });
+const gQ = (await call(T.exporter, 'POST', '/exports', fQ())).json;
+ok('no batch / lot entered -> shipping refused', /batch/i.test((await call(T.exporter, 'POST', `/exports/${gQ.id}/ship`, {})).json?.message ?? ''));
+const gMa = (await call(T.sales, 'PATCH', `/market-approvals/${fMa.id}`, { minShelfLifeDays: 180, labelLanguages: 'English, Swahili' })).json;
+ok('changing an approved market sends it back for review', gMa?.status === 'Pending');
+await call(T.exporter, 'PATCH', `/exports/${gQ.id}/logistics`, { batchRef: 'LOT-KE-2', mfgDate: fToday, expiryDate: gIn(100) });
+ok('while the approval is pending the order cannot ship -> 400', /approved market approval/.test((await call(T.exporter, 'POST', `/exports/${gQ.id}/ship`, {})).json?.message ?? ''));
+await call(T.owner, 'POST', `/market-approvals/${fMa.id}/review`, { decision: 'Approve' });
+ok('100 days of shelf life when Kenya needs 180 -> 400', /shelf life/.test((await call(T.exporter, 'POST', `/exports/${gQ.id}/ship`, {})).json?.message ?? ''));
+ok('a batch that expires before it was made -> 400', (await call(T.exporter, 'PATCH', `/exports/${gQ.id}/logistics`, { mfgDate: gIn(10), expiryDate: gIn(5) })).status === 400);
+await call(T.exporter, 'PATCH', `/exports/${gQ.id}/logistics`, { expiryDate: gIn(400) });
+ok('tracking before it ships -> 400', (await call(T.exporter, 'PATCH', `/exports/${gQ.id}/logistics`, { shippingStatus: 'Sailed' })).status === 400);
+const gS = (await call(T.exporter, 'POST', `/exports/${gQ.id}/ship`, { shipDate: fToday })).json;
+ok('with an approved market and 400 days of shelf life it ships', gS?.status === 'Shipped', JSON.stringify(gS).slice(0, 160));
+const gTz = (await call(T.exporter, 'POST', '/exports', fQ({ country: 'Tanzania' }))).json;
+await call(T.exporter, 'PATCH', `/exports/${gTz.id}/logistics`, { batchRef: 'LOT-TZ' });
+ok('a market without an approval -> 400', /Tanzania/.test((await call(T.exporter, 'POST', `/exports/${gTz.id}/ship`, {})).json?.message ?? ''));
+await call(T.exporter, 'DELETE', `/exports/${gTz.id}`);
+const gBl = await pfUpload('bill-of-lading.pdf');
+ok('an export document type not in Settings -> 400', (await call(T.exporter, 'PATCH', `/exports/${gS.id}/logistics`, { documents: [{ type: 'Love letter', file: fFile(gBl) }] })).status === 400);
+ok('arrival before departure -> 400', (await call(T.exporter, 'PATCH', `/exports/${gS.id}/logistics`, { etd: gIn(5), eta: gIn(1) })).status === 400);
+const gLog = (await call(T.exporter, 'PATCH', `/exports/${gS.id}/logistics`, {
+  bookingNo: 'BK-77', containerNo: 'MSCU1234567', sealNo: 'S-9', blNo: 'BL-001', vessel: 'MSC Sample', etd: fToday, eta: gIn(20), shippingStatus: 'Sailed',
+  documents: [{ type: 'Bill of lading / AWB', file: fFile(gBl) }],
+})).json;
+ok('booking, container, seal, BL, vessel, dates, status and documents are kept on the shipment', gLog?.shippingStatus === 'Sailed' && gLog?.blNo === 'BL-001' && gLog?.documents?.length === 1);
+ok('the batch of a shipped container cannot change -> 400', (await call(T.exporter, 'PATCH', `/exports/${gS.id}/logistics`, { batchRef: 'OTHER' })).status === 400);
+// claims
+ok('a claim on a quote -> 400', (await call(T.sales, 'POST', `/exports/${fQ5.id ?? gQ.id}/claims`, { date: fToday, kind: 'Damage', quantity: 1, description: 'x' })).status >= 400);
+const gPh = await pfUpload('damage-photos.pdf');
+const gC = await call(T.sales, 'POST', `/exports/${gS.id}/claims`, { date: fToday, kind: 'Damage', quantity: 2, description: 'Crushed bundles', photos: [fFile(gPh)] });
+ok('Distribution raises a damage claim CLM with photos and the batch', /^CLM-\d{3}$/.test(gC.json?.refNo) && gC.json?.batchRef === 'LOT-KE-2' && gC.json?.photos?.length === 1, JSON.stringify(gC.json).slice(0, 160));
+ok('claiming more bundles than shipped -> 400', (await call(T.sales, 'POST', `/exports/${gS.id}/claims`, { date: fToday, kind: 'Shortage', quantity: 4, description: 'Missing' })).status === 400);
+ok('Distribution cannot decide a claim -> 403', (await call(T.sales, 'POST', `/export-claims/${gC.json.id}/decide`, { decision: 'Approve', resolution: 'Replacement' })).status === 403);
+ok('a credit worth more than the claimed bundles -> 400', (await call(T.finance, 'POST', `/export-claims/${gC.json.id}/decide`, { decision: 'Approve', resolution: 'Credit note', creditAmount: gS.revenueForeign })).status === 400);
+const gTb1 = (await call(T.owner, 'GET', '/reports/trial-balance')).json;
+const gCredit = Math.round((gS.revenueForeign * 2 / gS.cartons) * 100) / 100;
+const gD = (await call(T.finance, 'POST', `/export-claims/${gC.json.id}/decide`, { decision: 'Approve', resolution: 'Credit note', creditAmount: gCredit, inspection: 'Photos match', note: 'Agreed' })).json;
+ok('Finance approves a credit note XCN', gD?.status === 'Approved' && /^XCN-\d{3}$/.test(gD?.creditNoteRef) && gD?.creditApplied === gCredit, JSON.stringify(gD).slice(0, 160));
+const gS2 = (await call(T.exporter, 'GET', `/exports/${gS.id}`)).json;
+ok('the credit lowers what the invoice owes', Math.abs(gS2?.due - (gS.due - gCredit)) < 0.01 && gS2?.credited === gCredit);
+const gTb2 = (await call(T.owner, 'GET', '/reports/trial-balance')).json;
+ok('the credit note posts Sales Returns & Allowances against the receivable at the invoice rate', gTb2.balanced && Math.abs(net(gTb2, 'Sales Returns & Allowances') - net(gTb1, 'Sales Returns & Allowances') - gCredit * gS.fxRate) < 0.02);
+ok('deciding twice -> 400', (await call(T.finance, 'POST', `/export-claims/${gC.json.id}/decide`, { decision: 'Reject', note: 'x' })).status === 400);
+// a paid invoice: the credit is owed back, the receivable never goes negative
+const gC2 = (await call(T.sales, 'POST', `/exports/${fS1.id}/claims`, { date: fToday, kind: 'Quality', quantity: 1, description: 'Stale' })).json;
+const gPaidCredit = Math.round((fS1.revenueForeign / fS1.cartons) * 100) / 100;
+await call(T.finance, 'POST', `/export-claims/${gC2.id}/decide`, { decision: 'Approve', resolution: 'Credit note', creditAmount: gPaidCredit });
+const gTb3 = (await call(T.owner, 'GET', '/reports/trial-balance')).json;
+ok('on a paid invoice the credit is owed back (Distributor Credit Payable), not a negative receivable', gTb3.balanced && Math.abs(-(net(gTb3, 'Distributor Credit Payable') - net(gTb2, 'Distributor Credit Payable')) - gPaidCredit * fS1.fxRate) < 0.02
+  && (await call(T.exporter, 'GET', `/exports/${fS1.id}`)).json?.due === 0);
+const gC3 = (await call(T.sales, 'POST', `/exports/${gS.id}/claims`, { date: fToday, kind: 'Shortage', quantity: 1, description: 'One short' })).json;
+ok('a replacement is approved without money', (await call(T.finance, 'POST', `/export-claims/${gC3.id}/decide`, { decision: 'Approve', resolution: 'Replacement' })).json?.creditAmount === 0);
+const gC4 = (await call(T.sales, 'POST', `/exports/${fS2.id}/claims`, { date: fToday, kind: 'Return', quantity: 1, description: 'Wrong flavour' })).json;
+ok('a rejection needs a reason, then rejects', (await call(T.finance, 'POST', `/export-claims/${gC4.id}/decide`, { decision: 'Reject' })).status === 400
+  && (await call(T.finance, 'POST', `/export-claims/${gC4.id}/decide`, { decision: 'Reject', note: 'Outside the return window' })).json?.status === 'Rejected');
+const gAcc = (await call(T.owner, 'GET', `/distributors/${fD.id}/account`)).json;
+ok('the account statement shows the credit notes and lists the claims', gAcc?.statement?.some((l) => /^XCN-/.test(l.ref)) && gAcc?.claims?.length === 4, JSON.stringify(gAcc?.claims?.map((c) => c.status)));
+
+// ── D4 distributor portal: portal roles, own account and prices, claims, payment advices, notifications ──
+const hMk = async (role) => {
+  const email = `ke-${role.toLowerCase().replace(/[^a-z]/g, '')}-${Date.now()}@example.test`;
+  const u = await call(T.owner, 'POST', '/users', { name: `Nairobi ${role}`, email, password: PW, role: 'Distributor', distributorId: fD.id, portalRole: role });
+  return { user: u.json, token: await login(email) };
+};
+const hWh = await hMk('Warehouse');
+const hFin = await hMk('Finance');
+const hRo = await hMk('Read-only');
+ok('distributor logins carry their portal role', hWh.user?.portalRole === 'Warehouse' && hRo.user?.portalRole === 'Read-only', JSON.stringify(hWh.user).slice(0, 120));
+const hAcc = (await call(hRo.token, 'GET', '/portal/intl/account')).json;
+const hOrd = hAcc?.orders?.find((o) => o.id === gS.id);
+ok('the portal shows its own orders, due dates and aging, without Zen Foods costs or margins', !!hOrd && hOrd.due >= 0 && hOrd.unitCost === undefined && hOrd.margin === undefined && hOrd.cogs === undefined && hOrd.creditNote === undefined && hAcc?.agingLabels?.length === 5);
+ok('... and only its own records', hAcc?.orders?.every((o) => o.distributorId === fD.id));
+const hPr = (await call(hRo.token, 'GET', '/portal/intl/prices')).json ?? [];
+ok('its agreed prices, without cost or margin', hPr.length >= 1 && hPr[0].costPerPack === undefined && hPr[0].marginPct === undefined && hPr[0].currency === 'USD', JSON.stringify(hPr[0]));
+ok('Read-only cannot raise a claim -> 403', (await call(hRo.token, 'POST', `/portal/intl/shipments/${gS.id}/claims`, { date: fToday, kind: 'Damage', quantity: 1, description: 'x' })).status === 403);
+ok('Read-only cannot upload a file -> 403', (await fetch(BASE + '/attachments', { method: 'POST', headers: { Authorization: `Bearer ${hRo.token}` }, body: (() => { const fd = new FormData(); fd.append('file', new Blob([Buffer.from('%PDF-1.4 x')], { type: 'application/pdf' }), 'x.pdf'); return fd; })() })).status === 403);
+const hClaim = await call(hWh.token, 'POST', `/portal/intl/shipments/${gS.id}/claims`, { date: fToday, kind: 'Shortage', quantity: 1, description: 'One bundle short on arrival' });
+ok('Warehouse raises a claim on its own shipment', hClaim.status === 201 && hClaim.json?.raisedBy === hWh.user.name, JSON.stringify(hClaim.json).slice(0, 120));
+ok('another distributor cannot claim on it -> 403', (await call(T.dist, 'POST', `/portal/intl/shipments/${gS.id}/claims`, { date: fToday, kind: 'Damage', quantity: 1, description: 'x' })).status === 403);
+ok('Warehouse cannot send a payment advice -> 403', (await call(hWh.token, 'POST', '/portal/intl/advices', { date: fToday, currency: 'USD', amount: 10, proof: fFile(gBl) })).status === 403);
+ok('Warehouse cannot place portal requests (orders) -> 403', (await call(hWh.token, 'POST', '/portal/requests', { productId: fStockP.id, cartons: 1 })).status === 403);
+const hUp = await (async () => {
+  const fd = new FormData();
+  fd.append('file', new Blob([Buffer.from('%PDF-1.4 swift')], { type: 'application/pdf' }), 'swift-copy.pdf');
+  return (await fetch(BASE + '/attachments', { method: 'POST', headers: { Authorization: `Bearer ${hFin.token}` }, body: fd })).json();
+})();
+const hAdv = await call(hFin.token, 'POST', '/portal/intl/advices', { date: fToday, currency: 'USD', amount: 25, method: 'SWIFT', bankRef: 'MT103-77', forInvoices: gS.refNo, proof: fFile(hUp) });
+ok('Finance sends a payment advice RA with the SWIFT copy', /^RA-\d{3}$/.test(hAdv.json?.refNo) && hAdv.json?.status === 'Submitted', JSON.stringify(hAdv.json).slice(0, 160));
+ok('staff see it as an alert', ((await call(T.owner, 'GET', '/reports/alerts')).json ?? []).some((a) => a.title === `Payment advice · ${hAdv.json.refNo}`));
+const hRec = (await call(T.exporter, 'POST', `/distributors/${fD.id}/remittances`, { date: fToday, currency: 'USD', amount: 25, fxRate: 280, method: 'SWIFT', bankRef: 'MT103-77', bankIndex: 0, adviceId: hAdv.json.id })).json;
+ok('recording the remittance from the advice marks it Recorded', hRec?.advices?.find((a) => a.id === hAdv.json.id)?.status === 'Recorded');
+ok('recording the same advice twice -> 400', (await call(T.exporter, 'POST', `/distributors/${fD.id}/remittances`, { date: fToday, currency: 'USD', amount: 25, fxRate: 280, method: 'SWIFT', bankIndex: 0, adviceId: hAdv.json.id })).status === 400);
+const hUp2 = await (async () => {
+  const fd = new FormData();
+  fd.append('file', new Blob([Buffer.from('%PDF-1.4 swift 2')], { type: 'application/pdf' }), 'swift-copy-2.pdf');
+  return (await fetch(BASE + '/attachments', { method: 'POST', headers: { Authorization: `Bearer ${hFin.token}` }, body: fd })).json();
+})();
+const hAdv2 = (await call(hFin.token, 'POST', '/portal/intl/advices', { date: fToday, currency: 'USD', amount: 5, proof: fFile(hUp2) })).json;
+ok('a second advice can be rejected with a reason', hAdv2?.refNo && (await call(T.finance, 'POST', `/remittance-advices/${hAdv2.id}/reject`, { note: 'Not in our bank' })).json?.status === 'Rejected');
+const hNt = (await call(hRo.token, 'GET', '/portal/intl/notifications')).json ?? [];
+ok('notifications: shipped, claim decided, payment received, advice rejected', ['shipped', 'claim', 'payment', 'advice'].every((k) => hNt.some((n) => n.kind === k)), JSON.stringify(hNt.map((n) => n.kind)));
+ok('staff see claims and market approvals to decide as alerts', ((await call(T.owner, 'GET', '/reports/alerts')).json ?? []).some((a) => a.title === `Claim to decide · ${hClaim.json.refNo}`));
+ok('a staff login cannot read the portal account -> 403', (await call(T.owner, 'GET', '/portal/intl/account')).status === 403);
 
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

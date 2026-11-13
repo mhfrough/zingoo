@@ -56,6 +56,9 @@ export function intlGroup(fb: FormBuilder) {
     bankCharges: [''],
     minMarginPct: [10],
     bankAccounts: fb.array<FormGroup>([]),
+    originPort: [''], dischargePort: [''], finalDestination: [''], shippingMode: [''], containerPreference: [''],
+    importerOfRecord: [''], notifyParty: [''], freightConfirmed: [false], forwarderName: [''], forwarderContact: [''], forwarderRef: [''],
+    recallContactName: [''], recallContactEmail: [''], recallContactPhone: [''], recallSopFile: [null as AttachmentMeta | null],
   });
 }
 export type IntlGroup = ReturnType<typeof intlGroup>;
@@ -107,6 +110,11 @@ export function intlReset(fb: FormBuilder, g: IntlGroup, d: Distributor | null) 
     invoiceCurrency: d?.invoiceCurrency ?? '', incoterm: d?.incoterm ?? '', incotermPlace: d?.incotermPlace ?? '',
     incotermVersion: d?.incotermVersion ?? 'Incoterms 2020', paymentTermType: d?.paymentTermType ?? '', settlementMethods: d?.settlementMethods ?? [],
     bankCharges: d?.bankCharges ?? '', minMarginPct: Number(d?.minMarginPct ?? 10),
+    originPort: d?.originPort ?? '', dischargePort: d?.dischargePort ?? '', finalDestination: d?.finalDestination ?? '',
+    shippingMode: d?.shippingMode ?? '', containerPreference: d?.containerPreference ?? '', importerOfRecord: d?.importerOfRecord ?? '',
+    notifyParty: d?.notifyParty ?? '', freightConfirmed: !!d?.freightConfirmed, forwarderName: d?.forwarderName ?? '',
+    forwarderContact: d?.forwarderContact ?? '', forwarderRef: d?.forwarderRef ?? '', recallContactName: d?.recallContactName ?? '',
+    recallContactEmail: d?.recallContactEmail ?? '', recallContactPhone: d?.recallContactPhone ?? '', recallSopFile: d?.recallSopFile ?? null,
   });
   (d?.paymentPlan ?? []).forEach((m, i) => arr('paymentPlan').at(i).reset({ ...milestoneGroup(fb, m).getRawValue() }));
   (d?.bankAccounts ?? []).forEach((b, i) => arr('bankAccounts').at(i).reset({ ...bankGroup(fb, b).getRawValue() }));
@@ -155,6 +163,11 @@ export function intlValue(g: IntlGroup) {
         beneficiary: String(b['beneficiary']).trim(), bankName: String(b['bankName']).trim(), account: String(b['account']).trim(),
         iban: t(String(b['iban'])), swift: t(String(b['swift'])), currency: t(String(b['currency'])), isDefault: !!b['isDefault'],
       })),
+    originPort: t(v.originPort), dischargePort: t(v.dischargePort), finalDestination: t(v.finalDestination), shippingMode: t(v.shippingMode),
+    containerPreference: t(v.containerPreference), importerOfRecord: t(v.importerOfRecord), notifyParty: t(v.notifyParty),
+    freightConfirmed: v.freightConfirmed, forwarderName: t(v.forwarderName), forwarderContact: t(v.forwarderContact), forwarderRef: t(v.forwarderRef),
+    recallContactName: t(v.recallContactName), recallContactEmail: t(v.recallContactEmail), recallContactPhone: t(v.recallContactPhone),
+    recallSopFile: v.recallSopFile,
   };
 }
 
@@ -413,6 +426,27 @@ export function intlValue(g: IntlGroup) {
         <p class="muted">Finance verifies each account under Credit &amp; prices. Changing an account's details clears its verification.</p>
         <div><button appBtn type="button" size="sm" icon="plus" (click)="addBank()">Add bank account</button></div>
       </div>
+
+      <h4 class="form-section">Logistics preferences</h4>
+      <app-field label="Origin port"><input type="text" formControlName="originPort" maxlength="120" placeholder="Karachi" /></app-field>
+      <app-field label="Discharge port"><input type="text" formControlName="dischargePort" maxlength="120" /></app-field>
+      <app-field label="Final destination"><input type="text" formControlName="finalDestination" maxlength="120" /></app-field>
+      <app-field label="Shipping mode">
+        <select formControlName="shippingMode"><option value="">-</option><option>Sea</option><option>Air</option><option>Road</option></select>
+      </app-field>
+      <app-field label="Container preference" [wide]="true" hint="20GP, 40HC, LCL ... and any weight limits"><input type="text" formControlName="containerPreference" maxlength="200" /></app-field>
+      <app-field label="Importer of record"><input type="text" formControlName="importerOfRecord" maxlength="200" /></app-field>
+      <app-field label="Notify party"><input type="text" formControlName="notifyParty" maxlength="200" /></app-field>
+      <app-field label="Freight & insurance payer" hint="Follows the Incoterm"><label><input type="checkbox" formControlName="freightConfirmed" /> Confirmed with the distributor</label></app-field>
+      <app-field label="Forwarder / clearing agent"><input type="text" formControlName="forwarderName" maxlength="150" /></app-field>
+      <app-field label="Agent contact"><input type="text" formControlName="forwarderContact" maxlength="200" /></app-field>
+      <app-field label="Agreed reference"><input type="text" formControlName="forwarderRef" maxlength="80" /></app-field>
+
+      <h4 class="form-section">Recall contact (needed to activate)</h4>
+      <app-field label="Name"><input type="text" formControlName="recallContactName" maxlength="120" /></app-field>
+      <app-field label="Email"><input type="email" formControlName="recallContactEmail" maxlength="150" /></app-field>
+      <app-field label="Phone"><input type="text" formControlName="recallContactPhone" maxlength="40" /></app-field>
+      <app-field label="Recall procedure (SOP)" [wide]="true"><app-file-input formControlName="recallSopFile" label="Upload the SOP" /></app-field>
     </ng-container>
   `,
 })

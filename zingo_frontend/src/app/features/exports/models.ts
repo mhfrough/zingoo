@@ -75,6 +75,88 @@ export interface ExportRow {
   creditOverrideAt?: string | null;
   /** what the credit check said when it shipped */
   creditNote?: string | null;
+  /** credit notes from approved claims, in the invoice currency */
+  credited?: number;
+  // logistics and batch
+  dischargePort?: string | null;
+  shippingMode?: string | null;
+  bookingNo?: string | null;
+  containerNo?: string | null;
+  sealNo?: string | null;
+  blNo?: string | null;
+  vessel?: string | null;
+  etd?: string | null;
+  eta?: string | null;
+  shippingStatus?: string | null;
+  documents?: { type: string; file: { id: string; name: string; mime: string; size: number } }[];
+  batchRef?: string | null;
+  mfgDate?: string | null;
+  expiryDate?: string | null;
+}
+
+type FileMeta = { id: string; name: string; mime: string; size: number };
+
+/** a damage, shortage, quality or return claim on an export shipment */
+export interface ExportClaim {
+  id: string;
+  refNo: string;
+  date: string;
+  shipmentId: string;
+  distributorId: string | null;
+  kind: string;
+  quantity: number;
+  batchRef: string | null;
+  description: string;
+  photos: FileMeta[];
+  raisedBy: string;
+  status: 'Submitted' | 'Approved' | 'Rejected';
+  inspection: string | null;
+  resolution: 'Credit note' | 'Replacement' | null;
+  creditAmount: number;
+  creditApplied: number;
+  creditNoteRef: string | null;
+  decidedBy: string | null;
+  decisionNote: string | null;
+  shipment: { id: string; refNo: string; currency: string; buyer?: string };
+}
+
+/** a product's eligibility for one market */
+export interface MarketApproval {
+  id: string;
+  productId: string;
+  product: { id: string; sku: string; name: string };
+  country: string;
+  status: 'Pending' | 'Approved' | 'Rejected';
+  labelVersion: string | null;
+  labelLanguages: string | null;
+  labelFile: FileMeta | null;
+  allergens: string | null;
+  registrationAuthority: string | null;
+  registrationNo: string | null;
+  registrationExpiry: string | null;
+  certificates: { type: string; file: FileMeta; expiry?: string | null }[];
+  minShelfLifeDays: number;
+  restrictions: string | null;
+  createdBy: string;
+  reviewedBy: string | null;
+  reviewNote: string | null;
+}
+
+/** an international distributor's "we paid", with proof */
+export interface RemittanceAdvice {
+  id: string;
+  refNo: string;
+  date: string;
+  currency: string;
+  amount: number;
+  method: string | null;
+  bankRef: string | null;
+  forInvoices: string | null;
+  proof: FileMeta | null;
+  note: string | null;
+  sentBy: string;
+  status: 'Submitted' | 'Recorded' | 'Rejected';
+  reviewNote: string | null;
 }
 
 /** an international distributor's credit position, in its credit currency */
@@ -125,6 +207,8 @@ export interface DistributorAccount {
   }[];
   orders: ExportRow[];
   remittances: Remittance[];
+  claims: ExportClaim[];
+  advices: RemittanceAdvice[];
   statement: { date: string; ref: string; text: string; currency: string; debit: number; credit: number; balance: number }[];
 }
 

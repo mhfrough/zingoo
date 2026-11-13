@@ -1,6 +1,6 @@
 import { Column, Entity, JoinColumn, ManyToOne } from 'typeorm';
 import { AppEntity } from '../common/app.entity';
-import { Role, Seat } from '../common/enums';
+import { PortalRole, Role, Seat } from '../common/enums';
 import { Distributor, Manufacturer } from '../catalog/catalog.entities';
 
 /** Someone who can log in. `seat` says which approval signature they can give. */
@@ -36,6 +36,10 @@ export class User extends AppEntity {
 
   @Column({ type: 'uuid', nullable: true })
   distributorId: string | null;
+
+  /** a distributor login's role in the portal (spec section 7): Owner, Sales, Finance, Warehouse, Read-only */
+  @Column({ type: 'varchar', length: 12, default: 'Owner' })
+  portalRole: PortalRole;
 
   /** only for role Manufacturer: which manufacturer this login belongs to */
   @ManyToOne(() => Manufacturer, { nullable: true, onDelete: 'SET NULL' })

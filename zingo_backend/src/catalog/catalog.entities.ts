@@ -501,6 +501,57 @@ export class Distributor extends AppEntity {
   @Column({ type: 'decimal', precision: 5, scale: 2, default: 10, transformer: numeric })
   minMarginPct: number;
 
+  // logistics preferences (spec section 5); each shipment keeps its own actual details
+  @Column({ type: 'varchar', length: 120, nullable: true })
+  originPort: string | null;
+
+  @Column({ type: 'varchar', length: 120, nullable: true })
+  dischargePort: string | null;
+
+  @Column({ type: 'varchar', length: 120, nullable: true })
+  finalDestination: string | null;
+
+  /** Sea, Air or Road */
+  @Column({ type: 'varchar', length: 10, nullable: true })
+  shippingMode: string | null;
+
+  /** 20GP, 40HC, LCL ... and any weight or quantity limits */
+  @Column({ type: 'varchar', length: 200, nullable: true })
+  containerPreference: string | null;
+
+  /** importer of record / consignee and notify party (their addresses are in the address list) */
+  @Column({ type: 'varchar', length: 200, nullable: true })
+  importerOfRecord: string | null;
+
+  @Column({ type: 'varchar', length: 200, nullable: true })
+  notifyParty: string | null;
+
+  /** freight and insurance payer follow the Incoterm; this is the commercial confirmation of it */
+  @Column({ default: false })
+  freightConfirmed: boolean;
+
+  @Column({ type: 'varchar', length: 150, nullable: true })
+  forwarderName: string | null;
+
+  @Column({ type: 'varchar', length: 200, nullable: true })
+  forwarderContact: string | null;
+
+  @Column({ type: 'varchar', length: 80, nullable: true })
+  forwarderRef: string | null;
+
+  /** recall contact and procedure (spec section 6), needed to activate */
+  @Column({ type: 'varchar', length: 120, nullable: true })
+  recallContactName: string | null;
+
+  @Column({ type: 'varchar', length: 150, nullable: true })
+  recallContactEmail: string | null;
+
+  @Column({ type: 'varchar', length: 40, nullable: true })
+  recallContactPhone: string | null;
+
+  @Column({ type: 'jsonb', nullable: true })
+  recallSopFile: PartnerFile | null;
+
   /** earlier single province, kept so older records can be moved to `provinces` */
   @Column({ type: 'varchar', length: 60, nullable: true })
   province: string | null;

@@ -1,6 +1,7 @@
 import { ChangeDetectionStrategy, Component, computed, effect, inject, input, model, output, signal, untracked } from '@angular/core';
 import { FormBuilder, ReactiveFormsModule } from '@angular/forms';
 import { AuthService } from '../../core/auth.service';
+import { ApiService } from '../../core/api.service';
 import { SettingsStore } from '../../core/settings.store';
 import { errorText } from '../../shared/errors';
 import { fmtAmount2, fmtDate, fmtMoney } from '../../shared/format';
@@ -189,6 +190,28 @@ const today = () => new Date().toISOString().slice(0, 10);
           </table>
         </div>
 
+        @if (acc.advices.length) {
+          <h3>Payment advices from the distributor</h3>
+          @for (v of acc.advices; track v.id) {
+            <div class="cards">
+              <div>
+                <small>{{ v.refNo }} · {{ date(v.date) }} · sent by {{ v.sentBy }}{{ v.bankRef ? ' · ' + v.bankRef : '' }}</small>
+                <strong>{{ v.currency }} {{ amt(v.amount) }}</strong> {{ v.forInvoices ? 'for ' + v.forInvoices : '' }}
+                <small>{{ v.status }}{{ v.reviewNote ? ' · ' + v.reviewNote : '' }}{{ v.proof ? ' · proof: ' + v.proof.name : '' }}</small>
+                @if (v.status === 'Submitted' && canWrite()) {
+                  <div class="row">
+                    <button appBtn size="sm" (click)="fromAdvice(v)">Record from this advice</button>
+                    @if (finance()) {
+                      <input type="text" [value]="reasons()[v.id] ?? ''" (input)="setReason(v.id, $any($event.target).value)" maxlength="500" placeholder="Reason to reject" [attr.aria-label]="'Reject reason for ' + v.refNo" />
+                      <button appBtn size="sm" variant="danger" [disabled]="!(reasons()[v.id] ?? '').trim()" [loading]="busy()" (click)="rejectAdvice(v)">Reject</button>
+                    }
+                  </div>
+                }
+              </div>
+            </div>
+          }
+        }
+
         <h3>Money received</h3>
         @for (r of acc.remittances; track r.id) {
           <div class="cards">
@@ -267,6 +290,26 @@ const today = () => new Date().toISOString().slice(0, 10);
           </form>
         }
 
+        @if (acc.claims.length) {
+          <h3>Claims</h3>
+          <div class="scroll">
+            <table class="t" aria-label="Claims">
+              <thead><tr><th>Claim</th><th>Container</th><th>What</th><th class="num">Credit</th><th>Status</th></tr></thead>
+              <tbody>
+                @for (c of acc.claims; track c.id) {
+                  <tr>
+                    <td>{{ c.refNo }}<small>{{ date(c.date) }} · {{ c.raisedBy }}</small></td>
+                    <td>{{ c.shipment.refNo }}</td>
+                    <td>{{ c.kind }} · {{ c.quantity }} bundle(s)<small>{{ c.description }}</small></td>
+                    <td class="num">{{ c.creditAmount ? c.shipment.currency + ' ' + amt(c.creditAmount) : '-' }}<small>{{ c.creditNoteRef ?? c.resolution ?? '' }}</small></td>
+                    <td><app-tag [tone]="c.status === 'Approved' ? 'success' : c.status === 'Rejected' ? 'danger' : 'warning'">{{ c.status }}</app-tag><small>{{ c.decisionNote ?? '' }}</small></td>
+                  </tr>
+                }
+              </tbody>
+            </table>
+          </div>
+        }
+
         <h3>Statement</h3>
         <div class="scroll">
           <table class="t" aria-label="Statement">
@@ -291,6 +334,7 @@ const today = () => new Date().toISOString().slice(0, 10);
 })
 export class AccountPanel {
   private api = inject(ExportsApi);
+  private http = inject(ApiService);
   private auth = inject(AuthService);
   private toast = inject(ToastService);
   private fb = inject(FormBuilder);
@@ -328,8 +372,25 @@ export class AccountPanel {
 
   protected rem = this.fb.nonNullable.group({
     date: [today()], currency: ['USD'], amount: [null as number | null], fees: [0], fxRate: [280], method: [''], bankRef: [''],
-    bankIndex: ['0'], note: [''],
+    bankIndex: ['0'], note: [''], adviceId: [''],
   });
+
+  /** fill the remittance form from the distributor's advice; recording it marks the advice Recorded */
+  protected fromAdvice(v: import('./models').RemittanceAdvice) {
+    this.rem.patchValue({
+      date: v.date, currency: v.currency, amount: Number(v.amount), bankRef: v.bankRef ?? '', adviceId: v.id,
+      note: `From advice ${v.refNo}${v.forInvoices ? ' for ' + v.forInvoices : ''}`, ...(v.method ? { method: v.method } : {}),
+    });
+    this.toast.success(`Form filled from ${v.refNo}. Check the bank, apply it to invoices and record it.`);
+  }
+
+  protected rejectAdvice(v: import('./models').RemittanceAdvice) {
+    const note = (this.reasons()[v.id] ?? '').trim();
+    this.run(this.http.post(`remittance-advices/${v.id}/reject`, { note }), () => {
+      this.toast.success(`${v.refNo} rejected.`);
+      this.load(this.distributorId()!);
+    });
+  }
 
   constructor() {
     effect(() => {
@@ -360,7 +421,7 @@ export class AccountPanel {
     this.rem.reset({
       date: today(), currency: cur, amount: null, fees: 0, fxRate: Number(this.store.currencies().find((c) => c.code === cur)?.rate ?? 1),
       method: (acc.distributor.settlementMethods[0] ?? this.store.options('REMITTANCE_METHOD')[0]) ?? '', bankRef: '',
-      bankIndex: String(acc.distributor.bankAccounts.find((b) => b.verified)?.index ?? 0), note: '',
+      bankIndex: String(acc.distributor.bankAccounts.find((b) => b.verified)?.index ?? 0), note: '', adviceId: '',
     });
     this.alloc.set({});
     this.reasons.set({});
@@ -405,7 +466,7 @@ export class AccountPanel {
     const allocations = Object.entries(this.alloc()).map(([shipmentId, a]) => ({ shipmentId, amount: Number(a) })).filter((x) => x.amount > 0);
     this.run(this.api.remit(acc.distributor.id, {
       date: v.date, currency: v.currency, amount: Number(v.amount), fees: Number(v.fees) || 0, fxRate: Number(v.fxRate), method: v.method,
-      bankRef: v.bankRef.trim() || undefined, note: v.note.trim() || undefined, allocations,
+      bankRef: v.bankRef.trim() || undefined, note: v.note.trim() || undefined, allocations, ...(v.adviceId ? { adviceId: v.adviceId } : {}),
       ...(acc.distributor.bankAccounts.length ? { bankIndex: Number(v.bankIndex) } : {}),
     }), (next) => {
       this.toast.success('Money recorded.');

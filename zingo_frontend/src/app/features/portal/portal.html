@@ -43,6 +43,11 @@
   }
 
   <app-tabs [tabs]="tabs()" [(active)]="tab" ariaLabel="Portal sections">
+    @if (international()) {
+      <ng-template appTabPanel="intl">
+        <app-intl-portal />
+      </ng-template>
+    }
     <ng-template appTabPanel="dashboard">
       <div class="two-col">
         <div class="card" data-flush>

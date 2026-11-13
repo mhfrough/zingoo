@@ -148,6 +148,21 @@ export interface Distributor {
   bankAccounts?: DistributorBank[];
   bankCharges?: 'Sender' | 'Receiver' | 'Shared' | null;
   minMarginPct?: number;
+  originPort?: string | null;
+  dischargePort?: string | null;
+  finalDestination?: string | null;
+  shippingMode?: string | null;
+  containerPreference?: string | null;
+  importerOfRecord?: string | null;
+  notifyParty?: string | null;
+  freightConfirmed?: boolean;
+  forwarderName?: string | null;
+  forwarderContact?: string | null;
+  forwarderRef?: string | null;
+  recallContactName?: string | null;
+  recallContactEmail?: string | null;
+  recallContactPhone?: string | null;
+  recallSopFile?: { id: string; name: string; mime: string; size: number } | null;
   /** earlier fields, kept for older records */
   province?: string | null;
   areas?: string[];

@@ -62,6 +62,70 @@ export interface ExportRow {
   due: number;
   costPaid: number;
   costDue: number;
+  /** the international distributor the order is for (older quotes only have a buyer name) */
+  distributorId?: string | null;
+  distributor?: { id: string; name: string; code: string | null } | null;
+  /** the price-list version the rate came from */
+  priceId?: string | null;
+  paymentDays?: number | null;
+  dueDate?: string | null;
+  overdue?: boolean;
+  creditOverrideBy?: string | null;
+  creditOverrideReason?: string | null;
+  creditOverrideAt?: string | null;
+  /** what the credit check said when it shipped */
+  creditNote?: string | null;
+}
+
+/** an international distributor's credit position, in its credit currency */
+export interface CreditPosition {
+  currency: string;
+  limit: number;
+  outstanding: number;
+  unapplied: number;
+  exposure: number;
+  available: number;
+  overdue: number;
+  expired: boolean;
+  control: 'Block' | 'Warn';
+  problems: string[];
+}
+
+/** money an international distributor sent, and how it was applied */
+export interface Remittance {
+  id: string;
+  refNo: string;
+  date: string;
+  currency: string;
+  amount: number;
+  fees: number;
+  fxRate: number;
+  method: string;
+  bankRef: string | null;
+  fromBank: string | null;
+  note: string | null;
+  by: string;
+  applied: number;
+  unapplied: number;
+  allocations: { refNo: string; shipment: string; amount: number }[];
+}
+
+/** GET /distributors/:id/account */
+export interface DistributorAccount {
+  distributor: {
+    id: string; name: string; code: string | null; registrationStatus: string; invoiceCurrency: string | null; paymentDays: number;
+    paymentTermType: string | null; settlementMethods: string[];
+    bankAccounts: { index: number; label: string; verified: boolean; currency: string | null }[];
+  };
+  credit: CreditPosition;
+  agingLabels: string[];
+  currencies: {
+    currency: string; invoiced: number; collected: number; open: number; overdue: number; unapplied: number; aging: number[];
+    openPKR: number; unappliedPKR: number; balance: number;
+  }[];
+  orders: ExportRow[];
+  remittances: Remittance[];
+  statement: { date: string; ref: string; text: string; currency: string; debit: number; credit: number; balance: number }[];
 }
 
 /** Foreign-currency money received for a shipment. */

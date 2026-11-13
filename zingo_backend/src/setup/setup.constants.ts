@@ -70,7 +70,7 @@ export const STARTER_ACCOUNTS: [string, string, AccountType][] = [
   ['3000', 'Owner Equity', 'Equity'], ['3100', 'Opening Balance Equity', 'Equity'],
   ['4000', 'Sales Revenue', 'Revenue'], ['4010', 'Sales Returns & Allowances', 'Revenue'],
   ['4100', 'Export Sales Revenue', 'Revenue'], ['4200', 'Other Income', 'Revenue'], ['4300', 'FX Gain', 'Revenue'],
-  ['5000', 'Cost of Goods Sold', 'COGS'], ['5100', 'Export Logistics Expense', 'Expense'], ['5200', 'FX Loss', 'Expense'],
+  ['5000', 'Cost of Goods Sold', 'COGS'], ['5100', 'Export Logistics Expense', 'Expense'], ['5200', 'FX Loss', 'Expense'], ['5150', 'Bank Charges', 'Expense'],
   ['5300', 'Tax Expense', 'Expense'], ['5400', 'Depreciation Expense', 'Expense'],
   ...EXPENSE_CATEGORIES.map((c, i): [string, string, AccountType] => [String(6000 + i * 10), `Expense · ${c}`, 'Expense']),
   ...INCOME_CATEGORIES.map((c, i): [string, string, AccountType] => [String(4500 + i * 10), `Income · ${c}`, 'Revenue']),

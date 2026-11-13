@@ -18,6 +18,7 @@ import { ProductionOrdersService } from '../manufacturing/production-orders.serv
 import { PaymentRequestsService } from '../manufacturing/payment-requests.service';
 import { ShipmentsService } from '../manufacturing/shipments.service';
 import { DistInvoicesService } from '../manufacturing/dist-invoices.service';
+import { ExportsService } from '../exports/exports.service';
 import { PortalRequest } from '../portal/portal.entities';
 import { ReportsService } from '../reports/reports.service';
 import { Account, Category, ContainerType, Currency } from '../setup/setup.entities';
@@ -74,6 +75,7 @@ async function run() {
     for (const d of data.intlDistributors) {
       const { approved, price, ...rest } = d;
       const row = (await app.get(DistributorsService).create({ ...rest, approvedProductIds: [id[approved]] })) as Distributor;
+      id[`intl:${rest.name}`] = row.id;
       await app.get(CommercialService).addPrice({ id: '', name: 'Export Executive', role: 'Exports' }, row.id, {
         productId: id[approved], currency: rest.invoiceCurrency, effectiveFrom: new Date().toISOString().slice(0, 10), ...price,
       });
@@ -207,6 +209,13 @@ async function run() {
     const inv = await dis.create(sales, { date: ago(c.invoiceDaysAgo), distributorId: id[c.distributor], invoiceNo: c.distributorInvoiceNo, lines: [{ shipmentId: sh.id, containers: c.containersSold }] });
     await dis.verify(sales, inv.id);
     await dis.pay(inv.id, { date: ago(c.collectedDaysAgo), amount: c.collected, method: 'Bank Transfer', toAccount: 'Zen Foods Bank Account' });
+
+    // phase D3: an export quote for the international distributor, its defaults taken from the distributor and its price list
+    const intl = data.intlDistributors[0];
+    const xq = await app.get(ExportsService).create({
+      date: new Date().toISOString().slice(0, 10), distributorId: id[`intl:${intl.name}`], container: '20GP', productId: id[intl.approved], cartons: 10,
+    });
+    console.log(`  ${xq.refNo}: export quote for ${intl.name}, ${xq.currency} ${xq.rate} a pack (from its price list), ${xq.incoterm} ${xq.port}`);
 
     const chain = await reports.chain();
     const tb2 = await reports.trialBalance();

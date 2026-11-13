@@ -10,6 +10,7 @@ import { OpsApi } from '../ops/ops.api';
 import { ManufacturerForm } from './manufacturer-form';
 import { RegistrationPanel } from '../distribution/registration-panel';
 import { CommercialPanel } from '../distribution/commercial-panel';
+import { AccountPanel } from '../exports/account-panel';
 
 /** "Contract ZF-12 · 3 files" */
 const contractText = (p: { contract?: string | null; files?: unknown[] }) =>
@@ -38,7 +39,7 @@ const STATUS_TONE: Record<string, 'success' | 'warning' | 'danger' | 'neutral'> 
 @Component({
   selector: 'app-settings-partners',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [Btn, DataTable, ManufacturerForm, DistributorForm, RegistrationPanel, CommercialPanel],
+  imports: [Btn, DataTable, ManufacturerForm, DistributorForm, RegistrationPanel, CommercialPanel, AccountPanel],
   template: `
     <div class="stack">
       @if (section() === 'manufacturers') {
@@ -76,6 +77,7 @@ const STATUS_TONE: Record<string, 'success' | 'warning' | 'danger' | 'neutral'> 
     <app-distributor-form [(open)]="distributorOpen" [distributor]="editingDistributor()" [paymentCycles]="store.settings()?.paymentCycles ?? [15, 30, 45, 60]" [defaultSelloutDays]="store.settings()?.defaultSelloutDays ?? 30" [others]="distributors.value() ?? []" [products]="products.value() ?? []" (saved)="reload()" />
     <app-registration-panel [(open)]="registrationOpen" [distributorId]="registering()" (changed)="reload()" />
     <app-commercial-panel [(open)]="commercialOpen" [distributor]="commercial()" [products]="products.value() ?? []" (changed)="reload()" />
+    <app-account-panel [(open)]="accountOpen" [distributorId]="accountOf()" (changed)="reload()" />
   `,
 })
 export class SettingsPartners {
@@ -97,6 +99,9 @@ export class SettingsPartners {
   /** an international distributor's credit, bank accounts and price list */
   protected commercialOpen = signal(false);
   protected commercial = signal<Distributor | null>(null);
+  /** an international distributor's account: orders, money received, aging, statement */
+  protected accountOpen = signal(false);
+  protected accountOf = signal<string | null>(null);
 
   protected manufacturerColumns: TableColumn<Manufacturer>[] = [
     { id: 'name', label: 'Manufacturer', value: (m) => m.name, sub: (m) => m.contact },
@@ -140,7 +145,7 @@ export class SettingsPartners {
   ];
   protected distributorActions = (d: Distributor): RowAction[] => [
     ...(this.canDistributors() ? [{ id: 'edit', label: 'Edit' }] : []),
-    ...(d.market && d.market !== 'Local' ? [{ id: 'registration', label: 'Registration' }, { id: 'commercial', label: 'Credit & prices' }] : []),
+    ...(d.market && d.market !== 'Local' ? [{ id: 'registration', label: 'Registration' }, { id: 'commercial', label: 'Credit & prices' }, { id: 'account', label: 'Account' }] : []),
   ];
 
   protected money = fmtMoney;
@@ -169,6 +174,11 @@ export class SettingsPartners {
   }
 
   protected onDistributorAction(e: RowActionEvent<Distributor>) {
+    if (e.id === 'account') {
+      this.accountOf.set(e.row.id);
+      this.accountOpen.set(true);
+      return;
+    }
     if (e.id === 'commercial') {
       this.commercial.set(e.row);
       this.commercialOpen.set(true);

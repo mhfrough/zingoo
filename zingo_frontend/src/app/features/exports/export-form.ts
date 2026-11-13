@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, computed, inject, input } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, inject, input, signal } from '@angular/core';
 import { takeUntilDestroyed, toSignal } from '@angular/core/rxjs-interop';
 import { ReactiveFormsModule, Validators } from '@angular/forms';
 import { SettingsStore } from '../../core/settings.store';
@@ -6,7 +6,9 @@ import { fmtAmount2, fmtMoney, fmtPct } from '../../shared/format';
 import { Btn, Field, MoneyInput, Offcanvas } from '../../ui';
 import { Currency } from '../finance/models';
 import { FormModal } from '../ops/form-modal';
-import { Product } from '../ops/models';
+import { OpsApi } from '../ops/ops.api';
+import { Distributor, DistributorPrice, Product } from '../ops/models';
+import { ApiService } from '../../core/api.service';
 import { QuoteInputs, quoteEstimate } from './export-math';
 import { ExportsApi } from './exports.api';
 import { ContainerType, ExportRow } from './models';
@@ -36,6 +38,15 @@ const COSTS = [
         <div class="notice" data-tone="danger" role="alert">{{ error() }}</div>
       }
       <form [id]="formId" [formGroup]="form" (ngSubmit)="submit()" class="form-grid" novalidate>
+        <app-field label="International distributor" [wide]="true"
+                   [hint]="distributorId() ? 'Its buyer name, country, port, Incoterm, currency, price and terms are filled in; change any of them for this order only' : 'Or a one-off buyer typed below'">
+          <select formControlName="distributorId">
+            <option value="">No distributor (one-off buyer)</option>
+            @for (d of distributors(); track d.id) {
+              <option [value]="d.id">{{ d.name }}{{ d.code ? ' · ' + d.code : '' }}{{ d.registrationStatus !== 'Active' ? ' (' + (d.registrationStatus ?? 'Draft').toLowerCase() + ')' : '' }}</option>
+            }
+          </select>
+        </app-field>
         <app-field label="Quote date" [required]="true"><input type="date" formControlName="date" /></app-field>
         <app-field label="Foreign buyer" [required]="true" [error]="invalid('buyer') ? 'Enter the buyer' : null"><input type="text" formControlName="buyer" /></app-field>
         <app-field label="Destination country" [required]="true" [error]="invalid('country') ? 'Enter the country' : null"><input type="text" formControlName="country" /></app-field>
@@ -57,7 +68,7 @@ const COSTS = [
         <app-field label="Export product" [required]="true" [error]="invalid('productId') ? 'Choose a product' : null">
           <select formControlName="productId">
             <option value="">Choose a product</option>
-            @for (p of products(); track p.id) {
+            @for (p of productChoices(); track p.id) {
               <option [value]="p.id">{{ p.sku }} · {{ p.name }}</option>
             }
           </select>
@@ -75,9 +86,14 @@ const COSTS = [
         <app-field label="Exchange rate" hint="PKR per 1 unit of the invoice currency" [required]="true" [error]="invalid('fxRate') ? 'Enter the rate' : null">
           <input type="number" formControlName="fxRate" min="0" step="any" />
         </app-field>
-        <app-field label="Selling price per pack" [hint]="'In ' + currencyCode()" [required]="true" [error]="invalid('rate') ? 'Enter the price' : null">
+        <app-field label="Selling price per pack" [hint]="priceHint()" [required]="true" [error]="invalid('rate') ? 'Enter the price' : null">
           <app-money-input formControlName="rate" [currency]="currencyCode()" [decimals]="4" />
         </app-field>
+        @if (distributorId()) {
+          <app-field label="Payment days" hint="After shipping; from the distributor, for this order only">
+            <input type="number" formControlName="paymentDays" min="0" max="365" step="1" />
+          </app-field>
+        }
         @for (c of costs; track c[0]) {
           <app-field [label]="c[1]" [hint]="'In ' + currencyCode()"><app-money-input [formControlName]="c[0]" [currency]="currencyCode()" /></app-field>
         }
@@ -107,6 +123,14 @@ export class ExportForm extends FormModal {
   readonly defaultContainer = input('40HC');
   readonly defaultIncoterm = input('FOB');
   readonly packsPerCarton = input(432);
+  /** international distributors an order can be for */
+  readonly distributors = input<Distributor[]>([]);
+  private http = inject(ApiService);
+  /** the chosen distributor's price list, and the rate per pack it gives for the product and currency */
+  private prices = signal<DistributorPrice[]>([]);
+  /** true while the form is being filled from a quote (no defaults are applied then) */
+  private resetting = false;
+  protected priceRate = signal<number | null>(null);
   readonly formId = 'form-export';
   private store = inject(SettingsStore);
   /** active Incoterms, plus the one a quote already uses even if it was switched off since */
@@ -142,10 +166,23 @@ export class ExportForm extends FormModal {
     duty: [0, Validators.min(0)],
     bankFees: [0, Validators.min(0)],
     otherCosts: [0, Validators.min(0)],
+    distributorId: [''],
+    paymentDays: [0],
   });
 
   private value = toSignal(this.form.valueChanges, { initialValue: this.form.getRawValue() });
   protected currencyCode = computed(() => this.value().currency ?? 'USD');
+  protected distributorId = computed(() => this.value().distributorId ?? '');
+  private distributor = computed(() => this.distributors().find((d) => d.id === this.distributorId()) ?? null);
+  /** with a distributor, only its approved SKUs */
+  protected productChoices = computed(() => {
+    const d = this.distributor();
+    return d ? this.products().filter((p) => (d.approvedProductIds ?? []).includes(p.id)) : this.products();
+  });
+  protected priceHint = computed(() => {
+    const r = this.priceRate();
+    return r === null ? `In ${this.currencyCode()}` : `In ${this.currencyCode()}; its price list says ${r}`;
+  });
 
   /** live costing of what is typed */
   protected est = computed(() => {
@@ -162,29 +199,77 @@ export class ExportForm extends FormModal {
     this.form.controls.currency.valueChanges.pipe(takeUntilDestroyed()).subscribe((code) => {
       const rate = this.currencies().find((c) => c.code === code)?.rate;
       this.form.controls.fxRate.setValue(code === 'PKR' ? 1 : Number(rate ?? 1));
+      this.applyPrice();
     });
+    // picking a distributor fills its defaults (for this order only) and loads its price list
+    this.form.controls.distributorId.valueChanges.pipe(takeUntilDestroyed()).subscribe((id) => { if (!this.resetting) this.pickDistributor(id); });
+    this.form.controls.productId.valueChanges.pipe(takeUntilDestroyed()).subscribe(() => this.applyPrice());
+    this.form.controls.date.valueChanges.pipe(takeUntilDestroyed()).subscribe(() => this.applyPrice());
+  }
+
+  private pickDistributor(id: string) {
+    this.prices.set([]);
+    this.priceRate.set(null);
+    const d = this.distributors().find((x) => x.id === id);
+    if (!d) return;
+    const approved = d.approvedProductIds ?? [];
+    this.form.patchValue({
+      buyer: d.legalName || d.name, country: d.country || d.countries?.[0] || '', port: d.incotermPlace ?? '',
+      ...(d.incoterm ? { incoterm: d.incoterm } : {}), paymentDays: d.paymentDays ?? 0,
+      ...(approved.length && !approved.includes(this.form.controls.productId.value) ? { productId: approved[0] } : {}),
+    });
+    if (d.invoiceCurrency) this.form.controls.currency.setValue(d.invoiceCurrency);
+    this.http.get<DistributorPrice[]>(`distributors/${d.id}/prices`).subscribe({
+      next: (rows) => { this.prices.set(rows); this.applyPrice(); },
+      error: () => this.prices.set([]),
+    });
+  }
+
+  /** the price that applies on the quote date: a promotional one first, else the latest regular version */
+  private applyPrice() {
+    const v = this.form.getRawValue();
+    if (!v.distributorId) return;
+    const live = this.prices().filter((r) => r.productId === v.productId && r.currency === v.currency && r.status === 'Active'
+      && r.effectiveFrom <= v.date && (!r.effectiveTo || r.effectiveTo >= v.date));
+    const p = live.find((r) => r.promo) ?? live.filter((r) => !r.promo).sort((a, b) => b.version - a.version)[0];
+    const rate = p ? Math.round((Number(p.price) * (1 - Number(p.discountPct) / 100) / Number(p.packsPerUnit)) * 1e6) / 1e6 : null;
+    this.priceRate.set(rate);
+    if (rate !== null) this.form.controls.rate.setValue(rate);
   }
 
   protected reset() {
     const q = this.quote();
+    this.resetting = true;
     this.form.reset(q
       ? {
           date: q.date, buyer: q.buyer, country: q.country, port: q.port ?? '', container: q.container, incoterm: q.incoterm,
           productId: q.productId, cartons: q.cartons, currency: q.currency, fxRate: Number(q.fxRate), rate: Number(q.rate),
           inland: Number(q.inland), origin: Number(q.origin), documentation: Number(q.documentation), ocean: Number(q.ocean),
           insurance: Number(q.insurance), destination: Number(q.destination), duty: Number(q.duty), bankFees: Number(q.bankFees),
-          otherCosts: Number(q.otherCosts),
+          otherCosts: Number(q.otherCosts), distributorId: q.distributorId ?? '', paymentDays: q.paymentDays ?? 0,
         }
       : {
           date: today(), buyer: '', country: '', port: '', container: this.defaultContainer(), incoterm: this.defaultIncoterm(),
           productId: this.products()[0]?.id ?? '', cartons: 0, currency: 'USD',
           fxRate: Number(this.currencies().find((c) => c.code === 'USD')?.rate ?? 280), rate: 0,
           inland: 0, origin: 0, documentation: 0, ocean: 0, insurance: 0, destination: 0, duty: 0, bankFees: 0, otherCosts: 0,
+          distributorId: '', paymentDays: 0,
         });
+    this.resetting = false;
+    this.prices.set([]);
+    this.priceRate.set(null);
+    if (q?.distributorId) {
+      this.http.get<DistributorPrice[]>(`distributors/${q.distributorId}/prices`).subscribe({ next: (rows) => this.prices.set(rows), error: () => this.prices.set([]) });
+    }
   }
 
   protected request() {
-    return this.exportsApi.save(this.quote()?.id ?? null, this.form.getRawValue());
+    const { distributorId, paymentDays, ...v } = this.form.getRawValue();
+    if (!distributorId) return this.exportsApi.save(this.quote()?.id ?? null, { ...v, ...(this.quote() ? { distributorId: null } : {}) });
+    // the price-list rate is left for the server, so the order keeps the link to the price version
+    const fromList = this.priceRate() !== null && Math.abs(Number(v.rate) - (this.priceRate() ?? 0)) < 1e-9 && !this.quote();
+    const { rate, ...rest } = v;
+    return this.exportsApi.save(this.quote()?.id ?? null, { ...rest, ...(fromList ? {} : { rate }), distributorId, paymentDays: Number(paymentDays) || 0 });
   }
 
   protected successMessage() {

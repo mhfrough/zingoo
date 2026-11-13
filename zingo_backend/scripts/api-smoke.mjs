@@ -1414,5 +1414,103 @@ await call(T.finance, 'PATCH', '/currencies/AED', { rate: 76.25, source: 'Back t
 ok('Distribution cannot change rates -> 403', (await call(T.sales, 'PATCH', '/currencies/AED', { rate: 70 })).status === 403);
 ok('a currency used by a distributor cannot be deleted -> 409', (await call(T.owner, 'DELETE', '/currencies/AED')).status === 409);
 
+// ── D3 export orders linked to international distributors: defaults, eligibility, credit, remittances, aging ──
+const fToday = new Date().toISOString().slice(0, 10);
+const fAgo = (n) => new Date(Date.now() - n * 86400000).toISOString().slice(0, 10);
+const fZ = ((await call(T.owner, 'GET', '/distributors')).json ?? []).find((d) => d.name === 'Zayed Gulf Trading');
+const fSeedQ = ((await call(T.exporter, 'GET', '/exports')).json ?? []).find((x) => x.distributorId === fZ.id);
+ok('sample quote for Zayed: AED, CIF Jebel Ali, rate from its price list', fSeedQ?.currency === 'AED' && fSeedQ?.incoterm === 'CIF' && fSeedQ?.port === 'Jebel Ali, Dubai'
+  && Math.abs(fSeedQ?.rate - 60 / 432) < 1e-5 && !!fSeedQ?.priceId && fSeedQ?.distributor?.code === fZ.code, JSON.stringify([fSeedQ?.currency, fSeedQ?.rate, fSeedQ?.port]));
+ok('a quote without a distributor still needs buyer, currency and rate -> 400', (await call(T.exporter, 'POST', '/exports', { date: fToday, container: '20GP', productId: fZ.approvedProductIds[0], cartons: 10 })).status === 400);
+ok('an order for a local distributor -> 400', (await call(T.exporter, 'POST', '/exports', { date: fToday, distributorId: dLocal.id, container: '20GP', productId: fZ.approvedProductIds[0], cartons: 10 })).status === 400);
+const fStockP = ((await call(T.owner, 'GET', '/products')).json ?? []).filter((p) => p.stockCartons >= 30).sort((a, b) => b.stockCartons - a.stockCartons)[0];
+ok('a product has stock for the distributor export test', !!fStockP, JSON.stringify(((await call(T.owner, 'GET', '/products')).json ?? []).map((p) => [p.sku, p.stockCartons])));
+ok('a SKU not approved for the distributor -> 400', (await call(T.exporter, 'POST', '/exports', { date: fToday, distributorId: fZ.id, container: '20GP', productId: fStockP.id, cartons: 10 })).status === 400);
+// a new international distributor, taken through registration
+const fK1 = await pfUpload('kenya-registration.pdf');
+const fK2 = await pfUpload('kenya-signatory.pdf');
+const fAg = await pfUpload('kenya-agreement.pdf');
+const fFile = (f) => ({ id: f.id, name: f.name, mime: f.mime, size: f.size });
+const fD = (await call(T.sales, 'POST', '/distributors', {
+  name: `Nairobi Snacks ${Date.now() % 100000}`, market: 'International', countries: ['Kenya'], legalName: `Nairobi Snacks Ltd ${Date.now() % 100000}`, country: 'Kenya',
+  classification: 'Importer', registrationNo: 'KE-1', contacts: [{ name: 'Achieng', email: 'a@example.test', isPrimary: true }],
+  addresses: [{ type: 'Registered', line: 'Mombasa Rd', country: 'Kenya', isDefault: true }],
+  kycDocs: [{ type: 'Registration certificate', file: fFile(fK1) }, { type: 'Authorized signatory', file: fFile(fK2) }],
+  agreementStart: fAgo(30), agreementEnd: '2999-12-31', agreementStatus: 'Signed', agreementFile: fFile(fAg), approvedProductIds: [fStockP.id],
+  invoiceCurrency: 'USD', incoterm: 'FOB', incotermPlace: 'Karachi', paymentDays: 30, settlementMethods: ['SWIFT'],
+  bankAccounts: [{ beneficiary: 'Nairobi Snacks Ltd', bankName: 'Sample KE bank', account: 'KE-001', currency: 'USD', isDefault: true }],
+})).json;
+ok('the Kenyan distributor is saved as a draft', fD?.registrationStatus === 'Draft', JSON.stringify(fD).slice(0, 200));
+const fCost = Number(fStockP.manufacturerRate) + Number(fStockP.packagingRate) + Number(fStockP.printingRate) + Number(fStockP.inboundRate) + Number(fStockP.outboundRate ?? 0);
+const fBundle = Math.ceil(((fCost * 1.5 * fStockP.packsPerCarton) / 280) * 100) / 100;
+const fPr = await call(T.sales, 'POST', `/distributors/${fD.id}/prices`, { productId: fStockP.id, currency: 'USD', unit: 'Bundle', price: fBundle, effectiveFrom: fAgo(60), moq: 5, increment: 5 });
+ok('a USD price per bundle, minimum 5, multiples of 5', fPr.json?.status === 'Active', JSON.stringify(fPr.json).slice(0, 160));
+const fQ = (o = {}) => ({ date: fToday, distributorId: fD.id, container: '20GP', productId: fStockP.id, cartons: 5, ...o });
+ok('under the minimum order -> 400', (await call(T.exporter, 'POST', '/exports', fQ({ cartons: 3 }))).status === 400);
+ok('not a multiple of the order increment -> 400', (await call(T.exporter, 'POST', '/exports', fQ({ cartons: 7 }))).status === 400);
+const fQ1 = (await call(T.exporter, 'POST', '/exports', fQ())).json;
+ok('the order takes the distributor defaults (FOB Karachi, USD, 30 days) and its price per pack', fQ1?.incoterm === 'FOB' && fQ1?.port === 'Karachi' && fQ1?.currency === 'USD'
+  && fQ1?.paymentDays === 30 && Math.abs(fQ1?.rate - fBundle / fStockP.packsPerCarton) < 1e-5 && fQ1?.buyer === fD.legalName, JSON.stringify([fQ1?.incoterm, fQ1?.rate, fQ1?.buyer]));
+const fQx = (await call(T.exporter, 'POST', '/exports', fQ({ incoterm: 'CIF', rate: 0.5, paymentDays: 10, port: 'Mombasa' }))).json;
+ok('the order can change any default for itself', fQx?.incoterm === 'CIF' && fQx?.rate === 0.5 && fQx?.paymentDays === 10 && !fQx?.priceId);
+ok('... and the distributor is not changed', ((await call(T.owner, 'GET', '/distributors')).json ?? []).find((d) => d.id === fD.id)?.incoterm === 'FOB');
+await call(T.exporter, 'DELETE', `/exports/${fQx.id}`);
+ok("a draft distributor's order cannot ship -> 400", (await call(T.exporter, 'POST', `/exports/${fQ1.id}/ship`, {})).status === 400);
+for (const [tok, path, body] of [[T.sales, 'submit'], [T.finance, 'review'], [T.sales, 'approve', { step: 'Sales' }], [T.finance, 'approve', { step: 'Finance' }], [T.owner, 'approve', { step: 'Compliance' }], [T.owner, 'activate']]) {
+  await call(tok, 'POST', `/distributors/${fD.id}/registration/${path}`, body ?? {});
+}
+ok('the Kenyan distributor is active', (await call(T.owner, 'GET', `/distributors/${fD.id}/registration`)).json?.status === 'Active');
+const fNoCredit = await call(T.exporter, 'POST', `/exports/${fQ1.id}/ship`, {});
+ok('no credit approved (advance only, Block): shipping -> 400', fNoCredit.status === 400 && /credit/i.test(fNoCredit.json?.message ?? ''), fNoCredit.json?.message);
+ok('Exports cannot override the credit check -> 403', (await call(T.exporter, 'POST', `/exports/${fQ1.id}/credit-override`, { reason: 'x' })).status === 403);
+ok('an override needs a reason -> 400', (await call(T.finance, 'POST', `/exports/${fQ1.id}/credit-override`, { reason: '' })).status === 400);
+ok('Finance overrides it', !!(await call(T.finance, 'POST', `/exports/${fQ1.id}/credit-override`, { reason: 'LC confirmed' })).json?.creditOverrideAt);
+ok('changing the quantity clears the override', !(await call(T.exporter, 'PATCH', `/exports/${fQ1.id}`, { cartons: 10 })).json?.creditOverrideAt);
+await call(T.finance, 'POST', `/exports/${fQ1.id}/credit-override`, { reason: 'LC confirmed for 10' });
+const fS1 = (await call(T.exporter, 'POST', `/exports/${fQ1.id}/ship`, { shipDate: fToday })).json;
+ok('it ships on the override; the note and the due date (ship + 30 days) are kept', fS1?.status === 'Shipped' && /override/.test(fS1?.creditNote ?? '') && fS1?.dueDate === new Date(Date.now() + 30 * 86400000).toISOString().slice(0, 10), JSON.stringify([fS1?.creditNote, fS1?.dueDate]));
+await call(T.finance, 'PUT', `/distributors/${fD.id}/credit`, { creditLimit: 1000000, creditCurrency: 'USD', creditControl: 'Warn' });
+const fQ2 = (await call(T.exporter, 'POST', '/exports', fQ())).json;
+const fS2 = (await call(T.exporter, 'POST', `/exports/${fQ2.id}/ship`, { shipDate: fToday })).json;
+ok('within the approved credit it ships with no note', fS2?.status === 'Shipped' && !fS2?.creditNote, JSON.stringify(fS2?.creditNote));
+// remittances
+const fTbBefore = (await call(T.owner, 'GET', '/reports/trial-balance')).json;
+const fRem = (o = {}) => ({ date: fToday, currency: 'USD', amount: Math.round((fS1.due + 100) * 100) / 100, fees: 15, fxRate: 285, method: 'SWIFT', bankRef: 'MT103-1', bankIndex: 0, allocations: [{ shipmentId: fS1.id, amount: fS1.due }], ...o });
+ok('Distribution cannot record a remittance -> 403', (await call(T.sales, 'POST', `/distributors/${fD.id}/remittances`, fRem())).status === 403);
+ok('from a bank account not yet verified -> 400', (await call(T.exporter, 'POST', `/distributors/${fD.id}/remittances`, fRem())).status === 400);
+await call(T.finance, 'POST', `/distributors/${fD.id}/banks/0/verify`);
+ok('a method the distributor did not agree -> 400', (await call(T.exporter, 'POST', `/distributors/${fD.id}/remittances`, fRem({ method: 'Letter of credit' }))).status === 400);
+ok('applying more than the invoice owes -> 400 (and nothing is saved)', (await call(T.exporter, 'POST', `/distributors/${fD.id}/remittances`, fRem({ allocations: [{ shipmentId: fS1.id, amount: fS1.due + 50 }] }))).status === 400);
+ok('applying money in another currency -> 400', (await call(T.exporter, 'POST', `/distributors/${fD.id}/remittances`, fRem({ currency: 'AED' }))).status === 400);
+const fAcc1 = (await call(T.exporter, 'POST', `/distributors/${fD.id}/remittances`, fRem())).json;
+const fR1 = fAcc1?.remittances?.[0];
+ok('remittance IRC: invoice 1 paid in full, 100 left as credit', /^IRC-\d{3}$/.test(fR1?.refNo) && fR1?.unapplied === 100 && fAcc1?.orders?.find((o) => o.id === fS1.id)?.due === 0, JSON.stringify([fR1?.refNo, fR1?.unapplied]));
+ok('more than is left -> 400', (await call(T.exporter, 'POST', `/distributors/${fD.id}/remittances/${fR1.id}/allocate`, { allocations: [{ shipmentId: fS2.id, amount: 150 }] })).status === 400);
+const fAcc2 = (await call(T.exporter, 'POST', `/distributors/${fD.id}/remittances/${fR1.id}/allocate`, { allocations: [{ shipmentId: fS2.id, amount: 30 }] })).json;
+ok('apply 30 of the credit to invoice 2', fAcc2?.remittances?.[0]?.unapplied === 70 && Math.abs(fAcc2?.orders?.find((o) => o.id === fS2.id)?.due - (fS2.due - 30)) < 0.01, JSON.stringify(fAcc2).slice(0, 300));
+const fTbAfter = (await call(T.owner, 'GET', '/reports/trial-balance')).json;
+ok('ledger balanced; bank fees booked as Bank Charges (15 x 285)', fTbAfter.balanced && Math.abs(net(fTbAfter, 'Bank Charges') - net(fTbBefore, 'Bank Charges') - 15 * 285) < 0.01, String(net(fTbAfter, 'Bank Charges')));
+ok('the 70 not applied stays in Customer Advances at the arrival rate', Math.abs(-(net(fTbAfter, 'Customer Advances') - net(fTbBefore, 'Customer Advances')) - 70 * 285) < 0.01, String(net(fTbAfter, 'Customer Advances') - net(fTbBefore, 'Customer Advances')));
+ok('the better rate on applied money is an FX gain', net(fTbAfter, 'FX Gain') < net(fTbBefore, 'FX Gain'));
+const fUsd = fAcc2?.currencies?.find((c) => c.currency === 'USD');
+ok('account per currency: open, unapplied credit, balance and PKR equivalents', Math.abs(fUsd?.open - (fS2.due - 30)) < 0.01 && fUsd?.unapplied === 70 && Math.abs(fUsd?.balance - (fS2.due - 100)) < 0.01 && fUsd?.openPKR > 0, JSON.stringify(fUsd));
+ok('aging: nothing is due yet, all current', Math.abs(fUsd?.aging?.[0] - fUsd?.open) < 0.01, JSON.stringify(fUsd?.aging));
+const fLast = fAcc2?.statement?.filter((l) => l.currency === 'USD').at(-1);
+ok('the statement runs to the same balance', Math.abs(fLast?.balance - fUsd?.balance) < 0.01, JSON.stringify(fLast));
+// an overdue invoice
+const fQ3 = (await call(T.exporter, 'POST', '/exports', fQ({ date: fAgo(45), paymentDays: 0 }))).json;
+const fS3 = (await call(T.exporter, 'POST', `/exports/${fQ3.id}/ship`, { shipDate: fAgo(45) })).json;
+ok('an invoice due 45 days ago is overdue', fS3?.overdue === true, JSON.stringify([fS3?.dueDate, fS3?.overdue]));
+const fAcc3 = (await call(T.owner, 'GET', `/distributors/${fD.id}/account`)).json;
+ok('aging puts it in 31-60 and the credit check sees it', fAcc3?.agingLabels?.[2] === '31-60' && fAcc3?.currencies?.[0]?.aging?.[2] > 0 && fAcc3?.credit?.overdue === 1, JSON.stringify([fAcc3?.agingLabels, fAcc3?.currencies?.[0]?.aging]));
+const fQ4 = (await call(T.exporter, 'POST', '/exports', fQ())).json;
+ok('Warn: it ships with an overdue note', /overdue/.test((await call(T.exporter, 'POST', `/exports/${fQ4.id}/ship`, {})).json?.creditNote ?? ''));
+await call(T.finance, 'PUT', `/distributors/${fD.id}/credit`, { creditLimit: 1000000, creditCurrency: 'USD', creditControl: 'Block' });
+const fQ5 = (await call(T.exporter, 'POST', '/exports', fQ())).json;
+ok('Block: with an invoice overdue the next order cannot ship -> 400', (await call(T.exporter, 'POST', `/exports/${fQ5.id}/ship`, {})).status === 400);
+await call(T.exporter, 'DELETE', `/exports/${fQ5.id}`);
+ok('a Distributor login cannot read the account -> 403', (await call(T.dist, 'GET', `/distributors/${fD.id}/account`)).status === 403);
+ok('ledger still balanced after the distributor exports', (await call(T.owner, 'GET', '/reports/trial-balance')).json?.balanced === true);
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

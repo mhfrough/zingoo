@@ -7,7 +7,7 @@ import { Collection, SalesOrder } from '../distribution/distribution.entities';
 import { CreditNote } from '../portal/portal.entities';
 import { flagsFor, shipmentMath } from '../exports/export-math';
 import { LookupsService } from '../setup/lookups.service';
-import { ExportCostPayment, ExportReceipt, ExportShipment } from '../exports/exports.entities';
+import { DistributorRemittance, ExportCostPayment, ExportReceipt, ExportShipment } from '../exports/exports.entities';
 import { AccountingDocument, AccountingSettlement, Approval, FinanceEntry, FundingRepayment } from '../finance/finance.entities';
 import { ManufacturerPayment, ProductionBatch } from '../manufacturing/manufacturing.entities';
 import { MfrPaymentRequest, MfrRequestPayment } from '../manufacturing/payment-requests.entities';
@@ -41,6 +41,7 @@ export const ACC = {
   CUSTOMER_ADVANCES: 'Customer Advances',
   SALES_RETURNS: 'Sales Returns & Allowances',
   DIST_CREDIT_PAYABLE: 'Distributor Credit Payable',
+  BANK_CHARGES: 'Bank Charges',
 } as const;
 
 export interface ApprovalState {
@@ -411,13 +412,32 @@ export class PostingService implements OnModuleInit {
       const cash = round2(Number(r.foreignAmount) * Number(r.fxRate));
       const desc = `Export collection · ${r.shipment.refNo}`;
       const fx = { currency: r.shipment.currency, fxRate: r.fxRate };
+      // money applied from a distributor remittance was banked into Customer Advances first
+      const from = r.remittanceId ? ACC.CUSTOMER_ADVANCES : ACC.CASH;
       rows = [
-        ...this.pair(r.date, 'Exports', r.refNo, desc, ACC.CASH, ACC.AR, Math.min(base, cash), fx),
-        ...(cash > base ? this.pair(r.date, 'Exports', r.refNo, `FX gain · ${r.shipment.refNo}`, ACC.CASH, ACC.FX_GAIN, cash - base, fx) : []),
+        ...this.pair(r.date, 'Exports', r.refNo, desc, from, ACC.AR, Math.min(base, cash), fx),
+        ...(cash > base ? this.pair(r.date, 'Exports', r.refNo, `FX gain · ${r.shipment.refNo}`, from, ACC.FX_GAIN, cash - base, fx) : []),
         ...(base > cash ? this.pair(r.date, 'Exports', r.refNo, `FX loss · ${r.shipment.refNo}`, ACC.FX_LOSS, ACC.AR, base - cash, fx) : []),
       ];
     }
     await this.ledger.replace(em, 'EXPORT_RECEIPT', id, rows);
+  }
+
+  /**
+   * A distributor remittance: the bank gets what arrived (less the fees deducted on the way, a bank charge), and the
+   * full amount sits in Customer Advances until it is applied to invoices (each application is an ExportReceipt).
+   */
+  async syncRemittance(em: EntityManager, id: string) {
+    const r = await em.findOne(DistributorRemittance, { where: { id }, relations: ['distributor'] });
+    if (!r) return;
+    const fx = { currency: r.currency, fxRate: r.fxRate };
+    const gross = round2(Number(r.amount) * Number(r.fxRate));
+    const fees = round2(Number(r.fees) * Number(r.fxRate));
+    const desc = `Remittance · ${r.distributor.name}${r.bankRef ? ' · ' + r.bankRef : ''}`;
+    await this.ledger.replace(em, 'REMITTANCE', id, [
+      ...this.pair(r.date, 'Exports', r.refNo, desc, ACC.CASH, ACC.CUSTOMER_ADVANCES, gross - fees, fx),
+      ...(fees > 0 ? this.pair(r.date, 'Exports', r.refNo, `Bank charges deducted · ${r.refNo}`, ACC.BANK_CHARGES, ACC.CUSTOMER_ADVANCES, fees, fx) : []),
+    ]);
   }
 
   /** Paying the accrued logistics: the cost was booked at shipping, so this only moves cash against the payable. */

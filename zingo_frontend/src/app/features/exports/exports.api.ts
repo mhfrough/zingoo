@@ -1,6 +1,6 @@
 import { Injectable, inject } from '@angular/core';
 import { ApiService } from '../../core/api.service';
-import { ContainerType, ExportCostPayment, ExportReceipt, ExportRow } from './models';
+import { ContainerType, DistributorAccount, ExportCostPayment, ExportReceipt, ExportRow } from './models';
 
 /** Every call the Export Containers page makes (products, currencies and settings come from OpsApi / FinanceApi). */
 @Injectable({ providedIn: 'root' })
@@ -18,4 +18,9 @@ export class ExportsApi {
   ship = (id: string) => this.api.post<ExportRow>(`exports/${id}/ship`, {});
   collect = (id: string, body: unknown) => this.api.post<ExportRow>(`exports/${id}/collect`, body);
   payCosts = (id: string, body: unknown) => this.api.post<ExportRow>(`exports/${id}/pay-costs`, body);
+  creditOverride = (id: string, reason: string) => this.api.post<ExportRow>(`exports/${id}/credit-override`, { reason });
+  account = (distributorId: string) => this.api.get<DistributorAccount>(`distributors/${distributorId}/account`);
+  remit = (distributorId: string, body: unknown) => this.api.post<DistributorAccount>(`distributors/${distributorId}/remittances`, body);
+  allocate = (distributorId: string, remittanceId: string, body: unknown) =>
+    this.api.post<DistributorAccount>(`distributors/${distributorId}/remittances/${remittanceId}/allocate`, body);
 }

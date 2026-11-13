@@ -127,7 +127,8 @@
   </app-tabs>
 </div>
 
-<app-export-form [(open)]="quoteOpen" [quote]="editing()" [products]="products.value() ?? []" [containers]="containers.value() ?? []"
+<app-account-panel [(open)]="accountOpen" [distributorId]="accountOf()" (changed)="reload()" />
+<app-export-form [(open)]="quoteOpen" [quote]="editing()" [distributors]="intlDistributors()" [products]="products.value() ?? []" [containers]="containers.value() ?? []"
   [currencies]="currencies.value() ?? []" [defaultContainer]="settings.value()?.containerSize ?? '40HC'"
   [defaultIncoterm]="settings.value()?.defaultIncoterm ?? 'FOB'" [packsPerCarton]="settings.value()?.packsPerCarton ?? 432"
   (saved)="reload()" />

@@ -13,6 +13,7 @@ import { OpsApi } from '../ops/ops.api';
 import { ExportCollectForm } from './export-collect-form';
 import { ExportCostForm } from './export-cost-form';
 import { ExportForm } from './export-form';
+import { AccountPanel } from './account-panel';
 import { ExportsApi } from './exports.api';
 import { ContainerType, ExportCostPayment, ExportReceipt, ExportRow } from './models';
 
@@ -30,7 +31,7 @@ const CHECKLIST = [
 @Component({
   selector: 'app-exports',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [Btn, DataTable, Kpi, PageHeader, Tabs, TabPanel, ExportForm, ExportCollectForm, ExportCostForm],
+  imports: [Btn, DataTable, Kpi, PageHeader, Tabs, TabPanel, ExportForm, ExportCollectForm, ExportCostForm, AccountPanel],
   templateUrl: './exports.html',
   styleUrl: './exports.css',
 })
@@ -50,6 +51,12 @@ export class Exports {
   protected products = rxResource({ params: () => this.tick(), stream: () => this.ops.products() });
   protected currencies = rxResource({ stream: () => this.fin.currencies() });
   protected settings = rxResource({ params: () => this.tick(), stream: () => this.ops.settings() });
+  private distributorsRes = rxResource({ params: () => this.tick(), stream: () => this.ops.distributors() });
+  /** international distributors an order can be for */
+  protected intlDistributors = computed(() => (this.distributorsRes.value() ?? []).filter((d) => d.market && d.market !== 'Local'));
+  /** the distributor whose account panel is open */
+  protected accountOpen = signal(false);
+  protected accountOf = signal<string | null>(null);
 
   protected canWrite = computed(() => this.auth.can('exports'));
   protected tab = signal('shipments');
@@ -83,7 +90,10 @@ export class Exports {
 
   protected columns: TableColumn<ExportRow>[] = [
     { id: 'ref', label: 'Container', value: (e) => e.refNo, sub: (e) => (e.shipDate ? `Shipped ${fmtDate(e.shipDate)}` : `Quoted ${fmtDate(e.date)}`) },
-    { id: 'buyer', label: 'Buyer / destination', value: (e) => e.buyer, sub: (e) => (e.port ? `${e.country} · ${e.port}` : e.country), priority: 2 },
+    {
+      id: 'buyer', label: 'Buyer / destination', value: (e) => (e.distributor ? `${e.distributor.name}${e.distributor.code ? ' · ' + e.distributor.code : ''}` : e.buyer),
+      sub: (e) => (e.port ? `${e.country} · ${e.port}` : e.country), priority: 2,
+    },
     { id: 'term', label: 'Container / term', value: (e) => e.container, sub: (e) => e.incoterm, priority: 3 },
     { id: 'sku', label: 'SKU / bundles', value: (e) => e.product.sku, sub: (e) => `${fmtNumber(e.cartons)} bundles`, priority: 3 },
     {
@@ -97,16 +107,22 @@ export class Exports {
     { id: 'profit', label: 'Profit / %', kind: 'money', value: (e) => e.net, sub: (e) => fmtPct(e.margin) },
     {
       id: 'status', label: 'Status / due', kind: 'tag', value: (e) => (e.status === 'Quote' ? 'Quote' : e.due > 0 ? 'Receivable' : 'Collected'),
-      tone: this.shipTone, sub: (e) => (e.status === 'Shipped' && e.due > 0 ? `${e.currency} ${fmtAmount2(e.due)} due` : null),
+      tone: this.shipTone,
+      sub: (e) => [
+        e.status === 'Shipped' && e.due > 0 ? `${e.currency} ${fmtAmount2(e.due)} ${e.overdue ? 'overdue since' : 'due'}${e.dueDate ? ' ' + fmtDate(e.dueDate) : ''}` : null,
+        e.status === 'Quote' && e.creditOverrideAt ? `credit override: ${e.creditOverrideBy}` : null,
+        e.creditNote ? 'credit note on file' : null,
+      ].filter(Boolean).join(' · ') || null,
     },
   ];
 
   protected actions = (e: ExportRow): RowAction[] => {
-    if (!this.canWrite()) return [];
+    const account: RowAction[] = e.distributorId ? [{ id: 'account', label: 'Distributor account' }] : [];
+    if (!this.canWrite()) return account;
     if (e.status === 'Quote') {
-      return [{ id: 'ship', label: 'Ship', tone: 'success' }, { id: 'edit', label: 'Edit' }, { id: 'delete', label: 'Delete', tone: 'danger' }];
+      return [{ id: 'ship', label: 'Ship', tone: 'success' }, { id: 'edit', label: 'Edit' }, ...account, { id: 'delete', label: 'Delete', tone: 'danger' }];
     }
-    const acts: RowAction[] = [];
+    const acts: RowAction[] = [...account];
     if (e.due > 0.004) acts.push({ id: 'collect', label: 'Collect', tone: 'success' });
     if (e.costDue > 0.004) acts.push({ id: 'costs', label: 'Pay costs' });
     return acts;
@@ -161,6 +177,7 @@ export class Exports {
   protected async onAction(ev: RowActionEvent<ExportRow>) {
     const e = ev.row;
     if (ev.id === 'edit') return this.openQuote(e);
+    if (ev.id === 'account') { this.accountOf.set(e.distributorId ?? null); this.accountOpen.set(true); return; }
     if (ev.id === 'collect') { this.target.set(e); this.collectOpen.set(true); return; }
     if (ev.id === 'costs') { this.target.set(e); this.costOpen.set(true); return; }
 

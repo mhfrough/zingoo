@@ -4,6 +4,7 @@ import { ReactiveFormsModule, Validators } from '@angular/forms';
 import { Tone, fmtDate, fmtMoney, fmtNumber, productLabel, qtyLabel } from '../../shared/format';
 import { Btn, DataTable, Field, Offcanvas, RichText, RowAction, RowActionEvent, Select, SelectOption, TableColumn } from '../../ui';
 import { FormModal } from '../ops/form-modal';
+import { AuthService } from '../../core/auth.service';
 import { DistributorStock, DistributorStockRow, FactoryApi, ProductionOrder, Shipment } from './factory.api';
 
 const today = () => new Date().toISOString().slice(0, 10);
@@ -191,7 +192,7 @@ export class ReceiveForm extends FormModal {
       <div class="card" data-flush>
         <div class="card__head">
           <div><h2>{{ mode() === 'distributor' ? 'Zen Foods stock with you' : 'Stock held by distributors' }}</h2>
-            <p>Consignment: received and not yet sold, valued at the manufacturer's price, with the date to sell it by</p></div>
+            <p>Consignment: received and not yet sold, valued {{ ownPrice() ? 'at your price' : 'at cost (what Zen Foods pays the manufacturer)' }}, with the date to sell it by</p></div>
         </div>
         <div class="card__body">
           <app-data-table [columns]="stockColumns()" [rows]="stock()?.byProduct ?? []" [totals]="stockTotals()" [loading]="loading()" [searchable]="false"
@@ -206,6 +207,9 @@ export class ReceiveForm extends FormModal {
 })
 export class ShipmentsPanel {
   readonly mode = input<'company' | 'factory' | 'distributor'>('company');
+  private auth = inject(AuthService);
+  /** a distributor's own login gets its goods valued at its own price; staff (even on its portal page) see the cost */
+  protected ownPrice = computed(() => this.auth.user()?.role === 'Distributor');
   readonly shipments = input<Shipment[]>([]);
   readonly stock = input<DistributorStock | null>(null);
   /** orders that can be shipped from (factory and company) */
@@ -255,7 +259,7 @@ export class ShipmentsPanel {
   protected stockColumns = computed<TableColumn<DistributorStockRow>[]>(() => [
     { id: 'sku', label: this.mode() === 'company' ? 'Product / Distributor' : 'Product', kind: 'title', value: (r) => productLabel(r), sub: (r) => (this.mode() === 'company' ? r.distributor : null) },
     { id: 'containers', label: 'Containers', kind: 'number', value: (r) => r.containers, sub: (r) => `${fmtNumber(r.bundles)} bundles · ${fmtNumber(r.packets)} packets` },
-    { id: 'value', label: this.mode() === 'distributor' ? 'Value at your price' : 'Value at cost', kind: 'money', value: (r) => r.value, priority: 2 },
+    { id: 'value', label: this.ownPrice() ? 'Value at your price' : 'Value at cost', kind: 'money', value: (r) => r.value, priority: 2 },
     {
       id: 'sellBy', label: 'Sell by', kind: 'tag', value: (r) => (r.nextSellBy ? fmtDate(r.nextSellBy) : '-'),
       tone: (r): Tone => (r.overdue ? 'danger' : 'info'), sub: (r) => (r.overdue ? 'Past the sell-out date' : null),

@@ -18,7 +18,12 @@ const latestState = (o: LatestOrder): [string, Tone] => {
   const p = o.productionOrder;
   if (!p) return o.status === 'Requested' ? ['Waiting for Zingo', 'warning'] : [o.status, o.status === 'Rejected' ? 'danger' : 'neutral'];
   if (p.status === 'Sent') return ['With the manufacturer', 'warning'];
-  if (p.status === 'Accepted') return [p.stage ?? 'In production', 'info'];
+  if (p.status === 'Accepted') {
+    if (p.containers && p.received >= p.containers) return ['Delivered', 'success'];
+    if (p.received) return [`Part delivered ${p.received}/${p.containers}`, 'info'];
+    if (p.shipped) return ['On the way', 'warning'];
+    return [p.stage ?? 'In production', 'info'];
+  }
   if (p.status === 'Rejected') return ['Manufacturer declined', 'danger'];
   if (p.status === 'Cancelled') return ['Cancelled', 'danger'];
   return [p.status, 'neutral'];

@@ -1,4 +1,5 @@
 import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
+import { movementOf } from '../manufacturing/order-movement';
 import { InjectDataSource } from '@nestjs/typeorm';
 import { DataSource, EntityManager, Not } from 'typeorm';
 import { Distributor, DistributorRate, Product } from '../catalog/catalog.entities';
@@ -166,6 +167,7 @@ export class PortalService {
       where: { distributorId }, relations: ['product', 'order', 'productionOrder', 'productionOrder.manufacturer'],
       order: { date: 'DESC', createdAt: 'DESC' },
     });
+    const moved = await movementOf(this.db.manager, rows.map((r) => r.productionOrderId ?? ''));
     return rows.map(({ product, productionOrder: o, order, ...r }) => ({
       ...r,
       product: { id: product.id, sku: product.sku, name: product.name },
@@ -173,6 +175,7 @@ export class PortalService {
       productionOrder: o ? {
         id: o.id, refNo: o.refNo, status: o.status, stage: o.stage, readyDate: o.readyDate, dueDate: o.dueDate, containers: o.containers,
         reason: o.status === 'Rejected' || o.status === 'Cancelled' ? o.reason : null, updatedAt: o.updatedAt,
+        shipped: moved[o.id]?.shipped ?? 0, received: moved[o.id]?.received ?? 0,
         manufacturer: { id: o.manufacturer.id, name: o.manufacturer.name },
       } : null,
     }));
@@ -276,6 +279,7 @@ export class PortalService {
         order: { createdAt: 'DESC' }, take: 40,
       }),
     ]);
+    const moved = await movementOf(em, recent.map((r) => r.productionOrderId ?? ''));
     const rateOf = async (r: PortalRequest) => {
       const a = await em.findOne(DistributorRate, { where: { distributorId: r.distributorId, productId: r.productId } });
       return a ? Number(a.rate) : Number(r.product.rate);
@@ -290,7 +294,7 @@ export class PortalService {
       audit,
       needsApproval: !!s.requestsNeedApproval,
       /** distributor orders already past the desk: Zen Foods watches them with the manufacturer */
-      recent: recent.map((r) => ({
+      recent: recent.map((r) => ({ r, m: r.productionOrderId ? moved[r.productionOrderId] : undefined })).map(({ r, m }) => ({
         id: r.id, refNo: r.refNo, date: r.date, createdAt: r.createdAt, updatedAt: r.updatedAt, status: r.status, cartons: r.cartons,
         requestedDate: r.requestedDate, reviewNote: r.reviewNote,
         distributor: { id: r.distributor.id, name: r.distributor.name },
@@ -298,6 +302,7 @@ export class PortalService {
         productionOrder: r.productionOrder ? {
           id: r.productionOrder.id, refNo: r.productionOrder.refNo, status: r.productionOrder.status, stage: r.productionOrder.stage,
           readyDate: r.productionOrder.readyDate, containers: r.productionOrder.containers, updatedAt: r.productionOrder.updatedAt,
+          shipped: m?.shipped ?? 0, received: m?.received ?? 0,
           manufacturer: { id: r.productionOrder.manufacturer.id, name: r.productionOrder.manufacturer.name },
         } : null,
       })),

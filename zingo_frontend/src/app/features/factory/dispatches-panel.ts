@@ -9,8 +9,9 @@ import { DistDispatch, FactoryApi, Shipment } from './factory.api';
 const today = () => new Date().toISOString().slice(0, 10);
 
 /** bundles of a received delivery that can still go out: arrived in good order, less dispatches not returned */
+/** received bundles less those on a faulty-goods claim and those already sent out (a returned dispatch gives them back) */
 const bundlesLeft = (s: Shipment, dispatches: DistDispatch[]) =>
-  (s.receivedContainers ?? 0) * s.bundlesPerContainer
+  (s.receivedContainers ?? 0) * s.bundlesPerContainer - (s.claimedBundles ?? 0)
   - dispatches.filter((d) => d.shipmentId === s.id && d.status !== 'Returned').reduce((n, d) => n + d.bundles, 0);
 
 /** The distributor (or staff for it) sends bundles of a received delivery to one of its customers. */

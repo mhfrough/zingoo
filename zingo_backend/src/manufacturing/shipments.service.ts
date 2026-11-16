@@ -60,8 +60,8 @@ export class ShipmentsService {
     const rows = await this.db.manager.find(ProductionShipment, {
       where, relations: ['order', 'product', 'manufacturer', 'distributor'], order: { shipDate: 'DESC', refNo: 'DESC' },
     });
-    const [sold, rates] = await Promise.all([this.soldMap(this.db.manager), this.rateMap(this.db.manager)]);
-    return rows.map((s) => this.shape(s, sold[s.id] ?? 0, rates));
+    const [sold, rates, claimed] = await Promise.all([this.soldMap(this.db.manager), this.rateMap(this.db.manager), this.claimedMap(this.db.manager)]);
+    return rows.map((s) => this.shape(s, sold[s.id] ?? 0, rates, claimed[s.id] ?? 0));
   }
 
   /**
@@ -301,7 +301,14 @@ export class ShipmentsService {
 
   private async one(em: EntityManager, id: string) {
     const s = await em.findOne(ProductionShipment, { where: { id }, relations: ['order', 'product', 'manufacturer', 'distributor'] });
-    return this.shape(s!, (await this.soldMap(em))[id] ?? 0, await this.rateMap(em));
+    return this.shape(s!, (await this.soldMap(em))[id] ?? 0, await this.rateMap(em), (await this.claimedMap(em))[id] ?? 0);
+  }
+
+  /** bundles of each delivery on a faulty-goods claim that was not rejected (they cannot be dispatched) */
+  private async claimedMap(em: EntityManager): Promise<Record<string, number>> {
+    const rows: { shipmentId: string; n: number }[] = await em.query(
+      `SELECT "shipmentId", SUM(bundles)::int AS n FROM delivery_claims WHERE status <> 'Rejected' GROUP BY "shipmentId"`);
+    return Object.fromEntries(rows.map((r) => [r.shipmentId, Number(r.n)]));
   }
 
   /** containers of each delivery already on a distributor invoice that was not rejected */
@@ -326,7 +333,7 @@ export class ShipmentsService {
   }
 
   /** quantities and value of what was sent and what arrived; what is still on hand and whether it is past its sell-by date */
-  private shape(s: ProductionShipment, soldContainers = 0, rates: Record<string, number> = {}) {
+  private shape(s: ProductionShipment, soldContainers = 0, rates: Record<string, number> = {}, claimedBundles = 0) {
     const perContainer = s.bundlesPerContainer * s.packetsPerBundle;
     const received = s.receivedContainers ?? 0;
     const onHandContainers = s.status === 'Received' ? Math.max(0, received - soldContainers) : 0;
@@ -338,6 +345,8 @@ export class ShipmentsService {
       value: round2(s.containers * perContainer * Number(s.rate)),
       receivedValue: round2(received * perContainer * Number(s.rate)),
       soldContainers,
+      /** bundles on a faulty-goods claim (not rejected) */
+      claimedBundles,
       onHandContainers,
       onHandValue,
       /** what the distributor is charged per packet: its agreed rate, else the product's */

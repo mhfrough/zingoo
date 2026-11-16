@@ -41,7 +41,13 @@ const orderState = (r: PortalRequest): { label: string; tone: Tone } => {
   switch (o.status) {
     case 'Draft': return { label: 'Accepted by Zingo', tone: 'info' };
     case 'Sent': return { label: 'With the manufacturer', tone: 'warning' };
-    case 'Accepted': return { label: o.stage ?? 'In production', tone: 'info' };
+    case 'Accepted': {
+      const all = o.containers ?? 0;
+      if (all && (o.received ?? 0) >= all) return { label: 'Delivered', tone: 'success' };
+      if (o.received) return { label: `Part delivered ${o.received}/${all}`, tone: 'info' };
+      if (o.shipped) return { label: 'On the way', tone: 'warning' };
+      return { label: o.stage ?? 'In production', tone: 'info' };
+    }
     case 'Rejected': return { label: 'Manufacturer declined', tone: 'danger' };
     case 'Cancelled': return { label: 'Cancelled', tone: 'danger' };
     default: return { label: o.status, tone: 'neutral' };

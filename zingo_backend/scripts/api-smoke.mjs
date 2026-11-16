@@ -1865,5 +1865,11 @@ await call(p3Maker, 'POST', `/production-orders/${sReq3?.productionOrder?.id}/re
 const sRej = (await nList(T.dist)).items.find((n) => n.kind === 'order.rejected' && n.refNo === sReq3?.productionOrder?.refNo);
 ok('a notice carries the note as plain text', !!sRej && !/[<>]/.test(sRej.body ?? '') && sRej.body.includes('Line is full · Try next week'), sRej?.body);
 
+ok('a delivery shows the bundles on its claims (2 damaged + 1 quality), so they are not offered for dispatch', ((await call(T.owner, 'GET', '/production-shipments')).json ?? []).find((x) => x.id === nShip.id)?.claimedBundles === 3, JSON.stringify(((await call(T.owner, 'GET', '/production-shipments')).json ?? []).find((x) => x.id === nShip.id)?.claimedBundles));
+const bReqs = (await call(T.dist, 'GET', '/portal/requests')).json ?? [];
+ok('a distributor order shows how much was shipped and received', bReqs.some((r) => r.productionOrder && typeof r.productionOrder.shipped === 'number' && typeof r.productionOrder.received === 'number')
+  && bReqs.some((r) => (r.productionOrder?.received ?? 0) > 0), JSON.stringify(bReqs.map((r) => r.productionOrder && [r.productionOrder.refNo, r.productionOrder.shipped, r.productionOrder.received])));
+ok('the overview lists distributor orders with shipped and received', ((await call(T.owner, 'GET', '/reports/dashboard')).json?.latestOrders ?? []).every((o) => !o.productionOrder || typeof o.productionOrder.received === 'number'));
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

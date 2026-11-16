@@ -94,6 +94,9 @@ export class Offcanvas {
         if (want) {
           clearTimeout(this.closeTimer);
           this.closing.set(false);
+          // an "open" dialog that is not modal (left so by a dialog closing just before, or moved in the page)
+          // shows nothing: close it and open it properly
+          if (el.open && !el.matches(':modal')) el.close();
           if (!el.open) {
             el.showModal();
             this.focusInitial(el);

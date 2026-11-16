@@ -13,6 +13,7 @@ import { ShipmentsService } from '../manufacturing/shipments.service';
 import { DistInvoicesService } from '../manufacturing/dist-invoices.service';
 import { SettingsService } from '../setup/setup.service';
 import { PortalRequest } from '../portal/portal.entities';
+import { movementOf } from '../manufacturing/order-movement';
 
 /** Period filter: 'all' or 'YYYY-MM'. */
 type Period = string;
@@ -506,16 +507,24 @@ export class ReportsService {
       pendingApprovals: alerts.filter((a) => a.kind === 'approval').length,
       alerts,
       // the latest distributor orders and where each stands with its manufacturer
-      latestOrders: (await this.db.manager.find(PortalRequest, {
-        relations: ['distributor', 'product', 'productionOrder', 'productionOrder.manufacturer'], order: { createdAt: 'DESC' }, take: 8,
-      })).map((r) => ({
+      latestOrders: await this.latestOrders(),
+    };
+  }
+
+  /** the latest distributor orders with their production order, how far it is and whether it was shipped / received */
+  private async latestOrders() {
+    const rows = await this.db.manager.find(PortalRequest, {
+      relations: ['distributor', 'product', 'productionOrder', 'productionOrder.manufacturer'], order: { createdAt: 'DESC' }, take: 8,
+    });
+    const moved = await movementOf(this.db.manager, rows.map((r) => r.productionOrderId ?? ''));
+    return rows.map((r) => ({
         id: r.id, refNo: r.refNo, date: r.date, createdAt: r.createdAt, updatedAt: r.updatedAt, distributor: r.distributor.name,
         sku: r.product.sku, name: r.product.name, cartons: r.cartons, status: r.status, reviewNote: r.reviewNote,
         productionOrder: r.productionOrder ? {
           refNo: r.productionOrder.refNo, status: r.productionOrder.status, stage: r.productionOrder.stage,
-          readyDate: r.productionOrder.readyDate, manufacturer: r.productionOrder.manufacturer.name,
+          readyDate: r.productionOrder.readyDate, manufacturer: r.productionOrder.manufacturer.name, containers: r.productionOrder.containers,
+          shipped: moved[r.productionOrder.id]?.shipped ?? 0, received: moved[r.productionOrder.id]?.received ?? 0,
         } : null,
-      })),
-    };
+      }));
   }
 }

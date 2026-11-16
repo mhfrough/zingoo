@@ -115,6 +115,8 @@ export interface Shipment {
   receivedValue: number;
   /** containers already on a distributor invoice (not rejected) */
   soldContainers: number;
+  /** bundles on a faulty-goods claim that was not rejected */
+  claimedBundles?: number;
   onHandContainers: number;
   onHandValue: number;
   /** what the distributor is charged per packet (agreed rate, else the product's) */

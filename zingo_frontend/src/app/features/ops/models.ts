@@ -268,7 +268,10 @@ export interface Dashboard {
   latestOrders: {
     id: string; refNo: string; date: string; createdAt: string; updatedAt: string; distributor: string; sku: string; name: string;
     cartons: number; status: string; reviewNote: string | null;
-    productionOrder: { refNo: string; status: string; stage: string | null; readyDate: string | null; manufacturer: string } | null;
+    productionOrder: {
+      refNo: string; status: string; stage: string | null; readyDate: string | null; manufacturer: string;
+      containers: number; shipped: number; received: number;
+    } | null;
   }[];
 }
 

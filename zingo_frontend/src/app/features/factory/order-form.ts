@@ -2,7 +2,7 @@ import { ChangeDetectionStrategy, Component, computed, inject, input, signal } f
 import { takeUntilDestroyed, toSignal } from '@angular/core/rxjs-interop';
 import { ReactiveFormsModule, Validators } from '@angular/forms';
 import { fmtMoney, fmtNumber } from '../../shared/format';
-import { Btn, Field, MoneyInput, Offcanvas, Select, SelectOption } from '../../ui';
+import { Btn, Field, MoneyInput, Offcanvas, RichText, Select, SelectOption } from '../../ui';
 import { FormModal } from '../ops/form-modal';
 import { Distributor, Manufacturer, Product } from '../ops/models';
 import { FactoryApi, ProductionOrder } from './factory.api';
@@ -17,7 +17,7 @@ const today = () => new Date().toISOString().slice(0, 10);
 @Component({
   selector: 'app-production-order-form',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [ReactiveFormsModule, Offcanvas, Field, Btn, Select, MoneyInput],
+  imports: [ReactiveFormsModule, Offcanvas, Field, Btn, Select, MoneyInput, RichText],
   styles: `
     .sum {
       grid-column: 1 / -1;
@@ -91,7 +91,7 @@ const today = () => new Date().toISOString().slice(0, 10);
           <app-money-input formControlName="rate" />
         </app-field>
         <app-field label="Notes" [wide]="true">
-          <textarea formControlName="notes" rows="2" maxlength="2000" placeholder="Anything the manufacturer should know"></textarea>
+          <app-rich-text formControlName="notes" [max]="2000" [storeMax]="2000" placeholder="Anything the manufacturer should know" />
         </app-field>
 
         <div class="sum" aria-live="polite">

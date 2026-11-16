@@ -2,7 +2,7 @@ import { ChangeDetectionStrategy, Component, computed, inject, input, model } fr
 import { ReactiveFormsModule, Validators } from '@angular/forms';
 import { Observable } from 'rxjs';
 import { fmtDate, fmtMoney, fmtNumber } from '../../shared/format';
-import { Btn, Field, Offcanvas, Tag } from '../../ui';
+import { Btn, Field, Offcanvas, PlainPipe, RichPipe, RichText, Tag } from '../../ui';
 import { FormModal } from '../ops/form-modal';
 import { FactoryApi, ORDER_TONE, ProductionOrder, orderState } from './factory.api';
 
@@ -14,7 +14,7 @@ const subjectOf = (o: ProductionOrder | null) =>
 @Component({
   selector: 'app-accept-order-form',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [ReactiveFormsModule, Offcanvas, Field, Btn],
+  imports: [ReactiveFormsModule, Offcanvas, Field, Btn, RichText],
   template: `
     <app-offcanvas #oc [(open)]="open" title="Accept order" [subtitle]="subject()" size="md" [dirty]="form.dirty">
       @if (error()) {
@@ -24,7 +24,7 @@ const subjectOf = (o: ProductionOrder | null) =>
         <app-field label="Ready by" hint="When the containers will be ready" [wide]="true">
           <input type="date" formControlName="readyDate" [min]="order()?.date ?? ''" />
         </app-field>
-        <app-field label="Note" [wide]="true"><textarea formControlName="note" rows="2" maxlength="500"></textarea></app-field>
+        <app-field label="Note" [wide]="true"><app-rich-text formControlName="note" [max]="500" [storeMax]="500" /></app-field>
       </form>
       <ng-container offcanvasFooter>
         <button appBtn type="button" (click)="oc.requestClose()">Cancel</button>
@@ -58,7 +58,7 @@ export class AcceptOrderForm extends FormModal {
 @Component({
   selector: 'app-order-reason-form',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [ReactiveFormsModule, Offcanvas, Field, Btn],
+  imports: [ReactiveFormsModule, Offcanvas, Field, Btn, RichText],
   template: `
     <app-offcanvas #oc [(open)]="open" [title]="heading()" [subtitle]="subject()" size="md" [dirty]="form.dirty">
       @if (error()) {
@@ -66,7 +66,7 @@ export class AcceptOrderForm extends FormModal {
       }
       <form [id]="formId" [formGroup]="form" (ngSubmit)="submit()" class="form-grid" novalidate>
         <app-field label="Reason" [wide]="true" [hint]="hint()" [required]="true" [error]="invalid('reason') ? 'Say why' : null">
-          <textarea formControlName="reason" rows="3" maxlength="500"></textarea>
+          <app-rich-text formControlName="reason" [max]="500" [storeMax]="500" />
         </app-field>
       </form>
       <ng-container offcanvasFooter>
@@ -104,7 +104,7 @@ export class OrderReasonForm extends FormModal {
 @Component({
   selector: 'app-order-stage-form',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [ReactiveFormsModule, Offcanvas, Field, Btn],
+  imports: [ReactiveFormsModule, Offcanvas, Field, Btn, RichText],
   template: `
     <app-offcanvas #oc [(open)]="open" title="Report progress" [subtitle]="subject()" size="md" [dirty]="form.dirty">
       @if (error()) {
@@ -119,7 +119,7 @@ export class OrderReasonForm extends FormModal {
               }
             </select>
           </app-field>
-          <app-field label="Note" [wide]="true"><textarea formControlName="note" rows="2" maxlength="500"></textarea></app-field>
+          <app-field label="Note" [wide]="true"><app-rich-text formControlName="note" [max]="500" [storeMax]="500" /></app-field>
         } @else {
           <p class="notice">Every production step is reported. Shipping comes next.</p>
         }
@@ -164,7 +164,7 @@ export class OrderStageForm extends FormModal {
 @Component({
   selector: 'app-order-timeline',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [Offcanvas, Tag],
+  imports: [Offcanvas, Tag, PlainPipe, RichPipe],
   styles: `
     .facts {
       display: grid;
@@ -227,10 +227,10 @@ export class OrderStageForm extends FormModal {
           <div><dt>Deliver by</dt><dd>{{ o.dueDate ? date(o.dueDate) : '-' }}{{ o.overdue ? ' · late' : '' }}</dd></div>
           <div><dt>Ready by</dt><dd>{{ o.readyDate ? date(o.readyDate) : '-' }}</dd></div>
           @if (o.reason) {
-            <div><dt>Reason</dt><dd>{{ o.reason }}</dd></div>
+            <div><dt>Reason</dt><dd>{{ o.reason | plain }}</dd></div>
           }
           @if (o.notes) {
-            <div><dt>Notes</dt><dd>{{ o.notes }}</dd></div>
+            <div><dt>Notes</dt><dd class="rich" [innerHTML]="o.notes | rich"></dd></div>
           }
         </dl>
         <h3>Timeline</h3>
@@ -240,7 +240,7 @@ export class OrderStageForm extends FormModal {
               <strong>{{ e.event }}</strong>
               <small>{{ when(e.createdAt) }} · {{ e.by }} ({{ e.side.toLowerCase() }})</small>
               @if (e.note) {
-                <p>{{ e.note }}</p>
+                <p>{{ e.note | plain }}</p>
               }
             </li>
           }

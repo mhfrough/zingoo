@@ -1,7 +1,7 @@
 <app-page-header eyebrow="Zingoo · Zen Foods" title="Distributor partner portal"
   description="Order requests, deliveries and claims, payments, prices and your statement in one place.">
   <ng-container pageActions>
-    <button appBtn variant="primary" icon="plus" (click)="requestOpen.set(true)">Request stock</button>
+    <button appBtn variant="primary" icon="plus" (click)="requestOpen.set(true)">{{ direct() ? 'Order stock' : 'Request stock' }}</button>
     <button appBtn icon="download" (click)="downloadStatement()">Statement CSV</button>
   </ng-container>
 </app-page-header>
@@ -51,7 +51,7 @@
         <div class="card" data-flush>
           <div class="card__head"><div><h2>Upcoming and overdue invoices</h2><p>Instalments stay linked to their invoice and due date</p></div></div>
           <div class="card__body">
-            <app-data-table [columns]="invoiceColumns" [rows]="upcoming()" [actions]="payAction" [searchable]="false" [loading]="orders.isLoading()"
+            <app-data-table keepOrder [columns]="invoiceColumns" [rows]="upcoming()" [actions]="payAction" [searchable]="false" [loading]="orders.isLoading()"
               emptyTitle="Nothing to pay" emptyText="Dispatched invoices with a balance appear here." (action)="onOrderAction($event)" />
           </div>
         </div>
@@ -72,7 +72,7 @@
             </div>
           </div>
           <div class="card" data-flush>
-            <div class="card__head"><div><h2>Recent requests</h2><p>Zingo reviews each one and orders it from the manufacturer</p></div></div>
+            <div class="card__head"><div><h2>Recent orders</h2><p>{{ direct() ? 'Each order goes straight to the manufacturer; you see its answer and progress here' : 'Zingo reviews each one and orders it from the manufacturer' }}</p></div></div>
             <div class="card__body">
               <app-data-table [columns]="requestColumns" [rows]="requests.value() ?? []" [searchable]="false" [loading]="requests.isLoading()"
                 emptyTitle="No requests yet" emptyText="Use Request stock to ask for more." />
@@ -87,7 +87,7 @@
         <div class="card" data-flush>
           <div class="card__head">
             <div><h2>Orders and vouchers</h2><p>The price and terms are fixed when a request becomes an order</p></div>
-            <button appBtn size="sm" icon="plus" (click)="requestOpen.set(true)">Request stock</button>
+            <button appBtn size="sm" icon="plus" (click)="requestOpen.set(true)">{{ direct() ? 'Order stock' : 'Request stock' }}</button>
           </div>
           <div class="card__body">
             <app-data-table [columns]="orderColumns" [rows]="orders.value() ?? []" [actions]="orderActions" [loading]="orders.isLoading()"
@@ -96,7 +96,7 @@
           </div>
         </div>
         <div class="card" data-flush>
-          <div class="card__head"><div><h2>Stock requests</h2><p>Zingo orders them from the manufacturer or says why not</p></div></div>
+          <div class="card__head"><div><h2>Stock orders to the manufacturer</h2><p>{{ direct() ? 'The manufacturer accepts with a date, reports each step and tells you when it is ready' : 'Zingo orders them from the manufacturer or says why not' }}</p></div></div>
           <div class="card__body">
             <app-data-table [columns]="requestColumns" [rows]="requests.value() ?? []" [loading]="requests.isLoading()" searchPlaceholder="Search requests"
               emptyTitle="No requests yet" emptyText="Use Request stock to ask for more." />
@@ -120,7 +120,7 @@
           [canReport]="canReceiveDelivery()" [canManage]="canManageInvoices()" (changed)="reload()" />
         <app-delivery-claims-panel mode="distributor" [shipments]="deliveries.value() ?? []" [distributorId]="isDistributor() ? null : (dist() ?? null)"
           [tick]="tick()" [canRaise]="canRaiseClaim()" (changed)="reload()" />
-        <app-trail-panel [rows]="trail.value() ?? []" [loading]="trail.isLoading()" [showDistributor]="false" />
+        <app-trail-panel [rows]="trail.value() ?? []" [loading]="trail.isLoading()" [showDistributor]="false" [showCost]="false" />
       </div>
     </ng-template>
 
@@ -197,7 +197,7 @@
             <button appBtn size="sm" icon="download" (click)="downloadStatement()">Statement CSV</button>
           </div>
           <div class="card__body">
-            <app-data-table [columns]="entryColumns" [rows]="statement.value()?.entries ?? []" [loading]="statement.isLoading()"
+            <app-data-table keepOrder [columns]="entryColumns" [rows]="statement.value()?.entries ?? []" [loading]="statement.isLoading()"
               searchPlaceholder="Search the statement" emptyTitle="No entries yet" emptyText="Invoices and payments appear here." />
           </div>
         </div>
@@ -216,6 +216,16 @@
         <div class="stack">
           <div class="card" data-flush>
             <div class="card__head">
+              <div><h2>Distributor orders with the manufacturers</h2><p>{{ desk.value()?.needsApproval ? 'Orders Zingo accepted, and how far each one is' : 'Orders go straight to the manufacturer (Settings: no Zingo approval). Watch the answer and progress here' }}</p></div>
+            </div>
+            <div class="card__body">
+              <app-data-table [columns]="deskOrderColumns" [rows]="desk.value()?.recent ?? []" [loading]="desk.isLoading()" searchPlaceholder="Search orders"
+                emptyTitle="No distributor orders yet" emptyText="Orders from distributors appear here." />
+            </div>
+          </div>
+          @if (desk.value()?.needsApproval || (desk.value()?.requests?.length ?? 0)) {
+          <div class="card" data-flush>
+            <div class="card__head">
               <div><h2>Requests to accept <app-tag [tone]="(desk.value()?.requests?.length ?? 0) ? 'warning' : 'success'">{{ desk.value()?.requests?.length ?? 0 }}</app-tag></h2><p>Accepting orders the goods from the product's manufacturer, delivered to the distributor</p></div>
             </div>
             <div class="card__body">
@@ -223,6 +233,7 @@
                 [loading]="desk.isLoading()" emptyTitle="No requests waiting" emptyText="New distributor requests appear here." (action)="onRequestAction($event)" />
             </div>
           </div>
+          }
           <div class="card" data-flush>
             <div class="card__head">
               <div><h2>Payments to verify <app-tag [tone]="(desk.value()?.advices?.length ?? 0) ? 'warning' : 'success'">{{ desk.value()?.advices?.length ?? 0 }}</app-tag></h2><p>Only a confirmed payment reaches cash and the ledger{{ canFinance() ? '' : ' (Finance or Admin confirms)' }}</p></div>
@@ -254,7 +265,7 @@
   </app-tabs>
 </div>
 
-<app-request-form [(open)]="requestOpen" [rates]="rates.value() ?? []" [distributorId]="dist()" (saved)="reload()" />
+<app-request-form [(open)]="requestOpen" [rates]="rates.value() ?? []" [distributorId]="dist()" [direct]="direct()" (saved)="reload()" />
 <app-receipt-form [(open)]="receiptOpen" [order]="receiving()" [distributorId]="dist()" (saved)="reload()" />
 <app-advice-form [(open)]="adviceOpen" [orders]="orders.value() ?? []" [methods]="profile.value()?.paymentMethods ?? ['Bank Transfer']" [orderId]="payingOrder()" [distributorId]="dist()" (saved)="reload()" />
 <app-accept-form [(open)]="acceptOpen" [req]="accepting()" [cycles]="profile.value()?.paymentCycles ?? [15, 30, 45, 60]"

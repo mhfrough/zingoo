@@ -4,7 +4,7 @@ import { AttachmentMeta, AttachmentsApi } from '../../core/attachments.api';
 import { SettingsStore } from '../../core/settings.store';
 import { errorText } from '../../shared/errors';
 import { fmtDate, fmtMoney } from '../../shared/format';
-import { Btn, Kpi, Offcanvas, Tag, ToastService } from '../../ui';
+import { Btn, Kpi, Offcanvas, PlainPipe, Tag, ToastService } from '../../ui';
 import { FinanceApi } from './finance.api';
 import { FinanceEntry } from './models';
 
@@ -16,7 +16,7 @@ import { FinanceEntry } from './models';
 @Component({
   selector: 'app-funding-position',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [Offcanvas, Btn, Kpi, Tag],
+  imports: [Offcanvas, Btn, Kpi, Tag, PlainPipe],
   styles: `
     :host {
       display: contents;
@@ -182,7 +182,7 @@ import { FinanceEntry } from './models';
               @for (r of p()!.repayments; track r.id) {
                 <tr>
                   <td>{{ r.refNo }}<small>{{ date(r.date) }}</small></td>
-                  <td>{{ r.kind === 'markup' ? 'Markup' : 'Principal' }}@if (r.note) {<small>{{ r.note }}</small>}</td>
+                  <td>{{ r.kind === 'markup' ? 'Markup' : 'Principal' }}@if (r.note) {<small>{{ r.note | plain }}</small>}</td>
                   <td class="num mono">{{ money(r.amount) }}</td>
                   <td>{{ r.method || '-' }}@if (r.reference) {<small>{{ r.reference }}</small>}</td>
                   <td>@if (r.proof) { <button type="button" class="link" (click)="download(r.proof)">Download</button> } @else { - }</td>

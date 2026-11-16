@@ -33,7 +33,7 @@ const LINES = ['origin', 'ocean', 'insurance', 'destination', 'duty'];
             }
           </div>
           <div class="card__body">
-            <app-data-table [columns]="methodColumns" [rows]="methods()" [actions]="lookupActions" [searchable]="false"
+            <app-data-table keepOrder [columns]="methodColumns" [rows]="methods()" [actions]="lookupActions" [searchable]="false"
               [loading]="store.lookupsRes.isLoading()" emptyTitle="No payment methods" emptyText="Add the first one."
               (action)="onLookupAction($event)" />
           </div>
@@ -47,7 +47,7 @@ const LINES = ['origin', 'ocean', 'insurance', 'destination', 'duty'];
             }
           </div>
           <div class="card__body">
-            <app-data-table [columns]="containerColumns" [rows]="store.containers()" [actions]="containerActions" [searchable]="false"
+            <app-data-table keepOrder [columns]="containerColumns" [rows]="store.containers()" [actions]="containerActions" [searchable]="false"
               [loading]="store.containersRes.isLoading()" emptyTitle="No container types" emptyText="Add the first one."
               (action)="onContainerAction($event)" />
           </div>
@@ -63,7 +63,7 @@ const LINES = ['origin', 'ocean', 'insurance', 'destination', 'duty'];
             }
           </div>
           <div class="card__body">
-            <app-data-table [columns]="sourceColumns" [rows]="sources()" [actions]="lookupActions" [searchable]="false"
+            <app-data-table keepOrder [columns]="sourceColumns" [rows]="sources()" [actions]="lookupActions" [searchable]="false"
               [loading]="store.lookupsRes.isLoading()" emptyTitle="No capital sources" emptyText="Add the first one."
               (action)="onLookupAction($event)" />
           </div>
@@ -77,7 +77,7 @@ const LINES = ['origin', 'ocean', 'insurance', 'destination', 'duty'];
             }
           </div>
           <div class="card__body">
-            <app-data-table [columns]="typeColumns" [rows]="streamTypes()" [actions]="lookupActions" [searchable]="false"
+            <app-data-table keepOrder [columns]="typeColumns" [rows]="streamTypes()" [actions]="lookupActions" [searchable]="false"
               [loading]="store.lookupsRes.isLoading()" emptyTitle="No stream types" emptyText="Add the first one."
               (action)="onLookupAction($event)" />
           </div>
@@ -94,7 +94,7 @@ const LINES = ['origin', 'ocean', 'insurance', 'destination', 'duty'];
               }
             </div>
             <div class="card__body">
-              <app-data-table [columns]="simpleColumns" [rows]="simpleRows()[s.list] ?? []" [actions]="lookupActions" [searchable]="false"
+              <app-data-table keepOrder [columns]="simpleColumns" [rows]="simpleRows()[s.list] ?? []" [actions]="lookupActions" [searchable]="false"
                 [loading]="store.lookupsRes.isLoading()" emptyTitle="Nothing here yet" emptyText="Add the first one." (action)="onLookupAction($event)" />
             </div>
           </div>
@@ -111,7 +111,7 @@ const LINES = ['origin', 'ocean', 'insurance', 'destination', 'duty'];
           }
         </div>
         <div class="card__body">
-          <app-data-table [columns]="personColumns" [rows]="people()" [actions]="lookupActions" [searchable]="false"
+          <app-data-table keepOrder [columns]="personColumns" [rows]="people()" [actions]="lookupActions" [searchable]="false"
             [loading]="store.lookupsRes.isLoading()" emptyTitle="No investor accounts yet" emptyText="Add the investors and business owners."
             (action)="onLookupAction($event)" />
         </div>
@@ -127,7 +127,7 @@ const LINES = ['origin', 'ocean', 'insurance', 'destination', 'duty'];
             }
         </div>
         <div class="card__body">
-          <app-data-table [columns]="incotermColumns" [rows]="incoterms()" [actions]="lookupActions" [searchable]="false"
+          <app-data-table keepOrder [columns]="incotermColumns" [rows]="incoterms()" [actions]="lookupActions" [searchable]="false"
             [loading]="store.lookupsRes.isLoading()" emptyTitle="No Incoterms" emptyText="Add the first one." (action)="onLookupAction($event)" />
         </div>
       </div>
@@ -140,7 +140,7 @@ const LINES = ['origin', 'ocean', 'insurance', 'destination', 'duty'];
             }
         </div>
         <div class="card__body">
-          <app-data-table [columns]="currencyColumns" [rows]="store.currencies()" [actions]="currencyActions" [searchable]="false"
+          <app-data-table keepOrder [columns]="currencyColumns" [rows]="store.currencies()" [actions]="currencyActions" [searchable]="false"
             [loading]="store.currenciesRes.isLoading()" emptyTitle="No currencies" emptyText="Add the first one." (action)="onCurrencyAction($event)" />
         </div>
       </div>

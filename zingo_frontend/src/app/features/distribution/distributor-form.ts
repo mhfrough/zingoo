@@ -5,7 +5,7 @@ import { ReactiveFormsModule, Validators } from '@angular/forms';
 import { PlacesService, placeKey, splitKey } from '../../core/places.service';
 import { Area, areasOf, holds } from '../../shared/areas';
 import { countryOptions } from '../../shared/countries';
-import { Btn, Field, FilesInput, MoneyInput, MultiSelect, Offcanvas, SelectOption } from '../../ui';
+import { Btn, Field, FilesInput, MoneyInput, MultiSelect, Offcanvas, RichText, SelectOption } from '../../ui';
 import { FormModal } from '../ops/form-modal';
 import { Distributor, Product } from '../ops/models';
 import { IntlFields, intlGroup, intlReset, intlValue } from './intl-fields';
@@ -28,7 +28,7 @@ const STATUSES: { value: Distributor['status']; hint: string }[] = [
 @Component({
   selector: 'app-distributor-form',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [FilesInput, MoneyInput, ReactiveFormsModule, Offcanvas, Field, Btn, MultiSelect, IntlFields],
+  imports: [FilesInput, MoneyInput, ReactiveFormsModule, Offcanvas, Field, Btn, MultiSelect, IntlFields, RichText],
   styles: `
     .form-section {
       grid-column: 1 / -1;
@@ -82,14 +82,14 @@ const STATUSES: { value: Distributor['status']; hint: string }[] = [
 
         <h4 class="form-section">Areas</h4>
         @if (local()) {
-          <app-field label="Provinces" hint="Pick one or more">
+          <app-field label="Provinces" hint="Pick one or more first">
             <app-multi-select formControlName="provinces" [options]="provinceOptions()" placeholder="Add a province" />
           </app-field>
-          <app-field label="Districts" hint="Only districts of the chosen provinces">
-            <app-multi-select formControlName="districts" [options]="districtOptions()" placeholder="Add a district" />
-          </app-field>
-          <app-field label="Cities" hint="Only cities of the chosen districts (or provinces)">
+          <app-field label="Cities" [hint]="(value().provinces ?? []).length ? 'Cities of the chosen provinces' : 'Pick a province to see its cities'">
             <app-multi-select formControlName="cities" [options]="cityOptions()" placeholder="Add a city" />
+          </app-field>
+          <app-field label="Districts (optional)" hint="Only when the distributor covers whole districts. Each city's district is filled in for you">
+            <app-multi-select formControlName="districts" [options]="districtOptions()" placeholder="Add a district" />
           </app-field>
         }
         @if (international()) {
@@ -171,7 +171,7 @@ const STATUSES: { value: Distributor['status']; hint: string }[] = [
         <h4 class="form-section">Contract</h4>
         <app-field label="Point of contact" hint="Who to speak to: name, phone or email"><input type="text" formControlName="poc" maxlength="150" /></app-field>
         <app-field label="Contract" hint="Contract number or title"><input type="text" formControlName="contract" maxlength="150" /></app-field>
-        <app-field label="Terms" [wide]="true"><textarea formControlName="terms" maxlength="5000" placeholder="What was agreed: rates, payment, delivery, exclusivity"></textarea></app-field>
+        <app-field label="Terms" [wide]="true"><app-rich-text formControlName="terms" [max]="5000" [storeMax]="5000" placeholder="What was agreed: rates, payment, delivery, exclusivity" /></app-field>
         <app-field label="Uploads" [wide]="true" hint="Signed contract, licences, pictures. Several files at once"><app-files-input formControlName="files" label="Upload files" /></app-field>
       </form>
       <ng-container offcanvasFooter>
@@ -236,7 +236,7 @@ export class DistributorForm extends FormModal {
     intl: intlGroup(this.fb),
   });
 
-  private value = toSignal(this.form.valueChanges, { initialValue: this.form.getRawValue() });
+  protected value = toSignal(this.form.valueChanges, { initialValue: this.form.getRawValue() });
   protected local = computed(() => this.value().market !== 'International');
   protected international = computed(() => this.value().market !== 'Local');
   protected noArea = computed(() => {
@@ -264,7 +264,8 @@ export class DistributorForm extends FormModal {
       return this.free({ level: 'D', province: k.province, district: k.name, name: k.name });
     }));
   protected cityOptions = computed<SelectOption<string>[]>(() =>
-    this.places.citiesIn(this.value().provinces ?? [], this.value().districts ?? []).filter((o) => {
+    // cities come from the provinces only: an optional district never hides a city
+    ((this.value().provinces ?? []).length ? this.places.citiesIn(this.value().provinces ?? [], []) : []).filter((o) => {
       const k = splitKey(o.value);
       return this.free({ level: 'C', province: k.province, district: this.places.districtOf(k.province, k.name) ?? '', name: k.name });
     }));
@@ -281,15 +282,6 @@ export class DistributorForm extends FormModal {
       const ds = this.form.controls.districts.value.filter(keep);
       if (ds.length !== this.form.controls.districts.value.length) this.form.controls.districts.setValue(ds);
       const cs = this.form.controls.cities.value.filter(keep);
-      if (cs.length !== this.form.controls.cities.value.length) this.form.controls.cities.setValue(cs);
-    });
-    this.form.controls.districts.valueChanges.pipe(takeUntilDestroyed()).subscribe((ds) => {
-      if (!ds.length) return;
-      const cs = this.form.controls.cities.value.filter((key) => {
-        const k = splitKey(key);
-        const d = this.places.districtOf(k.province, k.name);
-        return !!d && ds.includes(placeKey(k.province, d));
-      });
       if (cs.length !== this.form.controls.cities.value.length) this.form.controls.cities.setValue(cs);
     });
   }

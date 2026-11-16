@@ -5,7 +5,7 @@ import { AuthService } from '../../core/auth.service';
 import { LookupList, SettingsStore } from '../../core/settings.store';
 import { errorText } from '../../shared/errors';
 import { fmtAmount2, fmtNumber } from '../../shared/format';
-import { Btn, Field, MoneyInput, MultiSelect, Offcanvas, Select, SelectOption, ToastService } from '../../ui';
+import { Btn, Field, MoneyInput, MultiSelect, Offcanvas, RichText, Select, SelectOption, ToastService } from '../../ui';
 import { FormModal } from '../ops/form-modal';
 import { Distributor, Manufacturer, PackagingTemplate, Product } from '../ops/models';
 import { SettingsApi } from '../settings/settings.api';
@@ -23,7 +23,7 @@ const withCurrent = (list: string[], current: string | null | undefined): Select
 @Component({
   selector: 'app-product-form',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [MoneyInput, ReactiveFormsModule, Offcanvas, Field, Btn, Select, MultiSelect],
+  imports: [MoneyInput, ReactiveFormsModule, Offcanvas, Field, Btn, Select, MultiSelect, RichText],
   template: `
     <app-offcanvas #oc [(open)]="open" [title]="product() ? 'Edit product / SKU' : 'Add product / SKU'"
                subtitle="Rates are per packet, in PKR." size="lg" [dirty]="form.dirty">
@@ -78,7 +78,7 @@ const withCurrent = (list: string[], current: string | null | undefined): Select
               <input type="number" formControlName="gramsPerPacket" min="0" step="0.5" placeholder="e.g. 18" />
             </app-field>
             <app-field label="Description" [wide]="true">
-              <textarea formControlName="description" rows="2" maxlength="2000" placeholder="Taste, ingredients, target buyer"></textarea>
+              <app-rich-text formControlName="description" [max]="2000" [storeMax]="2000" placeholder="Taste, ingredients, target buyer" />
             </app-field>
           </div>
         </section>

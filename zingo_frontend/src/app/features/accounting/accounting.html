@@ -194,7 +194,7 @@
             <div><h2>Cash & bank book</h2><p>Running balance: capital, receipts, approved payments and asset purchases</p></div>
           </div>
           <div class="card__body">
-            <app-data-table [columns]="cashColumns" [rows]="cashRows()" [loading]="cashBook.isLoading()"
+            <app-data-table keepOrder [columns]="cashColumns" [rows]="cashRows()" [loading]="cashBook.isLoading()"
               [error]="cashBook.error() ? 'The server did not answer.' : null" searchPlaceholder="Search the cash book"
               emptyTitle="No cash movements in this period" emptyText="Receipts and payments appear here." (retry)="reload()" />
           </div>

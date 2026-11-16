@@ -1,8 +1,8 @@
 import { ChangeDetectionStrategy, Component, computed, inject, input, output, signal } from '@angular/core';
 import { takeUntilDestroyed, toSignal } from '@angular/core/rxjs-interop';
 import { ReactiveFormsModule, Validators } from '@angular/forms';
-import { Tone, fmtDate, fmtNumber } from '../../shared/format';
-import { Btn, DataTable, Field, Offcanvas, RowAction, RowActionEvent, Select, SelectOption, TableColumn } from '../../ui';
+import { Tone, fmtDate, fmtNumber, productLabel } from '../../shared/format';
+import { Btn, DataTable, Field, Offcanvas, RichText, RowAction, RowActionEvent, Select, SelectOption, TableColumn } from '../../ui';
 import { FormModal } from '../ops/form-modal';
 import { DistDispatch, FactoryApi, Shipment } from './factory.api';
 
@@ -17,7 +17,7 @@ const bundlesLeft = (s: Shipment, dispatches: DistDispatch[]) =>
 @Component({
   selector: 'app-dispatch-form',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [ReactiveFormsModule, Offcanvas, Field, Btn, Select],
+  imports: [ReactiveFormsModule, Offcanvas, Field, Btn, Select, RichText],
   template: `
     <app-offcanvas #oc [(open)]="open" title="Dispatch to a customer" subtitle="Goods leaving your warehouse for a shop, wholesaler or sub-distributor." size="lg" [dirty]="form.dirty">
       @if (error()) {
@@ -36,7 +36,7 @@ const bundlesLeft = (s: Shipment, dispatches: DistDispatch[]) =>
         </app-field>
         <app-field label="Area / route"><input type="text" formControlName="area" maxlength="120" /></app-field>
         <app-field label="Vehicle no."><input type="text" formControlName="vehicle" maxlength="60" /></app-field>
-        <app-field label="Note" [wide]="true"><textarea formControlName="note" rows="2" maxlength="500"></textarea></app-field>
+        <app-field label="Note" [wide]="true"><app-rich-text formControlName="note" [max]="500" [storeMax]="500" /></app-field>
       </form>
       <ng-container offcanvasFooter>
         <button appBtn type="button" (click)="oc.requestClose()">Cancel</button>
@@ -104,7 +104,7 @@ export class DispatchForm extends FormModal {
 @Component({
   selector: 'app-close-dispatch-form',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [ReactiveFormsModule, Offcanvas, Field, Btn],
+  imports: [ReactiveFormsModule, Offcanvas, Field, Btn, RichText],
   template: `
     <app-offcanvas #oc [(open)]="open" [title]="(outcome() === 'Returned' ? 'Returned: ' : 'Delivered: ') + (d()?.refNo ?? '')" [subtitle]="subject()" size="md" [dirty]="form.dirty">
       @if (error()) {
@@ -116,7 +116,7 @@ export class DispatchForm extends FormModal {
         </app-field>
         <app-field [label]="outcome() === 'Returned' ? 'Why it came back' : 'Note'" [wide]="true" [required]="outcome() === 'Returned'"
                    [error]="invalid('note') ? 'Say why it came back' : null">
-          <textarea formControlName="note" rows="2" maxlength="500"></textarea>
+          <app-rich-text formControlName="note" [max]="500" [storeMax]="500" />
         </app-field>
       </form>
       <ng-container offcanvasFooter>
@@ -197,11 +197,11 @@ export class DispatchesPanel {
   protected hasStock = computed(() => this.shipments().some((s) => s.status === 'Received' && s.destination === 'Distributor' && bundlesLeft(s, this.dispatches()) > 0));
 
   protected columns = computed<TableColumn<DistDispatch>[]>(() => [
-    { id: 'ref', label: 'Dispatch', value: (d) => d.refNo, sub: (d) => `${fmtDate(d.date)} · from ${d.shipment.refNo}` },
-    { id: 'goods', label: 'Goods', value: (d) => `${fmtNumber(d.bundles)} bundles`, sub: (d) => d.product.sku },
+    { id: 'goods', label: 'Goods / Customer', kind: 'title', value: (d) => productLabel(d.product), sub: (d) => d.customer },
+    { id: 'ref', label: 'Dispatch no. / bundles', kind: 'mono', value: (d) => d.refNo, sortValue: (d) => d.date, sub: (d) => `${fmtDate(d.date)} · ${fmtNumber(d.bundles)} bundles · from ${d.shipment.refNo}` },
     {
-      id: 'to', label: 'Customer', value: (d) => d.customer, priority: 2,
-      sub: (d) => [this.showDistributor() ? `by ${d.distributor.name}` : null, d.area, d.vehicle].filter(Boolean).join(' · ') || null,
+      id: 'to', label: 'Area', value: (d) => d.area || '-', priority: 2,
+      sub: (d) => [this.showDistributor() ? `by ${d.distributor.name}` : null, d.vehicle].filter(Boolean).join(' · ') || null,
     },
     {
       id: 'status', label: 'Status', kind: 'tag', value: (d) => d.status, tone: (d) => TONE[d.status],

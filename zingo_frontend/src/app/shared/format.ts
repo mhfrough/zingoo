@@ -32,6 +32,14 @@ export const fmtNumber = (v: number | string | null | undefined) => numberFmt.fo
 
 /** "2026-11-05" -> "05 Nov 2026" */
 export const fmtDate = (v: string | null | undefined) => (v ? formatDate(v, 'dd MMM yyyy', 'en-US') : '');
+/** "Masala Masti · Z10-MAS": what a row is about, name first (the code alone is hard to place) */
+export const productLabel = (p: { name?: string | null; sku: string } | null | undefined) =>
+  (!p ? '-' : p.name && p.name !== p.sku ? `${p.name} · ${p.sku}` : p.sku);
+/** "3 containers (30 bundles)" */
+export const qtyLabel = (containers: number, bundles?: number | null) =>
+  `${containers.toLocaleString('en-US')} container${containers === 1 ? '' : 's'}${bundles ? ` (${bundles.toLocaleString('en-US')} bundles)` : ''}`;
+/** 16 Nov 2026, 14:05 (a stored time, in the viewer's clock) */
+export const fmtDateTime = (v: string | null | undefined) => (v ? formatDate(v, 'dd MMM yyyy, HH:mm', 'en-US') : '');
 
 /** PARTIALLY_PAID -> Partially paid */
 export const sentence = (v: string) => {

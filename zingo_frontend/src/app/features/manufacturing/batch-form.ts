@@ -1,6 +1,6 @@
 import { ChangeDetectionStrategy, Component, input } from '@angular/core';
 import { ReactiveFormsModule, Validators } from '@angular/forms';
-import { Btn, Field, Offcanvas, MoneyInput } from '../../ui';
+import { Btn, Field, MoneyInput, Offcanvas, RichText } from '../../ui';
 import { FormModal } from '../ops/form-modal';
 import { Batch, Manufacturer, Product, QC_OPTIONS } from '../ops/models';
 
@@ -10,7 +10,7 @@ const today = () => new Date().toISOString().slice(0, 10);
 @Component({
   selector: 'app-batch-form',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [MoneyInput, ReactiveFormsModule, Offcanvas, Field, Btn],
+  imports: [MoneyInput, ReactiveFormsModule, Offcanvas, Field, Btn, RichText],
   template: `
     <app-offcanvas #oc [(open)]="open" [title]="batch() ? 'Edit production batch ' + batch()!.refNo : 'New production batch'"
                subtitle="Enter the actual bundles and cost after the run, then release it once QC passes." size="lg" [dirty]="form.dirty">
@@ -54,7 +54,7 @@ const today = () => new Date().toISOString().slice(0, 10);
           <app-money-input formControlName="cost" />
         </app-field>
         <app-field label="Production notes" [wide]="true">
-          <textarea formControlName="notes" placeholder="Optional"></textarea>
+          <app-rich-text formControlName="notes" [max]="2000" placeholder="Optional" />
         </app-field>
       </form>
       <ng-container offcanvasFooter>

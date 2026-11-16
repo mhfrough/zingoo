@@ -202,7 +202,7 @@ export class ShipmentsService {
     const last = stages[stages.length - 1] ?? null;
     return orders
       .map((o) => ({
-        id: o.id, refNo: o.refNo, date: o.date, status: o.status, stage: o.stage, readyDate: o.readyDate, dueDate: o.dueDate,
+        id: o.id, refNo: o.refNo, date: o.date, createdAt: o.createdAt, updatedAt: o.updatedAt, status: o.status, stage: o.stage, readyDate: o.readyDate, dueDate: o.dueDate,
         product: { id: o.product.id, sku: o.product.sku, name: o.product.name },
         manufacturer: { id: o.manufacturer.id, name: o.manufacturer.name },
         distributor: o.distributor ? { id: o.distributor.id, name: o.distributor.name } : null,

@@ -16,6 +16,7 @@ export interface PortalProfile {
   numberFormat: string;
   /** the earlier stock-request / sales-order flow is in use */
   salesOrdersEnabled?: boolean;
+  requestsNeedApproval?: boolean;
   paymentMethods: string[];
   paymentCycles: number[];
 }
@@ -45,7 +46,17 @@ export interface PortalRequest {
   product: { sku: string; name: string };
   order: { refNo: string } | null;
   /** the production order the request became */
-  productionOrder: { refNo: string; status: string; stage: string | null; readyDate: string | null } | null;
+  productionOrder: {
+    refNo: string; status: string; stage: string | null; readyDate: string | null; reason?: string | null;
+    manufacturer?: { name: string };
+  } | null;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+/** a distributor order already past the desk: Zen Foods watches it with the manufacturer */
+export interface DeskOrder extends PortalRequest {
+  distributor: { id: string; name: string };
 }
 
 export interface PortalReceipt {
@@ -91,6 +102,7 @@ export interface PortalAdvice {
 
 /** A SKU with the distributor's price. */
 export interface PortalRate {
+  manufacturerName?: string | null;
   productId: string;
   sku: string;
   name: string;
@@ -156,6 +168,9 @@ export interface Desk {
   advices: PortalAdvice[];
   claims: PortalReceipt[];
   audit: AuditRow[];
+  /** Settings: distributor orders wait here for Zingo approval */
+  needsApproval: boolean;
+  recent: DeskOrder[];
 }
 
 export interface Attachment {

@@ -1,7 +1,7 @@
 import { ChangeDetectionStrategy, Component, input } from '@angular/core';
 import { ReactiveFormsModule, Validators } from '@angular/forms';
 import { fmtMoney } from '../../shared/format';
-import { Btn, Field, Offcanvas } from '../../ui';
+import { Btn, Field, Offcanvas, RichText } from '../../ui';
 import { FormModal } from '../ops/form-modal';
 import { Order } from '../ops/models';
 
@@ -9,7 +9,7 @@ import { Order } from '../ops/models';
 @Component({
   selector: 'app-credit-override-form',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [ReactiveFormsModule, Offcanvas, Field, Btn],
+  imports: [ReactiveFormsModule, Offcanvas, Field, Btn, RichText],
   template: `
     <app-offcanvas #oc [(open)]="open" title="Credit hold override" [subtitle]="order() ? order()!.refNo + ' · ' + order()!.distributor.name : ''" size="lg" [dirty]="form.dirty">
       @if (order(); as o) {
@@ -23,7 +23,7 @@ import { Order } from '../ops/models';
       <form [id]="formId" [formGroup]="form" (ngSubmit)="submit()" class="form-grid" novalidate>
         <app-field label="Finance authorisation / reason" [required]="true" [wide]="true"
                    [error]="invalid('reason') ? 'Give a short reason (at least 3 characters)' : null">
-          <textarea formControlName="reason" placeholder="Why is this order allowed?"></textarea>
+          <app-rich-text formControlName="reason" [max]="2000" placeholder="Why is this order allowed?" />
         </app-field>
       </form>
       <ng-container offcanvasFooter>

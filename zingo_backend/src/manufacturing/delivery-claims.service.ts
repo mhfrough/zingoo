@@ -116,8 +116,9 @@ export class DeliveryClaimsService {
       const tone = c.status === 'Rejected' ? 'danger' as const : 'success' as const;
       const body = [`${plural(c.bundles, `${c.kind.toLowerCase()} bundle`)} of ${c.product.sku} on ${c.shipment.refNo}`, c.decisionNote && `Reason: ${c.decisionNote}`].filter(Boolean).join(' · ');
       await this.notes.send(em, user,
+        // the credit is valued at the manufacturer's rate: the distributor is told the outcome, not the amount
         { to: { distributorId: c.distributorId }, kind: 'delivery-claim.decided', tone, refNo: c.refNo, link: LINK.portal('stock'),
-          title: `${c.manufacturer.name} ${outcome} on claim ${c.refNo}`, body },
+          title: `${c.manufacturer.name} ${c.status === 'Rejected' ? 'rejected' : c.resolution === 'Credit' ? 'accepted with a credit' : 'accepted: replacement goods will be sent'} on claim ${c.refNo}`, body },
         { to: { staff: [...TEAM.manufacturing, 'Distribution', 'Finance'] }, kind: 'delivery-claim.decided', tone, refNo: c.refNo, link: LINK.manufacturing('orders'),
           title: `Claim ${c.refNo} (${c.distributor.name}) ${outcome} by ${c.manufacturer.name}`, body },
         { to: { manufacturerId: c.manufacturerId }, kind: 'delivery-claim.decided', tone, refNo: c.refNo, link: LINK.factory,

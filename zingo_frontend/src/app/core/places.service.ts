@@ -14,6 +14,14 @@ interface District {
   province: string;
 }
 
+/** today's district names for the GeoNames ones: "District of West Karachi" -> "Karachi West", "Khyber Agency" -> "Khyber" */
+const cleanDistrict = (name: string | null | undefined): string | null => {
+  if (!name) return null;
+  const west = /^District of (\w+) (.+)$/.exec(name);
+  if (west) return `${west[2]} ${west[1]}`;
+  return name.replace(/ Agency$/, '');
+};
+
 /** a district or city option value: "Province|Name" (names repeat across provinces) */
 export const placeKey = (province: string, name: string) => `${province}|${name}`;
 /** the parts of a placeKey */
@@ -25,7 +33,7 @@ export const splitKey = (key: string) => {
 /**
  * Pakistan provinces, districts and cities for the searchable selects (GeoNames data in public/data/pk-places.json).
  * The file is fetched once, the first time a form asks for it; a failed fetch leaves the lists empty.
- * Districts and cities narrow down: the districts of the chosen provinces, the cities of the chosen districts.
+ * Pick a province, then its cities; a district is optional (a city's own district is known from the data).
  */
 @Injectable({ providedIn: 'root' })
 export class PlacesService {
@@ -45,8 +53,12 @@ export class PlacesService {
       .then((r) => r.json())
       .then((j: { provinces: { name: string }[]; districts?: District[]; cities: Place[] }) => {
         this.provinceNames.set(j.provinces.map((p) => p.name));
-        this.districtList.set(j.districts ?? []);
-        this.places.set(j.cities.map((c) => ({ name: c.name, province: c.province, district: c.district ?? null })));
+        const seen = new Set<string>();
+        this.districtList.set((j.districts ?? [])
+          .map((d) => ({ name: cleanDistrict(d.name)!, province: d.province }))
+          .filter((d) => !seen.has(placeKey(d.province, d.name)) && !!seen.add(placeKey(d.province, d.name)))
+          .sort((a, b) => a.province.localeCompare(b.province) || a.name.localeCompare(b.name)));
+        this.places.set(j.cities.map((c) => ({ name: c.name, province: c.province, district: cleanDistrict(c.district) })));
       })
       .catch(() => {
         this.started = false;

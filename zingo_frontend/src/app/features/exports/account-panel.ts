@@ -5,7 +5,7 @@ import { ApiService } from '../../core/api.service';
 import { SettingsStore } from '../../core/settings.store';
 import { errorText } from '../../shared/errors';
 import { fmtAmount2, fmtDate, fmtMoney } from '../../shared/format';
-import { Btn, Field, Offcanvas, Tag, ToastService } from '../../ui';
+import { Btn, Field, Offcanvas, PlainPipe, Tag, ToastService } from '../../ui';
 import { ExportsApi } from './exports.api';
 import { DistributorAccount, ExportRow, Remittance } from './models';
 
@@ -19,7 +19,7 @@ const today = () => new Date().toISOString().slice(0, 10);
 @Component({
   selector: 'app-account-panel',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [ReactiveFormsModule, Offcanvas, Field, Btn, Tag],
+  imports: [ReactiveFormsModule, Offcanvas, Field, Btn, Tag, PlainPipe],
   styles: `
     h3 {
       margin: var(--space-5) 0 var(--space-2);
@@ -197,7 +197,7 @@ const today = () => new Date().toISOString().slice(0, 10);
               <div>
                 <small>{{ v.refNo }} · {{ date(v.date) }} · sent by {{ v.sentBy }}{{ v.bankRef ? ' · ' + v.bankRef : '' }}</small>
                 <strong>{{ v.currency }} {{ amt(v.amount) }}</strong> {{ v.forInvoices ? 'for ' + v.forInvoices : '' }}
-                <small>{{ v.status }}{{ v.reviewNote ? ' · ' + v.reviewNote : '' }}{{ v.proof ? ' · proof: ' + v.proof.name : '' }}</small>
+                <small>{{ v.status }}{{ v.reviewNote ? ' · ' + (v.reviewNote | plain) : '' }}{{ v.proof ? ' · proof: ' + v.proof.name : '' }}</small>
                 @if (v.status === 'Submitted' && canWrite()) {
                   <div class="row">
                     <button appBtn size="sm" (click)="fromAdvice(v)">Record from this advice</button>
@@ -300,9 +300,9 @@ const today = () => new Date().toISOString().slice(0, 10);
                   <tr>
                     <td>{{ c.refNo }}<small>{{ date(c.date) }} · {{ c.raisedBy }}</small></td>
                     <td>{{ c.shipment.refNo }}</td>
-                    <td>{{ c.kind }} · {{ c.quantity }} bundle(s)<small>{{ c.description }}</small></td>
+                    <td>{{ c.kind }} · {{ c.quantity }} bundle(s)<small>{{ c.description | plain }}</small></td>
                     <td class="num">{{ c.creditAmount ? c.shipment.currency + ' ' + amt(c.creditAmount) : '-' }}<small>{{ c.creditNoteRef ?? c.resolution ?? '' }}</small></td>
-                    <td><app-tag [tone]="c.status === 'Approved' ? 'success' : c.status === 'Rejected' ? 'danger' : 'warning'">{{ c.status }}</app-tag><small>{{ c.decisionNote ?? '' }}</small></td>
+                    <td><app-tag [tone]="c.status === 'Approved' ? 'success' : c.status === 'Rejected' ? 'danger' : 'warning'">{{ c.status }}</app-tag><small>{{ c.decisionNote | plain }}</small></td>
                   </tr>
                 }
               </tbody>

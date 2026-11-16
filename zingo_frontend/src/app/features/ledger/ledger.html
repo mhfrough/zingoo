@@ -58,7 +58,7 @@
           </select>
         </div>
         <div class="card__body">
-          <app-data-table [columns]="ledgerColumns" [rows]="ledgerRows()" [loading]="lines.isLoading()"
+          <app-data-table keepOrder [columns]="ledgerColumns" [rows]="ledgerRows()" [loading]="lines.isLoading()"
             [error]="lines.error() ? 'The server did not answer.' : null" searchPlaceholder="Search this ledger"
             emptyTitle="No lines" emptyText="Nothing is posted to this account in this period." (retry)="reload()" />
         </div>

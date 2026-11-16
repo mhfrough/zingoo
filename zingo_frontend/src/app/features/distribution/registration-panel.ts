@@ -4,7 +4,7 @@ import { ApiService } from '../../core/api.service';
 import { AuthService } from '../../core/auth.service';
 import { errorText } from '../../shared/errors';
 import { Tone } from '../../shared/format';
-import { Btn, Offcanvas, Tag, ToastService } from '../../ui';
+import { Btn, Offcanvas, PlainPipe, Tag, ToastService } from '../../ui';
 
 /** one step of the trail */
 interface RegistrationEvent {
@@ -51,7 +51,7 @@ const TONE: Record<string, Tone> = {
 @Component({
   selector: 'app-registration-panel',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [Offcanvas, Tag, Btn],
+  imports: [Offcanvas, Tag, Btn, PlainPipe],
   styles: `
     .head {
       display: flex;
@@ -196,7 +196,7 @@ const TONE: Record<string, Tone> = {
             @for (e of r.events; track e.id) {
               <li>
                 <strong>{{ e.action }}{{ e.step ? ' · ' + e.step : '' }}</strong> {{ e.fromStatus !== e.toStatus ? '(' + e.fromStatus + ' → ' + e.toStatus + ')' : '' }}
-                <small>{{ when(e.createdAt) }} · {{ e.by }} ({{ e.role }}){{ e.note ? ' · ' + e.note : '' }}</small>
+                <small>{{ when(e.createdAt) }} · {{ e.by }} ({{ e.role }}){{ e.note ? ' · ' + (e.note | plain) : '' }}</small>
               </li>
             }
           </ol>

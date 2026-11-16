@@ -12,6 +12,7 @@ export class UpdateSettingsDto {
   @IsOptional() @IsInt() @Min(1) @Max(365) defaultSelloutDays?: number;
   @IsOptional() @IsNumber() @Min(0) @Max(100) defaultAdvancePct?: number;
   @IsOptional() @IsBoolean() salesOrdersEnabled?: boolean;
+  @IsOptional() @IsBoolean() requestsNeedApproval?: boolean;
   @IsOptional() @IsNumber() @Min(0) approvalThreshold?: number;
   @IsOptional() @IsString() signatoryA?: string;
   @IsOptional() @IsString() signatoryB?: string;

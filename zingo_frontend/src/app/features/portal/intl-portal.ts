@@ -6,7 +6,7 @@ import { AttachmentMeta } from '../../core/attachments.api';
 import { AuthService } from '../../core/auth.service';
 import { errorText } from '../../shared/errors';
 import { fmtAmount2, fmtDate } from '../../shared/format';
-import { Btn, Field, FileInput, FilesInput, Tag, ToastService } from '../../ui';
+import { Btn, Field, FileInput, FilesInput, PlainPipe, Tag, ToastService } from '../../ui';
 
 /** what the portal sees of an order: no Zen Foods costs or margins */
 interface PortalExportOrder {
@@ -38,7 +38,7 @@ const today = () => new Date().toISOString().slice(0, 10);
 @Component({
   selector: 'app-intl-portal',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [ReactiveFormsModule, Btn, Field, FileInput, FilesInput, Tag],
+  imports: [ReactiveFormsModule, Btn, Field, FileInput, FilesInput, Tag, PlainPipe],
   styles: `
     :host { display: block; }
     section { margin-block-end: var(--space-6); }
@@ -138,7 +138,7 @@ const today = () => new Date().toISOString().slice(0, 10);
                   <td>{{ c.kind }} · {{ c.quantity }} bundle(s)</td>
                   <td>
                     <app-tag [tone]="c.status === 'Approved' ? 'success' : c.status === 'Rejected' ? 'danger' : 'warning'">{{ c.status }}</app-tag>
-                    <small>{{ c.creditNoteRef ? c.creditNoteRef + ' · ' + c.shipment.currency + ' ' + amt(c.creditAmount) : c.resolution ?? '' }}{{ c.decisionNote ? ' · ' + c.decisionNote : '' }}</small>
+                    <small>{{ c.creditNoteRef ? c.creditNoteRef + ' · ' + c.shipment.currency + ' ' + amt(c.creditAmount) : c.resolution ?? '' }}{{ c.decisionNote ? ' · ' + (c.decisionNote | plain) : '' }}</small>
                   </td>
                 </tr>
               } @empty {
@@ -182,7 +182,7 @@ const today = () => new Date().toISOString().slice(0, 10);
               }
               @for (v of a.advices; track v.id) {
                 <tr><td>{{ v.refNo }}</td><td>{{ date(v.date) }}</td><td class="num">{{ v.currency }} {{ amt(v.amount) }}</td>
-                  <td><app-tag [tone]="v.status === 'Recorded' ? 'success' : v.status === 'Rejected' ? 'danger' : 'warning'">{{ v.status === 'Submitted' ? 'Advice sent' : v.status }}</app-tag><small>{{ v.reviewNote ?? '' }}</small></td></tr>
+                  <td><app-tag [tone]="v.status === 'Recorded' ? 'success' : v.status === 'Rejected' ? 'danger' : 'warning'">{{ v.status === 'Submitted' ? 'Advice sent' : v.status }}</app-tag><small>{{ v.reviewNote | plain }}</small></td></tr>
               }
               @if (!a.remittances.length && !a.advices.length) {
                 <tr><td colspan="4">No payments yet.</td></tr>

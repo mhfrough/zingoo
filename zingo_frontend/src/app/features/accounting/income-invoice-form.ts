@@ -4,7 +4,7 @@ import { NonNullableFormBuilder, ReactiveFormsModule, Validators } from '@angula
 import { SettingsStore } from '../../core/settings.store';
 import { errorText } from '../../shared/errors';
 import { fmtMoney } from '../../shared/format';
-import { Btn, Field, MoneyInput, Offcanvas, TabItem, Tabs, Tag } from '../../ui';
+import { Btn, Field, MoneyInput, Offcanvas, RichText, TabItem, Tabs, Tag } from '../../ui';
 import { FinanceApi } from '../finance/finance.api';
 import { AccountingDoc, Currency } from '../finance/models';
 import { FormModal } from '../ops/form-modal';
@@ -43,7 +43,7 @@ type LineForm = ReturnType<typeof lineGroup>;
 @Component({
   selector: 'app-income-invoice-form',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [ReactiveFormsModule, Offcanvas, Field, MoneyInput, Btn, Tabs, Tag],
+  imports: [ReactiveFormsModule, Offcanvas, Field, MoneyInput, Btn, Tabs, Tag, RichText],
   styles: `
     .step {
       display: flex;
@@ -277,7 +277,7 @@ type LineForm = ReturnType<typeof lineGroup>;
 
               <section class="block">
                 <header><h3>Internal notes</h3></header>
-                <app-field label="Notes"><textarea formControlName="note" placeholder="Commercial notes, special terms, discount approval, references"></textarea></app-field>
+                <app-field label="Notes"><app-rich-text formControlName="note" [max]="2000" placeholder="Commercial notes, special terms, discount approval, references" /></app-field>
               </section>
             </div>
           }

@@ -3,7 +3,7 @@ import { toSignal } from '@angular/core/rxjs-interop';
 import { ReactiveFormsModule, Validators } from '@angular/forms';
 import { fmtMoney } from '../../shared/format';
 import { ProofFile, readProof } from '../../shared/files';
-import { Btn, Field, Offcanvas, MoneyInput } from '../../ui';
+import { Btn, Field, MoneyInput, Offcanvas, RichText } from '../../ui';
 import { FormModal } from '../ops/form-modal';
 import { PortalApi } from './portal.api';
 import { PortalOrder } from './portal.models';
@@ -21,7 +21,7 @@ export const payableOf = (o: PortalOrder) =>
 @Component({
   selector: 'app-advice-form',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [MoneyInput, ReactiveFormsModule, Offcanvas, Field, Btn],
+  imports: [MoneyInput, ReactiveFormsModule, Offcanvas, Field, Btn, RichText],
   template: `
     <app-offcanvas #oc [(open)]="open" title="Report a payment" size="lg" [dirty]="form.dirty"
                    subtitle="This is an advice, not confirmed cash. Zingo checks it against the bank record.">
@@ -61,7 +61,7 @@ export const payableOf = (o: PortalOrder) =>
         <app-field label="Receipt or screenshot" [wide]="true" [hint]="file() ? file()!.proofName : 'Image or PDF, under 450 KB'" [error]="fileError() || null">
           <input type="file" accept="image/png,image/jpeg,image/webp,image/gif,application/pdf" (change)="pick($event)" />
         </app-field>
-        <app-field label="Remark" [wide]="true"><textarea formControlName="note"></textarea></app-field>
+        <app-field label="Remark" [wide]="true"><app-rich-text formControlName="note" [max]="2000" /></app-field>
       </form>
       <ng-container offcanvasFooter>
         <button appBtn type="button" (click)="oc.requestClose()">Cancel</button>

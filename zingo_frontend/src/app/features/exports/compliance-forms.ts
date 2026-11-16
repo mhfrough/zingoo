@@ -6,7 +6,7 @@ import { AuthService } from '../../core/auth.service';
 import { SettingsStore } from '../../core/settings.store';
 import { countryOptions } from '../../shared/countries';
 import { fmtAmount2 } from '../../shared/format';
-import { Btn, Field, FileInput, FilesInput, Offcanvas, Select, SelectOption } from '../../ui';
+import { Btn, Field, FileInput, FilesInput, Offcanvas, PlainPipe, RichText, Select, SelectOption } from '../../ui';
 import { FormModal } from '../ops/form-modal';
 import { Product } from '../ops/models';
 import { ExportClaim, ExportRow, MarketApproval } from './models';
@@ -126,7 +126,7 @@ export class LogisticsForm extends FormModal {
 @Component({
   selector: 'app-claim-form',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [ReactiveFormsModule, Offcanvas, Field, Btn, FilesInput],
+  imports: [ReactiveFormsModule, Offcanvas, Field, Btn, FilesInput, RichText],
   template: `
     <app-offcanvas #oc [(open)]="open" title="Raise a claim" [subtitle]="shipment() ? shipment()!.refNo + ' · ' + shipment()!.cartons + ' bundles' : ''" size="md" [dirty]="form.dirty">
       @if (error()) {
@@ -139,7 +139,7 @@ export class LogisticsForm extends FormModal {
         </app-field>
         <app-field label="Bundles" [required]="true"><input type="number" formControlName="quantity" min="1" step="1" /></app-field>
         <app-field label="Batch"><input type="text" formControlName="batchRef" maxlength="60" /></app-field>
-        <app-field label="What happened" [required]="true" [wide]="true"><textarea formControlName="description" rows="3" maxlength="2000"></textarea></app-field>
+        <app-field label="What happened" [required]="true" [wide]="true"><app-rich-text formControlName="description" [max]="2000" [storeMax]="2000" /></app-field>
         <app-field label="Photos" [wide]="true"><app-files-input formControlName="photos" /></app-field>
       </form>
       <ng-container offcanvasFooter>
@@ -174,11 +174,11 @@ export class ClaimForm extends FormModal {
 @Component({
   selector: 'app-claim-decision-form',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [ReactiveFormsModule, Offcanvas, Field, Btn],
+  imports: [ReactiveFormsModule, Offcanvas, Field, Btn, PlainPipe],
   template: `
     <app-offcanvas #oc [(open)]="open" title="Decide claim" [subtitle]="claim() ? claim()!.refNo + ' · ' + claim()!.kind + ' · ' + claim()!.quantity + ' bundle(s)' : ''" size="md" [dirty]="form.dirty">
       @if (claim(); as c) {
-        <div class="notice"><span>{{ c.description }}{{ c.photos.length ? ' · ' + c.photos.length + ' photo(s)' : '' }} · raised by {{ c.raisedBy }}</span></div>
+        <div class="notice"><span>{{ c.description | plain }}{{ c.photos.length ? ' · ' + c.photos.length + ' photo(s)' : '' }} · raised by {{ c.raisedBy }}</span></div>
       }
       @if (error()) {
         <div class="notice" data-tone="danger" role="alert">{{ error() }}</div>

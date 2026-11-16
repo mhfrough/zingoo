@@ -2,7 +2,7 @@ import { ChangeDetectionStrategy, Component, computed, input } from '@angular/co
 import { takeUntilDestroyed, toSignal } from '@angular/core/rxjs-interop';
 import { ReactiveFormsModule, Validators } from '@angular/forms';
 import { fmtMoney } from '../../shared/format';
-import { Btn, Field, Offcanvas, MoneyInput } from '../../ui';
+import { Btn, Field, MoneyInput, Offcanvas, RichText } from '../../ui';
 import { FormModal } from '../ops/form-modal';
 import { Distributor, Order, Product } from '../ops/models';
 
@@ -12,7 +12,7 @@ const today = () => new Date().toISOString().slice(0, 10);
 @Component({
   selector: 'app-order-form',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [MoneyInput, ReactiveFormsModule, Offcanvas, Field, Btn],
+  imports: [MoneyInput, ReactiveFormsModule, Offcanvas, Field, Btn, RichText],
   template: `
     <app-offcanvas #oc [(open)]="open" [title]="order() ? 'Edit draft order ' + order()!.refNo : 'New distributor sales order'"
                subtitle="Dispatch it later to reserve stock and create the invoice." size="lg" [dirty]="form.dirty">
@@ -46,7 +46,7 @@ const today = () => new Date().toISOString().slice(0, 10);
         <app-field label="Distributor PO number">
           <input type="text" formControlName="poRef" placeholder="Optional" />
         </app-field>
-        <app-field label="Notes" [wide]="true"><textarea formControlName="notes" placeholder="Optional"></textarea></app-field>
+        <app-field label="Notes" [wide]="true"><app-rich-text formControlName="notes" [max]="2000" placeholder="Optional" /></app-field>
       </form>
       @if (invoice() > 0) {
         <div class="notice">

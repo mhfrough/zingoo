@@ -79,7 +79,9 @@ export class FileInput implements ControlValueAccessor {
     }
     this.busy.set(true);
     this.api.upload(chosen).subscribe({
-      next: (meta) => {
+      next: ({ id, name, mime, size }) => {
+        // only the file's details go into the form (the server answers with more, which the API would refuse)
+        const meta = { id, name, mime, size };
         this.busy.set(false);
         this.file.set(meta);
         this.onChange(meta);

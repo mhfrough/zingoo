@@ -1,6 +1,6 @@
 import { ChangeDetectionStrategy, Component, computed, inject, input, output, signal } from '@angular/core';
 import { errorText } from '../../shared/errors';
-import { fmtDate, fmtMoney, fmtNumber } from '../../shared/format';
+import { fmtDate, fmtMoney, fmtNumber, productLabel, qtyLabel } from '../../shared/format';
 import { Btn, ConfirmService, DataTable, RowAction, RowActionEvent, TableColumn, ToastService } from '../../ui';
 import { Distributor, Manufacturer, Product } from '../ops/models';
 import { AcceptOrderForm, OrderReasonForm, OrderStageForm, OrderTimeline } from './answer-forms';
@@ -82,14 +82,14 @@ export class OrdersPanel {
   });
 
   protected columns = computed<TableColumn<ProductionOrder>[]>(() => [
-    { id: 'ref', label: 'Order', value: (o) => o.refNo, sub: (o) => fmtDate(o.date) },
+    { id: 'order', label: 'Order / Deliver to', kind: 'title', value: (o) => productLabel(o.product), sub: (o) => destination(o) },
     {
-      id: 'product', label: 'Product', value: (o) => `${fmtNumber(o.containers)} × ${o.product.sku}`,
-      sub: (o) => `${fmtNumber(o.bundles)} bundles · ${fmtNumber(o.packets)} packets`,
+      id: 'ref', label: 'Order no. / quantity', kind: 'mono', value: (o) => o.refNo, sortValue: (o) => o.date,
+      sub: (o) => `${fmtDate(o.date)} · ${qtyLabel(o.containers, o.bundles)}`,
     },
     this.mode() === 'company'
-      ? { id: 'who', label: 'Manufacturer', priority: 2, value: (o) => o.manufacturer.name, sub: (o) => `to ${destination(o)}` }
-      : { id: 'who', label: 'Deliver to', priority: 2, value: (o) => destination(o), sub: (o) => (o.dueDate ? `by ${fmtDate(o.dueDate)}` : null) },
+      ? { id: 'who', label: 'Manufacturer', priority: 2, value: (o) => o.manufacturer.name, sub: (o) => (o.dueDate ? `needed by ${fmtDate(o.dueDate)}` : null) }
+      : { id: 'who', label: 'Needed by', priority: 2, value: (o) => (o.dueDate ? fmtDate(o.dueDate) : 'No date'), sub: (o) => `${fmtNumber(o.packets)} packets` },
     { id: 'value', label: 'Order value', kind: 'money', value: (o) => o.value, sub: (o) => `Advance ${o.advancePct}% · ${fmtMoney(o.advanceAmount)}`, priority: 2 },
     {
       id: 'status', label: 'Status', kind: 'tag', value: (o) => orderState(o), tone: (o) => (o.overdue ? 'danger' : ORDER_TONE[o.status]),

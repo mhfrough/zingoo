@@ -3,8 +3,8 @@ import { rxResource, toSignal } from '@angular/core/rxjs-interop';
 import { ReactiveFormsModule, Validators } from '@angular/forms';
 import { errorText } from '../../shared/errors';
 import { ProofFile, downloadBase64, readProof } from '../../shared/files';
-import { Tone, fmtDate, fmtMoney, fmtNumber } from '../../shared/format';
-import { Btn, DataTable, Field, Offcanvas, RowAction, RowActionEvent, Select, SelectOption, TableColumn, ToastService } from '../../ui';
+import { Tone, fmtDate, fmtMoney, fmtNumber, productLabel } from '../../shared/format';
+import { Btn, DataTable, Field, Offcanvas, PlainPipe, RichText, RowAction, RowActionEvent, Select, SelectOption, TableColumn, ToastService } from '../../ui';
 import { FormModal } from '../ops/form-modal';
 import { DeliveryClaim, FactoryApi, Shipment } from './factory.api';
 
@@ -16,7 +16,7 @@ const KIND_TEXT: Record<string, string> = { Damaged: 'Damaged bundles', Missing:
 @Component({
   selector: 'app-delivery-claim-form',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [ReactiveFormsModule, Offcanvas, Field, Btn, Select],
+  imports: [ReactiveFormsModule, Offcanvas, Field, Btn, Select, RichText],
   template: `
     <app-offcanvas #oc [(open)]="open" title="Report faulty goods" subtitle="The manufacturer the goods came from decides; Zen Foods sees it too." size="lg" [dirty]="form.dirty">
       @if (error()) {
@@ -29,7 +29,7 @@ const KIND_TEXT: Record<string, string> = { Damaged: 'Damaged bundles', Missing:
         @if (picked(); as s) {
           <div class="notice" style="grid-column: 1 / -1">
             <span>From <strong>{{ s.manufacturer.name }}</strong> · {{ fmtNumber(received()) }} bundles received on {{ fmtDate(s.receivedDate) }}
-              · PKR {{ fmtNumber(perBundle()) }} a bundle</span>
+              @if (perBundle()) { · PKR {{ fmtNumber(perBundle()) }} a bundle }</span>
           </div>
         }
         <app-field label="What is wrong" [required]="true">
@@ -44,7 +44,7 @@ const KIND_TEXT: Record<string, string> = { Damaged: 'Damaged bundles', Missing:
         </app-field>
         <app-field label="Date" [required]="true"><input type="date" formControlName="date" [min]="picked()?.receivedDate ?? ''" [max]="maxDate" /></app-field>
         <app-field label="What happened" [wide]="true" [required]="true" [error]="invalid('note') ? 'Describe the fault' : null">
-          <textarea formControlName="note" rows="3" maxlength="500"></textarea>
+          <app-rich-text formControlName="note" [max]="500" [storeMax]="500" />
         </app-field>
         <app-field label="Photo or PDF" [wide]="true" [hint]="file() ? file()!.proofName : 'Image or PDF, under 450 KB'" [error]="fileError() || null">
           <input type="file" accept="image/png,image/jpeg,image/webp,image/gif,application/pdf" (change)="pick($event)" />
@@ -84,7 +84,8 @@ export class DeliveryClaimForm extends FormModal {
   })));
   protected picked = computed(() => this.lots().find((s) => s.id === this.v().shipmentId) ?? null);
   protected received = computed(() => (this.picked() ? (this.picked()!.receivedContainers ?? 0) * this.picked()!.bundlesPerContainer : 0));
-  protected perBundle = computed(() => (this.picked() ? Math.round(this.picked()!.packetsPerBundle * Number(this.picked()!.rate) * 100) / 100 : 0));
+  /** staff only: a distributor login never receives the manufacturer's rate the claim is valued at */
+  protected perBundle = computed(() => (this.picked()?.rate ? Math.round(this.picked()!.packetsPerBundle * Number(this.picked()!.rate) * 100) / 100 : 0));
   protected value = computed(() => Math.round(Number(this.v().bundles ?? 0) * this.perBundle() * 100) / 100);
 
   protected reset() {
@@ -117,14 +118,14 @@ export class DeliveryClaimForm extends FormModal {
 @Component({
   selector: 'app-delivery-claim-decide',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [ReactiveFormsModule, Offcanvas, Field, Btn],
+  imports: [ReactiveFormsModule, Offcanvas, Field, Btn, RichText, PlainPipe],
   template: `
     <app-offcanvas #oc [(open)]="open" [title]="'Decide ' + (c()?.refNo ?? 'claim')" [subtitle]="subject()" size="md" [dirty]="form.dirty">
       @if (error()) {
         <div class="notice" data-tone="danger" role="alert">{{ error() }}</div>
       }
       @if (c(); as c) {
-        <div class="notice" style="margin-block-end: var(--space-4)"><span><strong>{{ c.distributor }}</strong>: {{ c.note }}</span></div>
+        <div class="notice" style="margin-block-end: var(--space-4)"><span><strong>{{ c.distributor }}</strong>: {{ c.note | plain }}</span></div>
       }
       <form [id]="formId" [formGroup]="form" (ngSubmit)="submit()" class="form-grid" novalidate>
         <app-field label="Decision" [wide]="true" [required]="true">
@@ -136,7 +137,7 @@ export class DeliveryClaimForm extends FormModal {
         </app-field>
         <app-field label="Note" [wide]="true" [required]="rejecting()" [hint]="rejecting() ? 'Say why; the distributor sees it' : 'Optional'"
                    [error]="rejecting() && invalid('note') ? 'Give a reason' : null">
-          <textarea formControlName="note" rows="3" maxlength="500"></textarea>
+          <app-rich-text formControlName="note" [max]="500" [storeMax]="500" />
         </app-field>
       </form>
       <ng-container offcanvasFooter>
@@ -249,14 +250,14 @@ export class DeliveryClaimsPanel {
   protected lots = computed(() => this.shipments().filter((s) => s.status === 'Received' && s.destination === 'Distributor' && (s.receivedContainers ?? 0) > 0));
 
   protected columns = computed<TableColumn<DeliveryClaim>[]>(() => [
-    { id: 'ref', label: 'Claim', value: (c) => c.refNo, sub: (c) => `${fmtDate(c.date)} · by ${c.raisedBy}` },
-    { id: 'what', label: 'Faulty goods', value: (c) => `${fmtNumber(c.bundles)} × ${c.sku}`, sub: (c) => `${KIND_TEXT[c.kind] ?? c.kind} · ${c.shipmentRef}` },
+    { id: 'what', label: 'Faulty goods', kind: 'title', value: (c) => productLabel({ name: c.productName, sku: c.sku ?? '' }), sub: (c) => `${fmtNumber(c.bundles)} bundles · ${KIND_TEXT[c.kind] ?? c.kind}` },
+    { id: 'ref', label: 'Claim no.', kind: 'mono', value: (c) => c.refNo, sortValue: (c) => c.date, sub: (c) => `${fmtDate(c.date)} · ${c.shipmentRef} · by ${c.raisedBy}` },
     {
       id: 'party', label: this.mode() === 'factory' ? 'Distributor' : this.mode() === 'distributor' ? 'Manufacturer' : 'Distributor / manufacturer', priority: 2,
       value: (c) => (this.mode() === 'factory' ? c.distributor : this.mode() === 'distributor' ? c.manufacturer : c.distributor) ?? '',
       sub: (c) => (this.mode() === 'company' ? `from ${c.manufacturer}` : c.note),
     },
-    { id: 'value', label: 'Value', kind: 'money', value: (c) => c.value, priority: 2 },
+    ...(this.mode() === 'distributor' ? [] : [{ id: 'value', label: 'Value', kind: 'money', value: (c: DeliveryClaim) => c.value, priority: 2 } as TableColumn<DeliveryClaim>]),
     {
       id: 'status', label: 'Status', kind: 'tag',
       value: (c) => (c.status === 'Pending' ? `Waiting for ${this.mode() === 'factory' ? 'you' : c.manufacturer}` : c.status === 'Rejected' ? 'Rejected' : c.resolution === 'Credit' ? 'Accepted · credit' : 'Accepted · replacement'),

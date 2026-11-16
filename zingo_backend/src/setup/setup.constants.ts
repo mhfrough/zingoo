@@ -11,6 +11,7 @@ export const DEFAULT_SETTINGS = {
   defaultSelloutDays: 30,
   defaultAdvancePct: 30,
   salesOrdersEnabled: false,
+  requestsNeedApproval: false,
   approvalThreshold: 50000,
   signatoryA: 'Signatory A (Arittek)',
   signatoryB: 'Signatory B (BCP)',

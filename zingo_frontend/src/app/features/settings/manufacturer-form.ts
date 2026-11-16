@@ -3,7 +3,7 @@ import { ChangeDetectionStrategy, Component, computed, inject, input } from '@an
 import { toSignal } from '@angular/core/rxjs-interop';
 import { FormArray, FormGroup, ReactiveFormsModule, Validators } from '@angular/forms';
 import { SettingsStore } from '../../core/settings.store';
-import { Btn, Field, FilesInput, MoneyInput, MultiSelect, Offcanvas, Select, SelectOption } from '../../ui';
+import { Btn, Field, FilesInput, MoneyInput, MultiSelect, Offcanvas, RichText, Select, SelectOption } from '../../ui';
 import { FormModal } from '../ops/form-modal';
 import { Manufacturer, PartnerBankAccount } from '../ops/models';
 import { SettingsApi } from './settings.api';
@@ -16,7 +16,7 @@ import { SettingsApi } from './settings.api';
 @Component({
   selector: 'app-manufacturer-form',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [FilesInput, ReactiveFormsModule, Offcanvas, Field, Btn, Select, MultiSelect, MoneyInput],
+  imports: [FilesInput, ReactiveFormsModule, Offcanvas, Field, Btn, Select, MultiSelect, MoneyInput, RichText],
   styles: `
     .form-section {
       grid-column: 1 / -1;
@@ -129,7 +129,7 @@ import { SettingsApi } from './settings.api';
         <h4 class="form-section">Contract</h4>
         <app-field label="Point of contact" hint="Who to speak to: name, phone or email"><input type="text" formControlName="poc" maxlength="150" /></app-field>
         <app-field label="Contract" hint="Contract number or title"><input type="text" formControlName="contract" maxlength="150" /></app-field>
-        <app-field label="Terms" [wide]="true"><textarea formControlName="terms" maxlength="5000" placeholder="What was agreed: rates, payment, delivery, exclusivity"></textarea></app-field>
+        <app-field label="Terms" [wide]="true"><app-rich-text formControlName="terms" [max]="5000" [storeMax]="5000" placeholder="What was agreed: rates, payment, delivery, exclusivity" /></app-field>
         <app-field label="Uploads" [wide]="true" hint="Signed contract, licences, pictures. Several files at once"><app-files-input formControlName="files" label="Upload files" /></app-field>
       </form>
       <ng-container offcanvasFooter>

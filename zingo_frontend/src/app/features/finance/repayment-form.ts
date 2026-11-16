@@ -4,7 +4,7 @@ import { ReactiveFormsModule, Validators } from '@angular/forms';
 import { AttachmentMeta } from '../../core/attachments.api';
 import { SettingsStore } from '../../core/settings.store';
 import { fmtMoney } from '../../shared/format';
-import { Btn, Field, FileInput, MoneyInput, Offcanvas } from '../../ui';
+import { Btn, Field, FileInput, MoneyInput, Offcanvas, RichText } from '../../ui';
 import { FormModal } from '../ops/form-modal';
 import { FinanceApi } from './finance.api';
 import { FinanceEntry } from './models';
@@ -18,7 +18,7 @@ const today = () => new Date().toISOString().slice(0, 10);
 @Component({
   selector: 'app-repayment-form',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [ReactiveFormsModule, Offcanvas, Field, Btn, MoneyInput, FileInput],
+  imports: [ReactiveFormsModule, Offcanvas, Field, Btn, MoneyInput, FileInput, RichText],
   template: `
     <app-offcanvas #oc [(open)]="open" [title]="title()" [subtitle]="subtitle()" size="lg" [dirty]="form.dirty">
       @if (error()) {
@@ -44,7 +44,7 @@ const today = () => new Date().toISOString().slice(0, 10);
           </select>
         </app-field>
         <app-field label="Reference" [wide]="true"><input type="text" formControlName="reference" placeholder="Transaction id, slip or voucher no." /></app-field>
-        <app-field label="Notes" [wide]="true"><textarea formControlName="note" placeholder="Optional"></textarea></app-field>
+        <app-field label="Notes" [wide]="true"><app-rich-text formControlName="note" [max]="2000" placeholder="Optional" /></app-field>
         <app-field label="Proof" [wide]="true"><app-file-input formControlName="proof" label="Attach proof" /></app-field>
       </form>
       <ng-container offcanvasFooter>

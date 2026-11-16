@@ -1,3 +1,5 @@
+import { richToPlain } from '../ui/rich-text';
+
 /** One block of a CSV export: a title line, then a header row and the data rows. */
 export interface CsvSection {
   title: string;
@@ -6,7 +8,8 @@ export interface CsvSection {
 
 /** Quotes a cell when it contains a comma, a quote or a line break. */
 function cell(value: string | number | null | undefined): string {
-  const text = value === null || value === undefined ? '' : String(value);
+  // a note from the rich-text editor goes out as plain text, its lines kept
+  const text = value === null || value === undefined ? '' : richToPlain(String(value));
   return /[",\r\n]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
 }
 

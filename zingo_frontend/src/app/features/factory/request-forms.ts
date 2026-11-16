@@ -3,7 +3,7 @@ import { takeUntilDestroyed, toSignal } from '@angular/core/rxjs-interop';
 import { ReactiveFormsModule, Validators } from '@angular/forms';
 import { SettingsStore } from '../../core/settings.store';
 import { fmtMoney } from '../../shared/format';
-import { Btn, Field, MoneyInput, Offcanvas, Select, SelectOption } from '../../ui';
+import { Btn, Field, MoneyInput, Offcanvas, RichText, Select, SelectOption } from '../../ui';
 import { FormModal } from '../ops/form-modal';
 import { Manufacturer } from '../ops/models';
 import { FactoryApi, PaymentRequest, PositionRow } from './factory.api';
@@ -17,7 +17,7 @@ const today = () => new Date().toISOString().slice(0, 10);
 @Component({
   selector: 'app-payment-request-form',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [ReactiveFormsModule, Offcanvas, Field, Btn, Select, MoneyInput],
+  imports: [ReactiveFormsModule, Offcanvas, Field, Btn, Select, MoneyInput, RichText],
   template: `
     <app-offcanvas #oc [(open)]="open" title="Request payment" subtitle="Advance or balance of an accepted order." size="lg" [dirty]="form.dirty">
       @if (error()) {
@@ -43,7 +43,7 @@ const today = () => new Date().toISOString().slice(0, 10);
           <app-select formControlName="bankAccount" [options]="bankOptions()" placeholder="Choose a bank account" [clearable]="false" />
         </app-field>
         <app-field label="Your invoice no."><input type="text" formControlName="invoiceNo" maxlength="60" /></app-field>
-        <app-field label="Note" [wide]="true"><textarea formControlName="note" rows="2" maxlength="500"></textarea></app-field>
+        <app-field label="Note" [wide]="true"><app-rich-text formControlName="note" [max]="500" [storeMax]="500" /></app-field>
       </form>
       <ng-container offcanvasFooter>
         <button appBtn type="button" (click)="oc.requestClose()">Cancel</button>
@@ -125,7 +125,7 @@ export class PaymentRequestForm extends FormModal {
 @Component({
   selector: 'app-pay-request-form',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [ReactiveFormsModule, Offcanvas, Field, Btn, MoneyInput],
+  imports: [ReactiveFormsModule, Offcanvas, Field, Btn, MoneyInput, RichText],
   template: `
     <app-offcanvas #oc [(open)]="open" [title]="req() ? 'Pay ' + req()!.refNo : 'Pay request'" [subtitle]="subject()" size="lg" [dirty]="form.dirty">
       @if (error()) {
@@ -158,7 +158,7 @@ export class PaymentRequestForm extends FormModal {
           </select>
         </app-field>
         <app-field label="Transfer / cheque ref."><input type="text" formControlName="reference" maxlength="80" /></app-field>
-        <app-field label="Note" [wide]="true"><textarea formControlName="note" rows="2" maxlength="500"></textarea></app-field>
+        <app-field label="Note" [wide]="true"><app-rich-text formControlName="note" [max]="500" [storeMax]="500" /></app-field>
       </form>
       <ng-container offcanvasFooter>
         <button appBtn type="button" (click)="oc.requestClose()">Cancel</button>

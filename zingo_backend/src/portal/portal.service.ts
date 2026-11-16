@@ -1,6 +1,6 @@
 import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectDataSource } from '@nestjs/typeorm';
-import { DataSource, EntityManager } from 'typeorm';
+import { DataSource, EntityManager, Not } from 'typeorm';
 import { Distributor, DistributorRate, Product } from '../catalog/catalog.entities';
 import { round2 } from '../common/numeric.transformer';
 import { nextRef } from '../common/ref';
@@ -124,6 +124,7 @@ export class PortalService {
       creditHeld: round2(credit.v),
       numberFormat: s.numberFormat,
       salesOrdersEnabled: !!s.salesOrdersEnabled,
+      requestsNeedApproval: !!s.requestsNeedApproval,
       paymentMethods: methods.filter((m) => m.active).map((m) => m.code),
       paymentCycles: s.paymentCycles,
     };
@@ -156,8 +157,25 @@ export class PortalService {
     });
   }
 
-  requestsOf(distributorId: string) {
-    return this.db.manager.find(PortalRequest, { where: { distributorId }, relations: ['product', 'order', 'productionOrder'], order: { date: 'DESC', refNo: 'DESC' } });
+  /**
+   * The distributor's requests and what became of them. Only what the distributor may see: never the manufacturer's
+   * rate, advance or the product's cost lines (Zen Foods buys from the manufacturer and sells to the distributor).
+   */
+  async requestsOf(distributorId: string) {
+    const rows = await this.db.manager.find(PortalRequest, {
+      where: { distributorId }, relations: ['product', 'order', 'productionOrder', 'productionOrder.manufacturer'],
+      order: { date: 'DESC', createdAt: 'DESC' },
+    });
+    return rows.map(({ product, productionOrder: o, order, ...r }) => ({
+      ...r,
+      product: { id: product.id, sku: product.sku, name: product.name },
+      order: order ? { id: order.id, refNo: order.refNo, status: order.status } : null,
+      productionOrder: o ? {
+        id: o.id, refNo: o.refNo, status: o.status, stage: o.stage, readyDate: o.readyDate, dueDate: o.dueDate, containers: o.containers,
+        reason: o.status === 'Rejected' || o.status === 'Cancelled' ? o.reason : null, updatedAt: o.updatedAt,
+        manufacturer: { id: o.manufacturer.id, name: o.manufacturer.name },
+      } : null,
+    }));
   }
 
   async receiptsOf(distributorId: string) {
@@ -186,7 +204,7 @@ export class PortalService {
     const em = this.db.manager;
     const s = await this.settings.get();
     const [products, agreed] = await Promise.all([
-      em.find(Product, { where: { active: true }, order: { sku: 'ASC' } }),
+      em.find(Product, { where: { active: true }, relations: ['manufacturer'], order: { sku: 'ASC' } }),
       em.find(DistributorRate, { where: { distributorId } }),
     ]);
     return products.map((p) => {
@@ -195,6 +213,8 @@ export class PortalService {
       const packs = p.packsPerCarton || s.packsPerCarton;
       return {
         productId: p.id, sku: p.sku, name: p.name, mrp: Number(p.mrp), standardRate: Number(p.rate), rate, agreed: !!a,
+        /** who makes it: an order goes to this manufacturer (none = it cannot be ordered yet) */
+        manufacturerName: p.manufacturer?.name ?? null,
         packsPerCarton: packs, perCarton: round2(rate * packs), spread: round2(Number(p.mrp) - rate),
         spreadPct: Number(p.mrp) ? round2((100 * (Number(p.mrp) - rate)) / Number(p.mrp)) : 0,
       };
@@ -245,11 +265,16 @@ export class PortalService {
   async desk() {
     const em = this.db.manager;
     const s = await this.settings.get();
-    const [requests, advices, receipts, audit] = await Promise.all([
-      em.find(PortalRequest, { where: { status: 'Requested' }, relations: ['distributor', 'product', 'product.manufacturer'], order: { date: 'ASC' } }),
-      em.find(PaymentAdvice, { where: { status: 'Submitted' }, relations: ['order', 'order.distributor'], order: { date: 'ASC' } }),
-      em.find(CargoReceipt, { where: { status: 'Disputed' }, relations: ['order', 'order.distributor', 'order.product'], order: { date: 'ASC' } }),
+    const newest = { date: 'DESC', createdAt: 'DESC' } as const;
+    const [requests, advices, receipts, audit, recent] = await Promise.all([
+      em.find(PortalRequest, { where: { status: 'Requested' }, relations: ['distributor', 'product', 'product.manufacturer'], order: newest }),
+      em.find(PaymentAdvice, { where: { status: 'Submitted' }, relations: ['order', 'order.distributor'], order: newest }),
+      em.find(CargoReceipt, { where: { status: 'Disputed' }, relations: ['order', 'order.distributor', 'order.product'], order: newest }),
       em.find(AuditLog, { order: { createdAt: 'DESC' }, take: 25 }),
+      em.find(PortalRequest, {
+        where: { status: Not('Requested') }, relations: ['distributor', 'product', 'productionOrder', 'productionOrder.manufacturer'],
+        order: { createdAt: 'DESC' }, take: 40,
+      }),
     ]);
     const rateOf = async (r: PortalRequest) => {
       const a = await em.findOne(DistributorRate, { where: { distributorId: r.distributorId, productId: r.productId } });
@@ -263,6 +288,19 @@ export class PortalService {
       advices: advices.map(({ proofData, ...rest }) => ({ ...rest, hasProof: !!proofData, distributorName: rest.order.distributor.name })),
       claims: receipts.map((r) => ({ ...this.slimReceipt(r), distributorName: r.order.distributor.name })),
       audit,
+      needsApproval: !!s.requestsNeedApproval,
+      /** distributor orders already past the desk: Zen Foods watches them with the manufacturer */
+      recent: recent.map((r) => ({
+        id: r.id, refNo: r.refNo, date: r.date, createdAt: r.createdAt, updatedAt: r.updatedAt, status: r.status, cartons: r.cartons,
+        requestedDate: r.requestedDate, reviewNote: r.reviewNote,
+        distributor: { id: r.distributor.id, name: r.distributor.name },
+        product: { id: r.product.id, sku: r.product.sku, name: r.product.name },
+        productionOrder: r.productionOrder ? {
+          id: r.productionOrder.id, refNo: r.productionOrder.refNo, status: r.productionOrder.status, stage: r.productionOrder.stage,
+          readyDate: r.productionOrder.readyDate, containers: r.productionOrder.containers, updatedAt: r.productionOrder.updatedAt,
+          manufacturer: { id: r.productionOrder.manufacturer.id, name: r.productionOrder.manufacturer.name },
+        } : null,
+      })),
     };
   }
 
@@ -277,6 +315,16 @@ export class PortalService {
       const refNo = await nextRef(em, PortalRequest, 'REQ', 3);
       const r = await em.save(em.create(PortalRequest, { ...dto, distributorId, refNo, status: 'Requested' }));
       await this.audit(em, user, 'Request submitted', refNo, `${product.sku} / ${dto.cartons} bundles`);
+      // Settings: with no approval step the order goes straight to the product's manufacturer; Zen Foods watches it
+      const s = await this.settings.get(em);
+      if (!s.requestsNeedApproval) {
+        if (!product.manufacturerId) {
+          throw new BadRequestException(`No manufacturer is set up for ${product.name} (${product.sku}) yet, so the order cannot be sent. Ask Zen Foods to assign one.`);
+        }
+        const full = await em.findOneOrFail(PortalRequest, { where: { id: r.id }, relations: ['product', 'distributor'] });
+        const done = await this.requestToProduction(em, full, { send: true } as AcceptRequestDto, user, true);
+        return { ...done.request, productionOrder: done.productionOrder };
+      }
       const who = await this.distName(em, distributorId);
       await this.notes.send(em, user,
         { to: { staff: TEAM.desk }, kind: 'request.filed', tone: 'warning', refNo, link: LINK.desk,
@@ -323,7 +371,7 @@ export class PortalService {
    * The request becomes a production order with the product's manufacturer, delivered to this distributor, and is
    * sent to the manufacturer straight away (unless kept as a draft). Bundles are rounded up to whole containers.
    */
-  private async requestToProduction(em: EntityManager, r: PortalRequest, dto: AcceptRequestDto, user: PortalUser) {
+  private async requestToProduction(em: EntityManager, r: PortalRequest, dto: AcceptRequestDto, user: PortalUser, direct = false) {
     const templates = r.product.packagings ?? [];
     const tpl = dto.packaging ? templates.find((t) => t.name === dto.packaging) : templates.find((t) => t.isDefault);
     const perContainer = tpl?.bundlesPerContainer || r.product.bundlesPerContainer || 1;
@@ -331,17 +379,30 @@ export class PortalService {
     const date = today();
     const dueDate = dto.dueDate !== undefined ? dto.dueDate : r.requestedDate && r.requestedDate >= date ? r.requestedDate : null;
     const send = dto.send ?? true;
-    const note = [`From stock request ${r.refNo}`, r.poRef && `PO ${r.poRef}`, dto.note?.trim()].filter(Boolean).join(' · ');
+    // the distributor's own notes (route, delivery instruction) reach the manufacturer with the order
+    const note = [`From stock request ${r.refNo}`, r.poRef && `PO ${r.poRef}`, dto.note?.trim(), r.notes?.trim()].filter(Boolean).join(' · ');
     const o = await this.production.createIn(em, { id: user.id, name: user.name, role: user.role as Role }, {
       date, productId: r.productId, destination: 'Distributor', distributorId: r.distributorId, containers,
       packaging: dto.packaging ?? null, dueDate, notes: note, send,
-    }, `From stock request ${r.refNo}`);
+    }, direct ? `Ordered by ${r.distributor.name} (${r.refNo})` : `From stock request ${r.refNo}`);
     const full = await em.findOneOrFail(ProductionOrder, { where: { id: o.id }, relations: ['manufacturer'] });
     r.status = 'Accepted';
     r.productionOrderId = o.id;
     await em.save(r);
+    const what = `${plural(containers, 'container')} (${plural(containers * o.bundlesPerContainer, 'bundle')}) of ${r.product.name} (${r.product.sku})`;
+    if (direct) {
+      await this.audit(em, user, 'Order sent to manufacturer', r.refNo, `${o.refNo} sent to ${full.manufacturer.name}`);
+      await this.notes.send(em, user,
+        { to: { distributorId: r.distributorId }, kind: 'request.sent', tone: 'success', refNo: r.refNo, link: LINK.portal('stock'),
+          title: `Order ${r.refNo} sent to ${full.manufacturer.name} as ${o.refNo}`,
+          body: `${what}. You will be told when the manufacturer accepts it, gives a date, and when it is ready and dispatched.` },
+        { to: { staff: TEAM.desk }, kind: 'request.sent', refNo: r.refNo, link: LINK.manufacturing('orders'),
+          title: `${r.distributor.name} ordered ${what} from ${full.manufacturer.name}`,
+          body: `${r.refNo} became ${o.refNo}. No approval needed (Settings): it is with the manufacturer.` },
+      );
+      return { request: r, productionOrder: full };
+    }
     await this.audit(em, user, 'Request accepted', r.refNo, `Created ${o.refNo}${send ? ` and sent it to ${full.manufacturer.name}` : ' (draft)'}`);
-    const what = `${plural(containers, 'container')} (${plural(containers * o.bundlesPerContainer, 'bundle')}) of ${r.product.sku}`;
     await this.notes.send(em, user,
       { to: { distributorId: r.distributorId }, kind: 'request.accepted', tone: 'success', refNo: r.refNo, link: LINK.portal('stock'),
         title: `Request ${r.refNo} accepted: production order ${o.refNo}`,

@@ -347,7 +347,7 @@ ok('the permission matrix is readable', access?.pages?.Admin?.includes('settings
 
 // ── Distributor partner portal ──
 // the older flow: a request becomes a warehouse sales order (needs sales orders switched on in Settings)
-await call(T.owner, 'PATCH', '/settings', { salesOrdersEnabled: true });
+await call(T.owner, 'PATCH', '/settings', { salesOrdersEnabled: true, requestsNeedApproval: true }); // the approval-desk flow (S tests the direct one)
 const p7prof = await call(T.dist, 'GET', '/portal/profile');
 ok('a distributor login sees its own profile', p7prof.status === 200 && p7prof.json?.distributor?.name && p7prof.json?.paymentMethods?.includes('Bank Transfer'), JSON.stringify(p7prof.json).slice(0, 100));
 const p7me = p7prof.json?.distributor?.id;
@@ -1098,8 +1098,8 @@ ok('receiving more than was sent -> 400', (await call(T.dist, 'POST', `/producti
 ok('a receipt before the ship date -> 400', (await call(T.dist, 'POST', `/production-shipments/${p5S1.json.id}/receive`, { date: '2000-01-01', receivedContainers: 1 })).status === 400);
 const p5R1 = await call(T.dist, 'POST', `/production-shipments/${p5S1.json.id}/receive`, { date: p5Day, receivedContainers: 1 });
 const p5Sell = new Date(Date.parse(`${p5Day}T00:00:00Z`) + 30 * 86_400_000).toISOString().slice(0, 10);
-ok('the distributor confirms it; the sell-out clock starts (Sindh Central: 30 days)',
-  p5R1.json?.status === 'Received' && p5R1.json?.selloutDays === 30 && p5R1.json?.sellBy === p5Sell && p5R1.json?.receivedValue === 18360, JSON.stringify(p5R1.json));
+ok('the distributor confirms it; the sell-out clock starts (Sindh Central: 30 days); it sees the goods at its own price',
+  p5R1.json?.status === 'Received' && p5R1.json?.selloutDays === 30 && p5R1.json?.sellBy === p5Sell && p5R1.json?.receivedValue === 27000 && !('rate' in (p5R1.json ?? {})), JSON.stringify(p5R1.json));
 ok('receiving twice -> 400', (await call(T.dist, 'POST', `/production-shipments/${p5S1.json.id}/receive`, { date: p5Day, receivedContainers: 1 })).status === 400);
 const p5J = ((await call(T.finance, 'GET', '/reports/journal?period=all')).json ?? []);
 ok('it posts Inventory at Distributor / Manufacturer Payable at the order rate',
@@ -1110,7 +1110,7 @@ ok('the paid advance (11,016) is set against the payable',
   && p5J.some((l) => l.reference === p5Mo.refNo && l.account === 'Manufacturer Payable' && l.debit === 11016), JSON.stringify(p5J.filter((l) => l.reference === p5Mo.refNo)));
 const p5St = (await call(T.dist, 'GET', '/production-shipments/stock')).json;
 const p5Row = p5St?.byProduct?.find((r) => r.sku === 'Z10-MAS');
-ok('the distributor holds 1 container = 10 bundles = 4,320 packets worth 18,360', p5Row?.containers === 1 && p5Row?.bundles === 10 && p5Row?.packets === 4320 && p5Row?.value === 18360 && p5Row?.nextSellBy === p5Sell, JSON.stringify(p5Row));
+ok('the distributor holds 1 container = 10 bundles = 4,320 packets worth 27,000 at its own price', p5Row?.containers === 1 && p5Row?.bundles === 10 && p5Row?.packets === 4320 && p5Row?.value === 27000 && p5Row?.nextSellBy === p5Sell, JSON.stringify(p5Row));
 ok('warehouse stock is not touched by a distributor delivery', ((await call(T.owner, 'GET', '/products')).json ?? []).find((p) => p.sku === 'Z10-MAS')?.stockCartons === p3Prods.find((p) => p.sku === 'Z10-MAS')?.stockCartons);
 // a short delivery
 const p5S2 = await call(T.factory, 'POST', '/production-shipments', { orderId: p5Mo.id, date: p5Day, containers: 1 });
@@ -1151,7 +1151,7 @@ const p6Inv = await call(T.dist, 'POST', '/distributor-invoices', p6Body());
 const p6Amount = Math.round(4320 * p6Lot.saleRate * 100) / 100;
 const p6Due = new Date(Date.parse(`${p6Day}T00:00:00Z`) + 30 * 86_400_000).toISOString().slice(0, 10);
 ok('the distributor reports 1 container sold: income at its price, cost at the manufacturer\'s, due after its 30 days',
-  p6Inv.status === 201 && p6Inv.json?.status === 'Submitted' && p6Inv.json?.amount === p6Amount && p6Inv.json?.cost === 18360
+  p6Inv.status === 201 && p6Inv.json?.status === 'Submitted' && p6Inv.json?.amount === p6Amount && !('cost' in (p6Inv.json ?? {})) && ((await call(T.owner, 'GET', '/distributor-invoices')).json ?? []).find((i) => i.id === p6Inv.json?.id)?.cost === 18360
   && p6Inv.json?.dueDate === p6Due && /^DI-\d{3}$/.test(p6Inv.json?.refNo) && p6Inv.json?.state === 'Waiting verification', JSON.stringify(p6Inv.json));
 ok('the container stops counting as its stock at once', ((await call(T.dist, 'GET', '/production-shipments')).json ?? []).find((s) => s.id === p6Lot.id)?.onHandContainers === 0);
 ok('it cannot be sold twice -> 400', (await call(T.dist, 'POST', '/distributor-invoices', p6Body())).status === 400);
@@ -1696,7 +1696,7 @@ ok('a claim on a delivery still in transit -> 400', (await (async () => {
 })()).status === 400);
 const nClaim = await call(T.dist, 'POST', '/delivery-claims', { shipmentId: nShip.id, date: nDay, kind: 'Damaged', bundles: 2, note: 'Two bundles crushed in the truck' });
 ok('the distributor raises a faulty-goods claim SCL with its value (2 bundles × 432 packets × 4.25)',
-  nClaim.status === 201 && /^SCL-\d{3}$/.test(nClaim.json?.refNo) && nClaim.json?.status === 'Pending' && nClaim.json?.value === 3672, JSON.stringify(nClaim.json));
+  nClaim.status === 201 && /^SCL-\d{3}$/.test(nClaim.json?.refNo) && nClaim.json?.status === 'Pending' && !('value' in (nClaim.json ?? {})) && ((await call(T.owner, 'GET', '/delivery-claims')).json ?? []).find((c) => c.id === nClaim.json?.id)?.value === 3672, JSON.stringify(nClaim.json));
 const nC = nClaim.json;
 ok('the manufacturer is told and has to act', await nHas(p3Maker, 'delivery-claim.filed', nC.refNo) && (await nWait(p3Maker)).some((w) => w.refNo === nC.refNo && w.mine));
 ok('the company is told (Admin, Manufacturing, Distribution) and sees it waiting on the manufacturer',
@@ -1717,7 +1717,7 @@ ok('the credit posts Manufacturer Payable / Inventory at Distributor 3,672', nJ.
 ok('the manufacturer statement shows the claim credit', ((await call(p3Maker, 'GET', '/mfr-payment-requests/statement')).json?.entries ?? []).some((e) => e.kind === 'Claim credit' && e.ref === nC.refNo && e.owed === -3672));
 ok('the order position counts the credit off what is still to pay', ((await call(T.owner, 'GET', '/mfr-payment-requests/position')).json?.rows ?? []).find((r) => r.orderId === nMo.id)?.credited === 3672);
 const nInv = (await call(T.dist, 'POST', '/distributor-invoices', { date: nDay, lines: [{ shipmentId: nShip.id, containers: 1 }] })).json;
-ok('selling the delivery carries the lower cost (18,360 - 3,672)', Math.abs(Number(nInv?.cost) - 14688) < 0.5, JSON.stringify(nInv?.cost));
+ok('selling the delivery carries the lower cost (18,360 - 3,672)', Math.abs(Number(((await call(T.owner, 'GET', '/distributor-invoices')).json ?? []).find((i) => i.id === nInv?.id)?.cost) - 14688) < 0.5);
 ok('a sales invoice tells the company desk', await nHas(T.sales, 'sales-invoice.filed', nInv?.refNo) && await nHas(T.finance, 'sales-invoice.filed', nInv?.refNo));
 await call(T.finance, 'POST', `/distributor-invoices/${nInv.id}/verify`);
 ok('verifying it tells the distributor', await nHas(T.dist, 'sales-invoice.verified', nInv.refNo));
@@ -1809,6 +1809,61 @@ ok('staff see every dispatch; a distributor only its own', ((await call(T.owner,
 ok('Viewer cannot dispatch -> 403', (await call(T.audit, 'POST', '/distributor-dispatches', { shipmentId: kLot.id, date: kDay, bundles: 1, customer: 'X' })).status === 403);
 ok('a dispatch posts nothing to the ledger', !((await call(T.finance, 'GET', '/reports/journal?period=all')).json ?? []).some((l) => l.reference === kD.json.refNo));
 ok('the ledger still balances after pickups and dispatches', (await call(T.owner, 'GET', '/reports/trial-balance')).json?.balanced === true);
+
+// ── S direct orders: with no approval step a distributor order goes straight to the manufacturer; privacy of rates ──
+ok('distributor orders need no approval by default', (await call(T.owner, 'PATCH', '/settings', { requestsNeedApproval: false })).status === 200
+  && (await call(T.dist, 'GET', '/portal/profile')).json?.requestsNeedApproval === false);
+const sReq = await call(T.dist, 'POST', '/portal/requests', { date: kDay, productId: p5Mo.productId, cartons: 12, requestedDate: kDay, poRef: 'PO-S1' });
+const sMo = sReq.json?.productionOrder;
+ok('the order becomes a production order sent to the product\'s manufacturer at once', sReq.status === 201 && sReq.json?.status === 'Accepted'
+  && sMo?.status === 'Sent' && sMo?.manufacturerId === p5Mo.manufacturerId && sMo?.distributorId === p5Mo.distributorId, JSON.stringify(sReq.json).slice(0, 240));
+ok('the manufacturer is told about the new order', await nHas(p3Maker, 'order.sent', sMo?.refNo));
+ok('Zen Foods is told too (it watches, nothing to approve)', await nHas(T.sales, 'request.sent', sReq.json?.refNo));
+const sDesk = (await call(T.sales, 'GET', '/portal/desk')).json;
+ok('the desk lists it to watch, not to accept', sDesk?.needsApproval === false && !sDesk?.requests?.some((r) => r.id === sReq.json?.id)
+  && sDesk?.recent?.some((r) => r.id === sReq.json?.id && r.productionOrder?.refNo === sMo?.refNo && r.productionOrder?.manufacturer?.name && r.distributor?.name));
+const sMine = ((await call(T.dist, 'GET', '/portal/requests')).json ?? []).find((r) => r.id === sReq.json?.id);
+ok('the distributor sees the order with its manufacturer and status', sMine?.productionOrder?.status === 'Sent' && !!sMine?.productionOrder?.manufacturer?.name && sMine?.product?.name);
+ok('the distributor never sees the manufacturer\'s rate or the product cost lines', sMine && !('rate' in sMine.productionOrder) && !('advancePct' in sMine.productionOrder)
+  && !('manufacturerRate' in sMine.product) && !('packagingRate' in sMine.product), JSON.stringify(sMine).slice(0, 300));
+ok('the order form shows who makes each product', ((await call(T.dist, 'GET', '/portal/rates')).json ?? []).find((r) => r.productId === p5Mo.productId)?.manufacturerName?.length > 0);
+const sAcc = await call(p3Maker, 'POST', `/production-orders/${sMo?.id}/accept`, { readyDate: kDay, note: 'Tentative' });
+ok('the manufacturer accepts with a tentative date; the distributor is told and sees the date', sAcc.status === 201
+  && await nHas(T.dist, 'order.accepted', sMo?.refNo)
+  && ((await call(T.dist, 'GET', '/portal/requests')).json ?? []).find((r) => r.id === sReq.json?.id)?.productionOrder?.readyDate === kDay);
+const sReq2 = (await call(T.dist, 'POST', '/portal/requests', { date: kDay, productId: p5Mo.productId, cartons: 3 })).json;
+await call(p3Maker, 'POST', `/production-orders/${sReq2?.productionOrder?.id}/reject`, { reason: 'Line is full this month' });
+ok('a manufacturer that declines tells the distributor with the reason', (await nList(T.dist)).items.some((n) => n.kind === 'order.rejected' && n.refNo === sReq2?.productionOrder?.refNo && n.body.includes('Line is full'))
+  && ((await call(T.dist, 'GET', '/portal/requests')).json ?? []).find((r) => r.id === sReq2?.id)?.productionOrder?.reason === 'Line is full this month');
+const sNoMaker = (await call(T.owner, 'POST', '/products', { sku: 'S-NOMFR', name: 'No maker yet', pack: 10, mrp: 10, rate: 6, packsPerCarton: 432 })).json;
+const sCount = ((await call(T.dist, 'GET', '/portal/requests')).json ?? []).length;
+const sBad = await call(T.dist, 'POST', '/portal/requests', { date: kDay, productId: sNoMaker?.id, cartons: 2 });
+ok('a product with no manufacturer cannot be ordered, and nothing is saved', sBad.status === 400 && /No manufacturer/.test(sBad.json?.message ?? '')
+  && ((await call(T.dist, 'GET', '/portal/requests')).json ?? []).length === sCount, JSON.stringify(sBad.json));
+ok('the manufacturer cannot see distributor prices or balances', (await call(p3Maker, 'GET', '/portal/desk')).status === 403
+  && (await call(p3Maker, 'GET', `/portal/statement?distributorId=${p5Mo.distributorId}`)).status === 403);
+
+const sDeep = (v, keys) => JSON.stringify(v ?? null).match(new RegExp(`"(${keys.join('|')})":`, 'g')) ?? [];
+const sDistLeak = [];
+for (const path of ['/production-shipments', '/production-shipments/stock', '/distributor-invoices', '/delivery-claims', '/distributor-dispatches', '/portal/orders', '/portal/receipts', '/portal/requests']) {
+  sDistLeak.push(...sDeep((await call(T.dist, 'GET', path)).json, ['manufacturerRate', 'packagingRate', 'printingRate', 'inboundRate', 'outboundRate', 'unitCost', 'costRate', 'cost', 'margin', 'advanceAmount']).map((k) => `${path} ${k}`));
+}
+ok('no distributor screen carries the manufacturer\'s rate or Zen Foods\' cost and margin', sDistLeak.length === 0, sDistLeak.slice(0, 6).join(', '));
+const sMfrLeak = [];
+for (const path of ['/production-orders', '/production-shipments', '/delivery-claims', '/mfr-payment-requests']) {
+  const j = (await call(p3Maker, 'GET', path)).json ?? [];
+  sMfrLeak.push(...sDeep(j, ['saleRate', 'standardRate', 'minMarginPct']).map((k) => `${path} ${k}`));
+  if (j.some((r) => r.distributor && typeof r.distributor === 'object' && Object.keys(r.distributor).some((k) => !['id', 'name', 'region', 'address', 'contact'].includes(k)))) sMfrLeak.push(`${path} distributor details`);
+  if (j.some((r) => r.product && 'rate' in r.product)) sMfrLeak.push(`${path} Zen Foods selling price`);
+}
+ok('no manufacturer screen carries what the distributor pays, Zen Foods\' prices or the distributor\'s credit and terms', sMfrLeak.length === 0, sMfrLeak.slice(0, 6).join(', '));
+
+const sReq3 = (await call(T.dist, 'POST', '/portal/requests', { date: kDay, productId: p5Mo.productId, cartons: 2, notes: '<p>Deliver to <strong>gate 2</strong></p><ul><li>Call first</li></ul>' })).json;
+ok('a formatted note is kept with its formatting', sReq3?.notes?.includes('<strong>gate 2</strong>'));
+ok('the distributor note reaches the manufacturer with the order', ((await call(p3Maker, 'GET', '/production-orders')).json ?? []).find((o) => o.id === sReq3?.productionOrder?.id)?.notes?.includes('gate 2'));
+await call(p3Maker, 'POST', `/production-orders/${sReq3?.productionOrder?.id}/reject`, { reason: '<p>Line is <strong>full</strong></p><p>Try next week</p>' });
+const sRej = (await nList(T.dist)).items.find((n) => n.kind === 'order.rejected' && n.refNo === sReq3?.productionOrder?.refNo);
+ok('a notice carries the note as plain text', !!sRej && !/[<>]/.test(sRej.body ?? '') && sRej.body.includes('Line is full · Try next week'), sRej?.body);
 
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

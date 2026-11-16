@@ -5,6 +5,11 @@
       <a appBtn variant="primary" icon="plus" routerLink="/admin/manufacturing" [queryParams]="{ new: 'batch' }">Production batch</a>
     </ng-container>
   }
+  @if (auth.can('admin')) {
+    <ng-container pageActions>
+      <button appBtn icon="factory" (click)="manufacturerOpen.set(true)">Add manufacturer</button>
+    </ng-container>
+  }
   @if (auth.can('distribution') && legacy()) {
     <ng-container pageActions>
       <a appBtn icon="plus" routerLink="/admin/distribution" [queryParams]="{ new: 'order' }">Sales order</a>
@@ -97,8 +102,8 @@
 
   <div class="card" data-flush>
     <div class="card__head">
-      <div><h2>Latest distributor orders</h2><p>Most recent sales orders in the system</p></div>
-      <a appBtn size="sm" icon="arrow-right" routerLink="/admin/distribution">View distribution</a>
+      <div><h2>Latest distributor orders</h2><p>What distributors ordered and where each order stands with its manufacturer</p></div>
+      <a appBtn size="sm" icon="arrow-right" routerLink="/admin/partner-portal">Open the approval desk</a>
     </div>
     <div class="card__body">
       <app-data-table [columns]="orderColumns" [rows]="d()?.latestOrders ?? []" [loading]="data.isLoading()"
@@ -113,3 +118,5 @@
     <div class="card__body"><app-chain [data]="chain.value() ?? null" /></div>
   </div>
 </div>
+
+<app-manufacturer-form [(open)]="manufacturerOpen" [manufacturer]="null" (saved)="data.reload()" />

@@ -43,6 +43,13 @@ export class Setting {
   @Column({ default: false })
   salesOrdersEnabled: boolean;
 
+  /**
+   * Off (default): a distributor's stock request becomes a production order sent to the product's manufacturer
+   * at once, and Zen Foods watches it. On: the request waits on the Zingo approval desk first.
+   */
+  @Column({ default: false })
+  requestsNeedApproval: boolean;
+
   /** days a distributor has to sell a container out, the default for a new distributor */
   @Column({ type: 'int', default: 30 })
   defaultSelloutDays: number;

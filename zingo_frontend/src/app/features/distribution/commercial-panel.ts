@@ -6,7 +6,7 @@ import { AuthService } from '../../core/auth.service';
 import { SettingsStore } from '../../core/settings.store';
 import { errorText } from '../../shared/errors';
 import { Tone } from '../../shared/format';
-import { Btn, Field, Offcanvas, Select, SelectOption, Tag, ToastService } from '../../ui';
+import { Btn, Field, Offcanvas, PlainPipe, Select, SelectOption, Tag, ToastService } from '../../ui';
 import { Distributor, DistributorPrice, Product } from '../ops/models';
 
 const UNITS = ['Pack', 'Dozen', 'Bundle', 'Container', 'Pallet', 'Metric tonne'] as const;
@@ -25,7 +25,7 @@ const costPerPack = (p: Product) =>
 @Component({
   selector: 'app-commercial-panel',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [ReactiveFormsModule, Offcanvas, Field, Btn, Tag, Select],
+  imports: [ReactiveFormsModule, Offcanvas, Field, Btn, Tag, Select, PlainPipe],
   styles: `
     h3 {
       margin: var(--space-5) 0 var(--space-2);
@@ -199,7 +199,7 @@ const costPerPack = (p: Product) =>
                   <td class="num">{{ r.marginPct }}%</td>
                   <td>{{ r.effectiveFrom }}<small>{{ r.effectiveTo ? 'to ' + r.effectiveTo : 'open' }}</small></td>
                   <td><app-tag [tone]="tone(r.status)">{{ r.status }}</app-tag>
-                    <small>{{ r.createdBy }}{{ r.decidedBy ? ' · ' + r.decidedBy : '' }}{{ r.decisionNote ? ' · ' + r.decisionNote : '' }}</small></td>
+                    <small>{{ r.createdBy }}{{ r.decidedBy ? ' · ' + r.decidedBy : '' }}{{ r.decisionNote ? ' · ' + (r.decisionNote | plain) : '' }}</small></td>
                   <td>
                     @if (r.status === 'Pending approval' && finance()) {
                       <div class="actions">

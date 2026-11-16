@@ -3,7 +3,7 @@ import { toSignal } from '@angular/core/rxjs-interop';
 import { ReactiveFormsModule, Validators } from '@angular/forms';
 import { fmtMoney } from '../../shared/format';
 import { ProofFile, readProof } from '../../shared/files';
-import { Btn, Field, Offcanvas } from '../../ui';
+import { Btn, Field, Offcanvas, RichText } from '../../ui';
 import { FormModal } from '../ops/form-modal';
 import { PortalApi } from './portal.api';
 import { PortalOrder } from './portal.models';
@@ -18,7 +18,7 @@ const CONDITIONS = ['Good', 'Damaged', 'Wet', 'Tampered', 'Other'];
 @Component({
   selector: 'app-receipt-form',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [ReactiveFormsModule, Offcanvas, Field, Btn],
+  imports: [ReactiveFormsModule, Offcanvas, Field, Btn, RichText],
   template: `
     <app-offcanvas #oc [(open)]="open" title="Confirm delivery" size="lg" [dirty]="form.dirty"
                    [subtitle]="order() ? order()!.refNo + ' · ' + order()!.product.sku + ' · ' + order()!.cartons + ' bundles shipped' : ''">
@@ -45,7 +45,7 @@ const CONDITIONS = ['Good', 'Damaged', 'Wet', 'Tampered', 'Other'];
         </app-field>
         <app-field label="Delivery challan / vehicle no."><input type="text" formControlName="waybill" maxlength="80" /></app-field>
         <app-field label="Received by"><input type="text" formControlName="receivedBy" maxlength="120" /></app-field>
-        <app-field label="What happened" [wide]="true" hint="Needed when anything is damaged or missing"><textarea formControlName="reason"></textarea></app-field>
+        <app-field label="What happened" [wide]="true" hint="Needed when anything is damaged or missing"><app-rich-text formControlName="reason" [max]="2000" /></app-field>
         <app-field label="Photo or PDF" [wide]="true" [hint]="file() ? file()!.proofName : 'Image or PDF, under 450 KB'" [error]="fileError() || null">
           <input type="file" accept="image/png,image/jpeg,image/webp,image/gif,application/pdf" (change)="pick($event)" />
         </app-field>

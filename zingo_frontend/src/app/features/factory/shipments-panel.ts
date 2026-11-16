@@ -1,8 +1,8 @@
 import { ChangeDetectionStrategy, Component, computed, inject, input, output, signal } from '@angular/core';
 import { takeUntilDestroyed, toSignal } from '@angular/core/rxjs-interop';
 import { ReactiveFormsModule, Validators } from '@angular/forms';
-import { Tone, fmtDate, fmtMoney, fmtNumber } from '../../shared/format';
-import { Btn, DataTable, Field, Offcanvas, RowAction, RowActionEvent, Select, SelectOption, TableColumn } from '../../ui';
+import { Tone, fmtDate, fmtMoney, fmtNumber, productLabel, qtyLabel } from '../../shared/format';
+import { Btn, DataTable, Field, Offcanvas, RichText, RowAction, RowActionEvent, Select, SelectOption, TableColumn } from '../../ui';
 import { FormModal } from '../ops/form-modal';
 import { DistributorStock, DistributorStockRow, FactoryApi, ProductionOrder, Shipment } from './factory.api';
 
@@ -16,7 +16,7 @@ const destinationOf = (s: { destination: string; distributor: { name: string } |
 @Component({
   selector: 'app-ship-form',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [ReactiveFormsModule, Offcanvas, Field, Btn, Select],
+  imports: [ReactiveFormsModule, Offcanvas, Field, Btn, Select, RichText],
   template: `
     <app-offcanvas #oc [(open)]="open" title="Ship containers" subtitle="Send finished containers of an accepted order." size="lg" [dirty]="form.dirty">
       @if (error()) {
@@ -38,7 +38,7 @@ const destinationOf = (s: { destination: string; distributor: { name: string } |
         <app-field label="Ship date" [required]="true"><input type="date" formControlName="date" [max]="maxDate" /></app-field>
         <app-field label="Vehicle / container no."><input type="text" formControlName="vehicle" maxlength="60" /></app-field>
         <app-field label="Waybill / bilty no."><input type="text" formControlName="waybill" maxlength="60" /></app-field>
-        <app-field label="Note" [wide]="true"><textarea formControlName="note" rows="2" maxlength="500"></textarea></app-field>
+        <app-field label="Note" [wide]="true"><app-rich-text formControlName="note" [max]="500" [storeMax]="500" /></app-field>
       </form>
       <ng-container offcanvasFooter>
         <button appBtn type="button" (click)="oc.requestClose()">Cancel</button>
@@ -99,7 +99,7 @@ export class ShipForm extends FormModal {
 @Component({
   selector: 'app-receive-form',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [ReactiveFormsModule, Offcanvas, Field, Btn],
+  imports: [ReactiveFormsModule, Offcanvas, Field, Btn, RichText],
   template: `
     <app-offcanvas #oc [(open)]="open" [title]="s() ? 'Receive ' + s()!.refNo : 'Receive shipment'" [subtitle]="subject()" size="md" [dirty]="form.dirty">
       @if (error()) {
@@ -112,7 +112,7 @@ export class ShipForm extends FormModal {
         <app-field label="Date received" [wide]="true" [required]="true"><input type="date" formControlName="date" [min]="s()?.shipDate ?? ''" [max]="maxDate" /></app-field>
         <app-field label="Note" [wide]="true" [required]="short()" [hint]="short() ? 'Say what was short or damaged' : ''"
                    [error]="short() && invalid('note') ? 'Say what was short or damaged' : null">
-          <textarea formControlName="note" rows="2" maxlength="500"></textarea>
+          <app-rich-text formControlName="note" [max]="500" [storeMax]="500" />
         </app-field>
       </form>
       <ng-container offcanvasFooter>
@@ -225,12 +225,18 @@ export class ShipmentsPanel {
   protected emptyText = computed(() => (this.mode() === 'factory' ? 'Ship an accepted order when it is ready.' : 'Shipments from the manufacturer appear here.'));
 
   protected columns = computed<TableColumn<Shipment>[]>(() => [
-    { id: 'ref', label: 'Shipment', value: (s) => s.refNo, sub: (s) => `Sent ${fmtDate(s.shipDate)}${s.waybill ? ` · ${s.waybill}` : ''}` },
-    { id: 'product', label: 'Product', value: (s) => `${fmtNumber(s.containers)} × ${s.product.sku}`, sub: (s) => `${fmtNumber(s.packets)} packets · ${s.order.refNo}` },
     {
-      id: 'route', label: this.mode() === 'distributor' ? 'From' : 'Route', priority: 2,
-      value: (s) => (this.mode() === 'distributor' ? s.manufacturer.name : destinationOf(s)),
-      sub: (s) => [this.mode() === 'company' ? `from ${s.manufacturer.name}` : s.vehicle, s.method === 'Pickup' ? 'Collected by the distributor' : null].filter(Boolean).join(' · ') || null,
+      id: 'product', label: this.mode() === 'distributor' ? 'Delivery / From' : 'Shipment / To', kind: 'title', value: (s) => productLabel(s.product),
+      sub: (s) => (this.mode() === 'distributor' ? s.manufacturer.name : this.mode() === 'company' ? `${s.manufacturer.name} → ${destinationOf(s)}` : destinationOf(s)),
+    },
+    {
+      id: 'ref', label: 'Shipment no. / quantity', kind: 'mono', value: (s) => s.refNo, sortValue: (s) => s.shipDate,
+      sub: (s) => `${fmtDate(s.shipDate)} · ${qtyLabel(s.containers, s.containers * s.bundlesPerContainer)} · order ${s.order.refNo}`,
+    },
+    {
+      id: 'route', label: 'Transport', priority: 3,
+      value: (s) => (s.method === 'Pickup' ? 'Collected by the distributor' : s.vehicle || 'Delivery'),
+      sub: (s) => s.waybill || null,
     },
     { id: 'value', label: 'Value', kind: 'money', priority: 2, value: (s) => (s.status === 'Received' ? s.receivedValue : s.value) },
     {
@@ -247,9 +253,9 @@ export class ShipmentsPanel {
   };
 
   protected stockColumns = computed<TableColumn<DistributorStockRow>[]>(() => [
-    { id: 'sku', label: 'Product', value: (r) => r.sku, sub: (r) => (this.mode() === 'company' ? `${r.name} · ${r.distributor}` : r.name) },
+    { id: 'sku', label: this.mode() === 'company' ? 'Product / Distributor' : 'Product', kind: 'title', value: (r) => productLabel(r), sub: (r) => (this.mode() === 'company' ? r.distributor : null) },
     { id: 'containers', label: 'Containers', kind: 'number', value: (r) => r.containers, sub: (r) => `${fmtNumber(r.bundles)} bundles · ${fmtNumber(r.packets)} packets` },
-    { id: 'value', label: 'Value at cost', kind: 'money', value: (r) => r.value, priority: 2 },
+    { id: 'value', label: this.mode() === 'distributor' ? 'Value at your price' : 'Value at cost', kind: 'money', value: (r) => r.value, priority: 2 },
     {
       id: 'sellBy', label: 'Sell by', kind: 'tag', value: (r) => (r.nextSellBy ? fmtDate(r.nextSellBy) : '-'),
       tone: (r): Tone => (r.overdue ? 'danger' : 'info'), sub: (r) => (r.overdue ? 'Past the sell-out date' : null),

@@ -7,14 +7,26 @@ import {
   ChangeDetectionStrategy, Component, ViewEncapsulation, booleanAttribute, computed, effect, inject, input, output,
   signal, untracked,
 } from '@angular/core';
-import { Tone, fmtAmount, fmtDate, fmtNumber } from '../shared/format';
+import { Tone, fmtAmount, fmtDate, fmtDateTime, fmtNumber } from '../shared/format';
 import { Btn } from './button';
 import { EmptyState } from './blocks';
 import { IconComponent, IconName } from './icon';
 import { SearchBox } from './search';
 import { Skeleton } from './skeleton';
 import { TABLE_DEFAULTS, loadTableState, saveTableState } from './table-state';
+import { isRich, richToPlain } from './rich-text';
 import { Tag } from './tag';
+
+/** newest first: by the record's date, then by when it was added (rows without either keep their order) */
+function newestFirst<T>(list: T[]): T[] {
+  const first = list[0] as Record<string, unknown> | undefined;
+  if (!first || !('date' in first || 'createdAt' in first)) return list;
+  const key = (r: T) => {
+    const o = r as Record<string, unknown>;
+    return `${String(o['date'] ?? '').slice(0, 10)}|${String(o['createdAt'] ?? '')}`;
+  };
+  return [...list].sort((a, b) => (key(a) < key(b) ? 1 : key(a) > key(b) ? -1 : 0));
+}
 
 /** One column of a data table. */
 export interface TableColumn<T> {
@@ -22,7 +34,8 @@ export interface TableColumn<T> {
   label: string;
   /** main value of the cell */
   value: (row: T) => string | number | null | undefined;
-  kind?: 'text' | 'money' | 'number' | 'date' | 'mono' | 'tag';
+  /** 'title': bold blue main line (what the row is about, e.g. product name and code) */
+  kind?: 'text' | 'money' | 'number' | 'date' | 'mono' | 'tag' | 'title';
   /** MERGE: a second line under the main value, so one column carries two fields */
   sub?: (row: T) => string | null | undefined;
   /** colour of the tag when kind = 'tag' */
@@ -194,7 +207,7 @@ export function pageList(current: number, total: number): (number | '…')[] {
       <table class="table" [attr.aria-busy]="loading() ? 'true' : null">
         <thead>
           <tr>
-            @for (c of columns(); track c.id) {
+            @for (c of cols(); track c.id) {
               <th scope="col" [attr.data-priority]="c.priority ?? 1" [attr.data-end]="isEnd(c) ? '' : null"
                   [attr.aria-sort]="ariaSort(c)">
                 @if (isSortable(c)) {
@@ -217,7 +230,7 @@ export function pageList(current: number, total: number): (number | '…')[] {
           @if (loading()) {
             @for (r of skeletonRows; track r) {
               <tr class="is-skeleton" aria-hidden="true">
-                @for (c of columns(); track c.id; let first = $first) {
+                @for (c of cols(); track c.id; let first = $first) {
                   <td [attr.data-label]="c.label" [attr.data-priority]="c.priority ?? 1"
                       [attr.data-end]="isEnd(c) ? '' : null" [attr.data-primary]="first ? '' : null">
                     <app-skeleton [width]="barWidth(r, $index, c)" [height]="c.kind === 'tag' ? '1.25rem' : undefined" />
@@ -244,17 +257,17 @@ export function pageList(current: number, total: number): (number | '…')[] {
             @for (row of pageRows(); track $index) {
               @let acts = actions() ? actions()!(row) : [];
               <tr [style.--i]="$index">
-                @for (c of columns(); track c.id; let first = $first) {
+                @for (c of cols(); track c.id; let first = $first) {
                   <td [attr.data-label]="c.label" [attr.data-priority]="c.priority ?? 1"
                       [attr.data-end]="isEnd(c) ? '' : null" [attr.data-primary]="first ? '' : null">
                     <div class="cell">
                       @if (c.kind === 'tag') {
                         <app-tag [tone]="c.tone ? c.tone(row) : 'neutral'">{{ text(c, row) }}</app-tag>
                       } @else {
-                        <div class="cell__main" [class.mono]="c.kind === 'mono'">{{ text(c, row) }}</div>
+                        <div class="cell__main" [class.mono]="c.kind === 'mono'" [class.cell__title]="c.kind === 'title'">{{ text(c, row) }}</div>
                       }
                       @if (c.sub && c.sub(row); as sub) {
-                        <div class="cell__sub">{{ sub }}</div>
+                        <div class="cell__sub">{{ flat(sub) }}</div>
                       }
                       @if (first && folded().length) {
                         <div class="cell__fold">
@@ -312,7 +325,7 @@ export function pageList(current: number, total: number): (number | '…')[] {
         @if (totals() && filtered().length) {
           <tfoot>
             <tr>
-              @for (c of columns(); track c.id; let first = $first) {
+              @for (c of cols(); track c.id; let first = $first) {
                 <td [attr.data-label]="c.label" [attr.data-priority]="c.priority ?? 1"
                     [attr.data-end]="isEnd(c) ? '' : null">
                   <div class="cell"><div class="cell__main">{{ totals()![c.id] ?? (first ? 'Total' : '') }}</div></div>
@@ -408,6 +421,12 @@ export class DataTable<T> {
   readonly serverMode = input(false, { transform: booleanAttribute });
   /** server mode: the number of records over all pages */
   readonly total = input<number>(0);
+  /** sort used until the user clicks a header (default: newest first by date, then by when it was added) */
+  readonly defaultSort = input<{ column: string; dir: 'asc' | 'desc' } | null>(null);
+  /** keep the rows in the order given (a statement with a running balance, a list in its set order) */
+  readonly keepOrder = input(false, { transform: booleanAttribute });
+  /** add the "Last update" column when the rows are records with created/updated times (default true) */
+  readonly stamp = input(true, { transform: booleanAttribute });
 
   /** a row action button was pressed */
   readonly action = output<RowActionEvent<T>>();
@@ -428,13 +447,25 @@ export class DataTable<T> {
   private defaults = inject(TABLE_DEFAULTS, { optional: true });
   private loaded = false;
 
-  protected folded = computed(() => this.columns().filter((c) => c.priority === 3));
-  protected span = computed(() => this.columns().length + (this.actions() ? 1 : 0));
+  /** the given columns, plus "Last update" (updated time, added date below) for stored records */
+  protected cols = computed<TableColumn<T>[]>(() => {
+    const given = this.columns();
+    const first = this.rows()[0] as Record<string, unknown> | undefined;
+    if (!this.stamp() || !first || !('updatedAt' in first) || given.some((c) => c.id === 'stamp')) return given;
+    const at = (r: T, k: 'createdAt' | 'updatedAt') => String((r as Record<string, unknown>)[k] ?? '');
+    return [...given, {
+      id: 'stamp', label: 'Last update', priority: 2, value: (r) => fmtDateTime(at(r, 'updatedAt')), sortValue: (r) => at(r, 'updatedAt'),
+      sub: (r) => (at(r, 'createdAt') ? `Added ${fmtDate(at(r, 'createdAt'))}` : null),
+    }];
+  });
+
+  protected folded = computed(() => this.cols().filter((c) => c.priority === 3));
+  protected span = computed(() => this.cols().length + (this.actions() ? 1 : 0));
 
   /** filter definitions with labels and select options filled in */
   protected filterDefs = computed(() =>
     this.filters().map((f) => {
-      const col = this.columns().find((c) => c.id === f.id);
+      const col = this.cols().find((c) => c.id === f.id);
       const options =
         f.type === 'select'
           ? (f.options ?? [...new Set(this.rows().map((r) => String(col?.value(r) ?? '')).filter(Boolean))].sort().map((v) => ({ value: v, label: v })))
@@ -446,7 +477,7 @@ export class DataTable<T> {
   /** rows that pass search and filters, sorted (not yet cut to a page); in serverMode the rows as given */
   protected filtered = computed(() => {
     if (this.serverMode()) return this.rows();
-    const cols = this.columns();
+    const cols = this.cols();
     const q = this.q().trim().toLowerCase();
     let list = this.rows();
     if (q) list = list.filter((row) => cols.some((c) => `${c.value(row) ?? ''} ${c.sub?.(row) ?? ''}`.toLowerCase().includes(q)));
@@ -457,11 +488,13 @@ export class DataTable<T> {
       if (!v || !col) continue;
       list = list.filter((row) => this.matches(f.type, v, col.value(row)));
     }
-    const s = this.sort();
+    const s = this.sort() ?? this.defaultSort();
     const sc = s && cols.find((c) => c.id === s.column);
     if (s && sc) {
       const dir = s.dir === 'asc' ? 1 : -1;
       list = [...list].sort((a, b) => dir * this.compare(sc.sortValue ? sc.sortValue(a) : sc.value(a), sc.sortValue ? sc.sortValue(b) : sc.value(b)));
+    } else if (!this.keepOrder()) {
+      list = newestFirst(list);
     }
     return list;
   });
@@ -561,8 +594,13 @@ export class DataTable<T> {
       case 'money': return fmtAmount(v);
       case 'number': return fmtNumber(v);
       case 'date': return fmtDate(String(v));
-      default: return String(v);
+      default: return this.flat(String(v));
     }
+  }
+
+  /** a rich-text note as one line in a cell */
+  protected flat(v: string): string {
+    return isRich(v) ? richToPlain(v).replace(/\s*\n\s*/g, ' · ').replace(/(\s*·\s*){2,}/g, ' · ').replace(/^\s*·\s*|\s*·\s*$/g, '') : v;
   }
 
   // ── sorting ──

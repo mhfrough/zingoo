@@ -265,7 +265,11 @@ export interface Dashboard {
   capitalTarget: number;
   pendingApprovals: number;
   alerts: Alert[];
-  latestOrders: { id: string; refNo: string; date: string; distributor: string; sku: string; cartons: number; value: number; status: string }[];
+  latestOrders: {
+    id: string; refNo: string; date: string; createdAt: string; updatedAt: string; distributor: string; sku: string; name: string;
+    cartons: number; status: string; reviewNote: string | null;
+    productionOrder: { refNo: string; status: string; stage: string | null; readyDate: string | null; manufacturer: string } | null;
+  }[];
 }
 
 /** Company settings the pages read (the full record has more fields). */
@@ -280,6 +284,7 @@ export interface Settings {
   defaultAdvancePct?: number;
   /** the earlier sales-order flow (warehouse dispatch, invoice at dispatch) is shown */
   salesOrdersEnabled?: boolean;
+  requestsNeedApproval?: boolean;
   lowStockCartons: number;
   paymentCycles: number[];
   defaultPaymentCycle: number;

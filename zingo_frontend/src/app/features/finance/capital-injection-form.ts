@@ -5,7 +5,7 @@ import { SettingsStore } from '../../core/settings.store';
 import { AttachmentMeta } from '../../core/attachments.api';
 import { fmtMoney } from '../../shared/format';
 import { isChequeMethod } from '../../shared/payments';
-import { Btn, Field, FileInput, MoneyInput, Offcanvas } from '../../ui';
+import { Btn, Field, FileInput, MoneyInput, Offcanvas, RichText } from '../../ui';
 import { FormModal } from '../ops/form-modal';
 import { FinanceApi } from './finance.api';
 import { InvestorAccount, InvestorType } from './models';
@@ -60,7 +60,7 @@ type StreamForm = ReturnType<typeof streamGroup>;
 @Component({
   selector: 'app-capital-injection-form',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [ReactiveFormsModule, Offcanvas, Field, Btn, MoneyInput, FileInput],
+  imports: [ReactiveFormsModule, Offcanvas, Field, Btn, MoneyInput, FileInput, RichText],
   styles: `
     .investors {
       display: contents;
@@ -477,7 +477,7 @@ type StreamForm = ReturnType<typeof streamGroup>;
           </app-field>
         }
 
-        <app-field label="Terms" [wide]="true"><textarea formControlName="note" placeholder="Optional. Return, profit share, repayment"></textarea></app-field>
+        <app-field label="Terms" [wide]="true"><app-rich-text formControlName="note" [max]="2000" placeholder="Optional. Return, profit share, repayment" /></app-field>
         <app-field label="Agreement" [wide]="true" hint="Optional. One agreement serves every investor">
           <app-file-input formControlName="agreement" label="Upload agreement" />
         </app-field>

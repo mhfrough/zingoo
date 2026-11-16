@@ -12,6 +12,7 @@ import { PaymentRequestsService } from '../manufacturing/payment-requests.servic
 import { ShipmentsService } from '../manufacturing/shipments.service';
 import { DistInvoicesService } from '../manufacturing/dist-invoices.service';
 import { SettingsService } from '../setup/setup.service';
+import { PortalRequest } from '../portal/portal.entities';
 
 /** Period filter: 'all' or 'YYYY-MM'. */
 type Period = string;
@@ -504,9 +505,16 @@ export class ReportsService {
       capitalTarget: s.capitalTarget,
       pendingApprovals: alerts.filter((a) => a.kind === 'approval').length,
       alerts,
-      latestOrders: orders.slice(0, 5).map((o) => ({
-        id: o.id, refNo: o.refNo, date: o.date, distributor: o.distributor.name, sku: o.product.sku,
-        cartons: o.cartons, value: o.billed, status: o.status,
+      // the latest distributor orders and where each stands with its manufacturer
+      latestOrders: (await this.db.manager.find(PortalRequest, {
+        relations: ['distributor', 'product', 'productionOrder', 'productionOrder.manufacturer'], order: { createdAt: 'DESC' }, take: 8,
+      })).map((r) => ({
+        id: r.id, refNo: r.refNo, date: r.date, createdAt: r.createdAt, updatedAt: r.updatedAt, distributor: r.distributor.name,
+        sku: r.product.sku, name: r.product.name, cartons: r.cartons, status: r.status, reviewNote: r.reviewNote,
+        productionOrder: r.productionOrder ? {
+          refNo: r.productionOrder.refNo, status: r.productionOrder.status, stage: r.productionOrder.stage,
+          readyDate: r.productionOrder.readyDate, manufacturer: r.productionOrder.manufacturer.name,
+        } : null,
       })),
     };
   }

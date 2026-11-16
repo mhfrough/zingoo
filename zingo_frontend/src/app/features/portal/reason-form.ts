@@ -1,7 +1,7 @@
 import { ChangeDetectionStrategy, Component, input } from '@angular/core';
 import { ReactiveFormsModule, Validators } from '@angular/forms';
 import { Observable } from 'rxjs';
-import { Btn, Field, Offcanvas } from '../../ui';
+import { Btn, Field, Offcanvas, RichText } from '../../ui';
 import { FormModal } from '../ops/form-modal';
 
 /**
@@ -11,7 +11,7 @@ import { FormModal } from '../ops/form-modal';
 @Component({
   selector: 'app-reason-form',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [ReactiveFormsModule, Offcanvas, Field, Btn],
+  imports: [ReactiveFormsModule, Offcanvas, Field, Btn, RichText],
   template: `
     <app-offcanvas #oc [(open)]="open" [title]="heading()" size="lg" [dirty]="form.dirty" [subtitle]="subject()">
       @if (error()) {
@@ -19,7 +19,7 @@ import { FormModal } from '../ops/form-modal';
       }
       <form [id]="formId" [formGroup]="form" (ngSubmit)="submit()" class="form-grid" novalidate>
         <app-field label="Reason" [wide]="true" hint="The distributor sees this" [required]="true" [error]="invalid('note') ? 'Say why' : null">
-          <textarea formControlName="note"></textarea>
+          <app-rich-text formControlName="note" [max]="2000" />
         </app-field>
       </form>
       <ng-container offcanvasFooter>

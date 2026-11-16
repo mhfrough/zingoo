@@ -29,7 +29,7 @@ import { SettingsApi } from './settings.api';
           }
         </div>
         <div class="card__body">
-          <app-data-table [columns]="centerColumns" [rows]="centers()" [actions]="centerActions" [searchable]="false" [loading]="budgets.isLoading()"
+          <app-data-table keepOrder [columns]="centerColumns" [rows]="centers()" [actions]="centerActions" [searchable]="false" [loading]="budgets.isLoading()"
             emptyTitle="No streams" emptyText="Add the first one." (action)="onCenterAction($event)" />
         </div>
       </div>
@@ -43,7 +43,7 @@ import { SettingsApi } from './settings.api';
           }
           </div>
           <div class="card__body">
-            <app-data-table [columns]="categoryColumns" [rows]="income.value() ?? []" [actions]="categoryActions" [searchable]="false" [loading]="income.isLoading()"
+            <app-data-table keepOrder [columns]="categoryColumns" [rows]="income.value() ?? []" [actions]="categoryActions" [searchable]="false" [loading]="income.isLoading()"
               emptyTitle="No income categories" emptyText="Add the first one." (action)="onCategoryAction($event)" />
           </div>
         </div>
@@ -55,7 +55,7 @@ import { SettingsApi } from './settings.api';
           }
           </div>
           <div class="card__body">
-            <app-data-table [columns]="categoryColumns" [rows]="expense.value() ?? []" [actions]="categoryActions" [searchable]="false" [loading]="expense.isLoading()"
+            <app-data-table keepOrder [columns]="categoryColumns" [rows]="expense.value() ?? []" [actions]="categoryActions" [searchable]="false" [loading]="expense.isLoading()"
               emptyTitle="No expense categories" emptyText="Add the first one." (action)="onCategoryAction($event)" />
           </div>
         </div>

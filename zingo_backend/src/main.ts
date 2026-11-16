@@ -1,4 +1,5 @@
 import { ValidationPipe } from '@nestjs/common';
+import { PartnerViewInterceptor } from './common/partner-view.interceptor';
 import { ConfigService } from '@nestjs/config';
 import { NestFactory } from '@nestjs/core';
 import type { NestExpressApplication } from '@nestjs/platform-express';
@@ -18,6 +19,9 @@ async function bootstrap() {
     .split(',')
     .map((o) => o.trim().replace(/\/$/, ''));
   app.enableCors({ origin: origins.includes('*') ? true : origins, credentials: true });
+
+  // distributor and manufacturer logins never receive each other's prices or Zen Foods' costs
+  app.useGlobalInterceptors(new PartnerViewInterceptor());
 
   app.useGlobalPipes(
     new ValidationPipe({

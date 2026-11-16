@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common';
+import { plainText } from '../common/plain-text';
 import { InjectDataSource } from '@nestjs/typeorm';
 import { DataSource, EntityManager } from 'typeorm';
 import { ROLE_PAGES } from '../auth/access';
@@ -86,7 +87,8 @@ export class NotificationsService {
   async send(em: EntityManager, actor: Actor | null, ...notes: Note[]) {
     const rows = notes.flatMap((n): Partial<Notification>[] => {
       const base = {
-        kind: n.kind, title: n.title.slice(0, 200), body: n.body ?? null, tone: n.tone ?? 'info', refNo: n.refNo ?? null,
+        // notes come from the rich-text editor: a notice is plain text
+        kind: n.kind, title: plainText(n.title).slice(0, 200), body: n.body ? plainText(n.body) : null, tone: n.tone ?? 'info', refNo: n.refNo ?? null,
         link: n.link ?? null, actorId: actor?.id && /^[0-9a-f-]{36}$/i.test(actor.id) ? actor.id : null, actorName: actor?.name ?? null,
       };
       if ('staff' in n.to) return [{ ...base, audience: 'staff' as const, targetId: null, roles: [...new Set<string>(['Admin', ...n.to.staff])] }];

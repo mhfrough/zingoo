@@ -3,8 +3,8 @@ import { FormArray, FormGroup, ReactiveFormsModule, Validators } from '@angular/
 import { toSignal } from '@angular/core/rxjs-interop';
 import { SettingsStore } from '../../core/settings.store';
 import { errorText } from '../../shared/errors';
-import { Tone, fmtAmount, fmtAmount2, fmtDate, fmtMoney, fmtNumber } from '../../shared/format';
-import { Btn, ConfirmService, DataTable, Field, MoneyInput, Offcanvas, RowAction, RowActionEvent, TableColumn, ToastService } from '../../ui';
+import { Tone, fmtAmount, fmtAmount2, fmtDate, fmtMoney, fmtNumber, productLabel } from '../../shared/format';
+import { Btn, ConfirmService, DataTable, Field, MoneyInput, Offcanvas, RichText, RowAction, RowActionEvent, TableColumn, ToastService } from '../../ui';
 import { FormModal } from '../ops/form-modal';
 import { OrderReasonForm } from './answer-forms';
 import { DistInvoice, FactoryApi, Shipment } from './factory.api';
@@ -20,7 +20,7 @@ const today = () => new Date().toISOString().slice(0, 10);
 @Component({
   selector: 'app-sales-invoice-form',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [ReactiveFormsModule, Offcanvas, Field, Btn],
+  imports: [ReactiveFormsModule, Offcanvas, Field, Btn, RichText],
   styles: `
     .lots {
       grid-column: 1 / -1;
@@ -80,7 +80,7 @@ const today = () => new Date().toISOString().slice(0, 10);
           }
         </div>
         <div class="total"><span>{{ num(containers()) }} container{{ containers() === 1 ? '' : 's' }}</span><span>{{ money(total()) }}</span></div>
-        <app-field label="Note" [wide]="true"><textarea formControlName="note" rows="2" maxlength="500"></textarea></app-field>
+        <app-field label="Note" [wide]="true"><app-rich-text formControlName="note" [max]="500" [storeMax]="500" /></app-field>
       </form>
       <ng-container offcanvasFooter>
         <button appBtn type="button" (click)="oc.requestClose()">Cancel</button>
@@ -275,11 +275,14 @@ export class InvoicesPanel {
   protected inStock = computed(() => this.shipments().some((s) => s.status === 'Received' && s.onHandContainers > 0));
 
   protected columns = computed<TableColumn<DistInvoice>[]>(() => [
-    { id: 'ref', label: 'Invoice', value: (i) => i.refNo, sub: (i) => `${fmtDate(i.date)}${i.invoiceNo ? ` · ${i.invoiceNo}` : ''}` },
-    ...(this.mode() === 'company' ? [{ id: 'who', label: 'Distributor', value: (i: DistInvoice) => i.distributor.name, priority: 2 } as TableColumn<DistInvoice>] : []),
     {
-      id: 'goods', label: 'Sold', value: (i) => `${fmtNumber(i.containers)} container${i.containers === 1 ? '' : 's'}`,
-      sub: (i) => `${[...new Set(i.lines.map((l) => l.product.sku))].join(', ')} · ${fmtNumber(i.packets)} packets`,
+      id: 'goods', label: this.mode() === 'company' ? 'Sold / Distributor' : 'Sold', kind: 'title',
+      value: (i) => [...new Set(i.lines.map((l) => productLabel(l.product)))].join(', '),
+      sub: (i) => (this.mode() === 'company' ? i.distributor.name : `${fmtNumber(i.containers)} container${i.containers === 1 ? '' : 's'} · ${fmtNumber(i.packets)} packets`),
+    },
+    {
+      id: 'ref', label: 'Invoice no.', kind: 'mono', value: (i) => i.refNo, sortValue: (i) => i.date,
+      sub: (i) => `${fmtDate(i.date)}${i.invoiceNo ? ` · ${i.invoiceNo}` : ''}${this.mode() === 'company' ? ` · ${fmtNumber(i.containers)} container${i.containers === 1 ? '' : 's'}` : ''}`,
     },
     { id: 'amount', label: 'Amount', kind: 'money', value: (i) => i.amount, sub: (i) => (i.paid > 0 ? `Paid ${fmtAmount(i.paid)}` : null) },
     { id: 'due', label: 'Still due', kind: 'money', priority: 2, value: (i) => i.due, sub: (i) => (i.status === 'Verified' ? `Due ${fmtDate(i.dueDate)}` : null) },

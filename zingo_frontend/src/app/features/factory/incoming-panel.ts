@@ -1,7 +1,7 @@
 import { ChangeDetectionStrategy, Component, computed, inject, input, output, signal } from '@angular/core';
 import { ReactiveFormsModule, Validators } from '@angular/forms';
-import { Tone, fmtDate, fmtNumber } from '../../shared/format';
-import { Btn, DataTable, Field, Offcanvas, RowAction, RowActionEvent, TableColumn } from '../../ui';
+import { Tone, fmtDate, fmtNumber, productLabel, qtyLabel } from '../../shared/format';
+import { Btn, DataTable, Field, Offcanvas, RichText, RowAction, RowActionEvent, TableColumn } from '../../ui';
 import { FormModal } from '../ops/form-modal';
 import { FactoryApi, IncomingOrder } from './factory.api';
 
@@ -11,7 +11,7 @@ const today = () => new Date().toISOString().slice(0, 10);
 @Component({
   selector: 'app-pickup-form',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [ReactiveFormsModule, Offcanvas, Field, Btn],
+  imports: [ReactiveFormsModule, Offcanvas, Field, Btn, RichText],
   template: `
     <app-offcanvas #oc [(open)]="open" [title]="o() ? 'Collect ' + o()!.refNo : 'Collect from factory'" [subtitle]="subject()" size="md" [dirty]="form.dirty">
       @if (error()) {
@@ -26,7 +26,7 @@ const today = () => new Date().toISOString().slice(0, 10);
         <app-field label="Pickup date" [required]="true"><input type="date" formControlName="date" [min]="o()?.date ?? ''" [max]="maxDate" /></app-field>
         <app-field label="Vehicle no."><input type="text" formControlName="vehicle" maxlength="60" /></app-field>
         <app-field label="Collected by" hint="Driver or person"><input type="text" formControlName="collectedBy" maxlength="60" /></app-field>
-        <app-field label="Note" [wide]="true"><textarea formControlName="note" rows="2" maxlength="500"></textarea></app-field>
+        <app-field label="Note" [wide]="true"><app-rich-text formControlName="note" [max]="500" [storeMax]="500" /></app-field>
       </form>
       <ng-container offcanvasFooter>
         <button appBtn type="button" (click)="oc.requestClose()">Cancel</button>
@@ -113,10 +113,13 @@ export class IncomingPanel {
   };
 
   protected columns = computed<TableColumn<IncomingOrder>[]>(() => [
-    { id: 'ref', label: 'Order', value: (o) => o.refNo, sub: (o) => `Ordered ${fmtDate(o.date)}` },
     {
-      id: 'product', label: 'Product', value: (o) => `${fmtNumber(o.containers)} × ${o.product.sku}`,
-      sub: (o) => `${fmtNumber(o.containers * o.bundlesPerContainer)} bundles${o.shippedContainers ? ` · ${o.shippedContainers} sent` : ''}`,
+      id: 'product', label: this.showDistributor() ? 'Order / Distributor' : 'Order / Manufacturer', kind: 'title', value: (o) => productLabel(o.product),
+      sub: (o) => (this.showDistributor() ? o.distributor?.name ?? '' : o.manufacturer.name),
+    },
+    {
+      id: 'ref', label: 'Order no. / quantity', kind: 'mono', value: (o) => o.refNo, sortValue: (o) => o.date,
+      sub: (o) => `${fmtDate(o.date)} · ${qtyLabel(o.containers, o.containers * o.bundlesPerContainer)}${o.shippedContainers ? ` · ${fmtNumber(o.shippedContainers)} sent` : ''}`,
     },
     {
       id: 'from', label: this.showDistributor() ? 'Route' : 'Manufacturer', priority: 2,

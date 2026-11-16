@@ -19,6 +19,8 @@ import { ShipmentsPanel } from '../factory/shipments-panel';
 import { DeliveryClaimsPanel } from '../factory/delivery-claims-panel';
 import { ProductsPanel } from '../products/products-panel';
 import { SettingsStore } from '../../core/settings.store';
+import { ManufacturersCard } from '../settings/manufacturers-card';
+import { ManufacturerForm } from '../settings/manufacturer-form';
 
 const QC_TONE: Record<string, Tone> = { Passed: 'success', Pending: 'warning', Failed: 'danger' };
 const STATUS_TONE: Record<string, Tone> = { Released: 'success', Planned: 'warning' };
@@ -26,7 +28,7 @@ const STATUS_TONE: Record<string, Tone> = { Released: 'success', Planned: 'warni
 @Component({
   selector: 'app-manufacturing',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [Btn, DataTable, Kpi, PageHeader, Tabs, TabPanel, BatchForm, ProductForm, PayManufacturerForm, OrdersPanel, RequestsPanel, ShipmentsPanel, DeliveryClaimsPanel, ProductsPanel],
+  imports: [Btn, DataTable, Kpi, PageHeader, Tabs, TabPanel, BatchForm, ProductForm, PayManufacturerForm, OrdersPanel, RequestsPanel, ShipmentsPanel, DeliveryClaimsPanel, ProductsPanel, ManufacturersCard, ManufacturerForm],
   templateUrl: './manufacturing.html',
 })
 export class Manufacturing {
@@ -70,11 +72,15 @@ export class Manufacturing {
       { id: 'payments', label: 'Manufacturer payments', icon: 'banknote', count: waitingPay || null },
       { id: 'products', label: 'Products', icon: 'package', count: this.unassigned() || null },
       { id: 'warehouse', label: 'Warehouse & batches', icon: 'boxes' },
+      { id: 'makers', label: 'Manufacturers', icon: 'factory', count: (this.manufacturers.value() ?? []).length || null },
     ];
   });
   protected ordersWaiting = computed(() => (this.productionOrders.value() ?? []).filter((o) => o.status === 'Sent').length);
 
   protected canWrite = computed(() => this.auth.can('manufacturing'));
+  /** adding or changing a manufacturer is an Admin task (as in Settings & Data) */
+  protected canManufacturers = computed(() => this.auth.can('admin'));
+  protected manufacturerOpen = signal(false);
   protected loading = computed(() => this.stock.isLoading() || this.batches.isLoading());
   protected loadError = computed(() => (this.stock.error() || this.batches.error() ? 'The server did not answer.' : null));
 

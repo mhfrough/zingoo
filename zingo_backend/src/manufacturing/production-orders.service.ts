@@ -254,8 +254,9 @@ export class ProductionOrdersService {
     await this.notes.send(em, user,
       { to: { staff: TEAM.manufacturing }, kind, tone, refNo: o.refNo, link: LINK.manufacturing('orders'), title, body },
       { to: { manufacturerId: o.manufacturerId }, kind, tone, refNo: o.refNo, link: LINK.factory, title, body },
-      ...(o.distributorId && kind !== 'order.rejected' ? [{ to: { distributorId: o.distributorId }, kind, tone, refNo: o.refNo, link: LINK.portal('stock'),
+      ...(o.distributorId ? [{ to: { distributorId: o.distributorId }, kind, tone, refNo: o.refNo, link: LINK.portal('stock'),
         title: kind === 'order.accepted' ? `Goods on the way: order ${o.refNo} is in production`
+          : kind === 'order.rejected' ? `${o.manufacturer.name} could not take order ${o.refNo}`
           : kind === 'order.ready' ? `Order ${o.refNo} is ready: collect it from ${o.manufacturer.name} or wait for dispatch` : title, body }] : []),
     );
   }

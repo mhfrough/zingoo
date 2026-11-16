@@ -93,6 +93,45 @@ export function richTextLength(html: string | null | undefined): number {
   return (div.textContent ?? '').length;
 }
 
+/** does the string hold editor HTML (and not plain text that happens to contain "<")? */
+export const isRich = (v: string | null | undefined) => !!v && /<\/?(p|br|strong|em|u|ul|ol|li|a)\b[^>]*>/i.test(v);
+
+/**
+ * Editor HTML as plain text: paragraphs and list items on their own lines ("- " for bullets). Plain text is returned
+ * as it is, so it is safe on any stored value (older notes were plain text).
+ */
+export function richToPlain(v: string | null | undefined): string {
+  if (!v) return '';
+  if (!isRich(v)) return v;
+  const doc = new DOMParser().parseFromString(`<body>${sanitizeRich(v)}</body>`, 'text/html');
+  const lines: string[] = [];
+  const walk = (n: Node, prefix = '') => {
+    n.childNodes.forEach((c) => {
+      if (c.nodeType !== Node.ELEMENT_NODE) return;
+      const el = c as HTMLElement;
+      if (el.tagName === 'UL' || el.tagName === 'OL') {
+        let i = 0;
+        el.querySelectorAll(':scope > li').forEach((li) => lines.push(`${el.tagName === 'OL' ? `${++i}.` : '-'} ${(li.textContent ?? '').trim()}`));
+      } else if (el.tagName === 'P') {
+        lines.push(prefix + (el.textContent ?? '').trim());
+      } else {
+        walk(el, prefix);
+      }
+    });
+  };
+  walk(doc.body);
+  // text outside any block (a bare "a <strong>b</strong>")
+  return (lines.length ? lines : [doc.body.textContent ?? '']).filter((l) => l.trim()).join('\n');
+}
+
+/** plain text (older notes) as editor HTML: one paragraph per line, characters escaped */
+export function plainToRich(v: string | null | undefined): string {
+  if (!v) return '';
+  if (isRich(v)) return v;
+  const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  return v.split(/\r?\n/).map((l) => `<p>${esc(l) || '<br>'}</p>`).join('');
+}
+
 /* ───────────── the editor ───────────── */
 
 interface Tool {
@@ -214,6 +253,11 @@ export class RichText implements ControlValueAccessor, AfterViewInit {
   readonly max = input<number>(TEXT_LIMITS.note);
   readonly ariaLabel = input<string>();
   readonly forceInvalid = input(false);
+  /**
+   * longest value the server stores for this field (HTML characters included). Formatting that would not fit is
+   * dropped: the value is then sent as plain text, so a save never fails on the markup.
+   */
+  readonly storeMax = input<number>();
 
   protected tools = TOOLS;
   protected pressed = signal<Record<string, boolean>>({});
@@ -279,7 +323,7 @@ export class RichText implements ControlValueAccessor, AfterViewInit {
   }
 
   private afterEdit() {
-    const clean = sanitizeRich(this.editorEl().nativeElement.innerHTML);
+    const clean = this.fit(sanitizeRich(this.editorEl().nativeElement.innerHTML));
     this.syncState();
     if (clean !== this.lastEmitted) {
       this.lastEmitted = clean;
@@ -432,8 +476,15 @@ export class RichText implements ControlValueAccessor, AfterViewInit {
   }
 
   // ── ControlValueAccessor ──
+  /** the value to store: the HTML, or plain text when the HTML is longer than the server keeps */
+  private fit(html: string) {
+    const limit = this.storeMax();
+    if (!limit || html.length <= limit) return html;
+    return richToPlain(html).slice(0, limit);
+  }
+
   writeValue(value: string | null) {
-    this.pending = sanitizeRich(value);
+    this.pending = sanitizeRich(plainToRich(value));
     this.lastEmitted = this.pending;
     if (this.viewReady) this.paint();
   }

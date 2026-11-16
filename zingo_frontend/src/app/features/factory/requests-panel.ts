@@ -1,7 +1,7 @@
 import { ChangeDetectionStrategy, Component, computed, inject, input, output, signal } from '@angular/core';
 import { AuthService } from '../../core/auth.service';
 import { errorText } from '../../shared/errors';
-import { Tone, fmtAmount, fmtDate, fmtMoney } from '../../shared/format';
+import { Tone, fmtAmount, fmtDate, fmtMoney, productLabel } from '../../shared/format';
 import { Btn, ConfirmService, DataTable, RowAction, RowActionEvent, TableColumn, ToastService } from '../../ui';
 import { Manufacturer } from '../ops/models';
 import { OrderReasonForm } from './answer-forms';
@@ -91,12 +91,12 @@ export class RequestsPanel {
   protected openOrders = computed(() => (this.position()?.rows ?? []).some((r) => r.status === 'Accepted'));
 
   protected columns = computed<TableColumn<PaymentRequest>[]>(() => [
-    { id: 'ref', label: 'Request', value: (r) => r.refNo, sub: (r) => `${fmtDate(r.date)}${r.invoiceNo ? ` · inv. ${r.invoiceNo}` : ''}` },
     {
-      id: 'order', label: this.mode() === 'company' ? 'Manufacturer / order' : 'Order',
-      value: (r) => (this.mode() === 'company' ? r.manufacturer.name : `${r.order.refNo} · ${r.order.product.sku}`),
-      sub: (r) => (this.mode() === 'company' ? `${r.kind} · ${r.order.refNo}` : r.kind),
+      id: 'order', label: this.mode() === 'company' ? 'Payment for / Manufacturer' : 'Payment for', kind: 'title',
+      value: (r) => `${r.kind} · ${productLabel(r.order.product)}`,
+      sub: (r) => (this.mode() === 'company' ? `${r.manufacturer.name} · order ${r.order.refNo}` : `Order ${r.order.refNo}`),
     },
+    { id: 'ref', label: 'Request no.', kind: 'mono', value: (r) => r.refNo, sortValue: (r) => r.date, sub: (r) => `${fmtDate(r.date)}${r.invoiceNo ? ` · inv. ${r.invoiceNo}` : ''}` },
     { id: 'amount', label: 'Amount', kind: 'money', value: (r) => r.amount, sub: (r) => (r.paid > 0 ? `Paid ${fmtAmount(r.paid)}` : null) },
     { id: 'bank', label: 'Pay into', priority: 2, value: (r) => r.bank.bank, sub: (r) => r.bank.account },
     { id: 'state', label: 'Status', kind: 'tag', value: (r) => r.state, tone: stateTone, sub: (r) => r.reason ?? (r.signatures.length ? `Signed ${r.signatures.join(' + ')}` : null) },

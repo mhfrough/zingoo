@@ -17,7 +17,7 @@ import { StatementRow, TrailRow } from './factory.api';
         <div><h2>Batch trail</h2><p>Each delivery from shipment to cash: received, sold, on hand, sales and collected</p></div>
       </div>
       <div class="card__body">
-        <app-data-table [columns]="columns()" [rows]="rows()" [totals]="totals()" [loading]="loading()"
+        <app-data-table keepOrder [columns]="columns()" [rows]="rows()" [totals]="totals()" [loading]="loading()"
           searchPlaceholder="Search deliveries" emptyTitle="No deliveries yet" emptyText="Shipments appear here once a manufacturer sends them." />
       </div>
     </div>
@@ -28,6 +28,8 @@ export class TrailPanel {
   readonly loading = input(false);
   /** show the distributor column (staff) */
   readonly showDistributor = input(true);
+  /** the cost is what Zen Foods paid the manufacturer: hidden in the distributor portal */
+  readonly showCost = input(true);
 
   protected columns = computed<TableColumn<TrailRow>[]>(() => [
     { id: 'ref', label: 'Delivery', value: (r) => `${r.refNo} · ${r.sku}`, sub: (r) => `${r.orderRef} · ${r.manufacturer}` },
@@ -38,7 +40,7 @@ export class TrailPanel {
       id: 'flow', label: 'Containers', value: (r) => `${fmtNumber(r.received)} received · ${fmtNumber(r.sold)} sold`,
       sub: (r) => `${fmtNumber(r.shipped)} shipped · ${fmtNumber(r.onHand)} on hand`,
     },
-    { id: 'cost', label: 'Cost', kind: 'money', priority: 3, value: (r) => r.cost },
+    ...(this.showCost() ? [{ id: 'cost', label: 'Cost', kind: 'money', priority: 3, value: (r: TrailRow) => r.cost } as TableColumn<TrailRow>] : []),
     { id: 'sales', label: 'Sales', kind: 'money', value: (r) => r.sales, sub: (r) => (r.collected ? `Collected ${fmtAmount(r.collected)}` : null) },
     {
       id: 'state', label: 'Status', kind: 'tag', value: (r) => stateOf(r), tone: (r): Tone => (r.overdue ? 'danger' : r.status === 'In transit' ? 'warning' : r.onHand ? 'info' : 'success'),
@@ -66,7 +68,7 @@ const stateOf = (r: TrailRow) =>
         <div><h2>Account statement</h2><p>Goods received (owed to you) and payments made. A negative balance is advance not yet covered by goods</p></div>
       </div>
       <div class="card__body">
-        <app-data-table [columns]="columns" [rows]="rows()" [totals]="totals()" [loading]="loading()" [searchable]="false"
+        <app-data-table keepOrder [columns]="columns" [rows]="rows()" [totals]="totals()" [loading]="loading()" [searchable]="false"
           emptyTitle="Nothing yet" emptyText="Payments and goods received appear here." />
       </div>
     </div>

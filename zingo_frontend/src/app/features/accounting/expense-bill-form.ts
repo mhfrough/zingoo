@@ -6,7 +6,7 @@ import { AuthService } from '../../core/auth.service';
 import { SettingsStore } from '../../core/settings.store';
 import { errorText } from '../../shared/errors';
 import { fmtMoney } from '../../shared/format';
-import { Btn, Field, FileInput, MoneyInput, Offcanvas, Tag } from '../../ui';
+import { Btn, Field, FileInput, MoneyInput, Offcanvas, RichText, Tag } from '../../ui';
 import { FinanceApi } from '../finance/finance.api';
 import { AccountingDoc, Currency } from '../finance/models';
 import { FormModal } from '../ops/form-modal';
@@ -56,7 +56,7 @@ type AllocForm = ReturnType<typeof allocGroup>;
 @Component({
   selector: 'app-expense-bill-form',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [ReactiveFormsModule, Offcanvas, Field, MoneyInput, Btn, Tag, FileInput],
+  imports: [ReactiveFormsModule, Offcanvas, Field, MoneyInput, Btn, Tag, FileInput, RichText],
   styles: `
     .sections {
       display: flex;
@@ -241,7 +241,7 @@ type AllocForm = ReturnType<typeof allocGroup>;
               </select>
             </app-field>
             <app-field label="Description / reason" [required]="true" [wide]="true" [error]="invalid('note') ? 'Say what the bill is for' : null">
-              <textarea formControlName="note" placeholder="What was bought or paid for, and why"></textarea>
+              <app-rich-text formControlName="note" [max]="2000" placeholder="What was bought or paid for, and why" />
             </app-field>
             @if (typeFields().length) {
               <h4 class="sub wide">{{ value().billType }} details</h4>

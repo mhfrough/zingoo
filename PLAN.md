@@ -396,4 +396,20 @@ The user asked for the flow of every request and actor and found three gaps: a d
 | Ready + pickup | The manufacturer's last production stage (Settings list, default "Ready to ship") now sends "ready: collect it or wait for dispatch" to the distributor and the company. The distributor (Owner / Warehouse, or Admin / Distribution for it) can "Confirm pickup" on a ready order: a shipment with method Pickup (vehicle, collected by), on the road until it confirms receipt at its warehouse. Manufacturer and company are told. The manufacturer can still deliver the rest itself. New "Coming from the manufacturer" table on Deliveries & stock: waiting, in production, ready, with the ready date. |
 | Distributor dispatch | `distributor_dispatches` `DSP-001`: bundles out of a received delivery to a customer (shop, wholesaler, sub-distributor), with area and vehicle; closed as Delivered or Returned (reason; returned bundles can go out again). Never more than arrived less claims. Zen Foods (Distribution, Admin) is told at each step; open dispatches wait on the distributor in the bell. Nothing posts: the sale is still the distributor's sales invoice. |
 
-API checks 901 (40 new). Not committed or deployed yet.
+API checks 901 (40 new). Commit 3df5aa9, pushed and deployed to Render 2026-11-16 (api + web).
+
+## 15. Client flow review (2026-11-16)
+The client drew the flow: a distributor orders straight from the manufacturer; the manufacturer releases the goods; Zen Foods watches every order and handles all money (the distributor pays Zen Foods at its agreed SKU rates, Zen Foods pays the manufacturer on its payment request). Built:
+
+| Item | Built |
+| --- | --- |
+| Direct orders | Settings "Distributor orders need Zingo approval" (`requestsNeedApproval`, default Off). Off: "Order stock" places the production order with the product's manufacturer and sends it at once; the distributor's notes go with it. A product with no manufacturer cannot be ordered (the form greys it out). The desk lists "Distributor orders with the manufacturers" to watch; "Requests to accept" shows only when the setting is On or old requests wait. A manufacturer that declines tells the distributor with the reason. |
+| Money privacy | Global `PartnerViewInterceptor`: a distributor login never receives the manufacturer's rate, advance or the product's cost lines, nor Zen Foods' cost and margin (its goods are valued at its own price; claim values hidden); a manufacturer login never receives the distributor's price, Zen Foods' selling price or the distributor's credit and terms (distributor reduced to name, region, address, contact). |
+| Readable tables | Rows lead with the product name and code (bold blue), the party on the second line ("Order / Distributor"), then the number with date and quantity. Every table of stored records gets "Last update" (updated time, added date) and is newest first unless the user sorts; statements, settings lists and due-date lists keep their order. |
+| Locations | Province first, then its cities; district optional (no longer hides cities); GeoNames names cleaned ("Karachi West", "Khyber"). |
+| Manufacturers | Same add / edit offcanvas as Settings on Manufacturing (header button + Manufacturers tab) and Overview (Admin). |
+| Rich text | Every textarea is the rich-text editor; a value too long for its field with formatting is stored as plain text; tables, notices, CSV and vouchers show plain text, order notes keep formatting. |
+| Overview | "Latest distributor orders" lists distributor orders with manufacturer and status. |
+
+Later: manufacturers add their own SKUs; several manufacturers per product (on hold). Admin "Switch account" (any user, no password) already existed.
+API checks 918.

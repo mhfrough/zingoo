@@ -91,6 +91,12 @@
       font-weight: var(--weight-semibold);
     }
 
+    /* what the row is about (product name and code): bold blue */
+    & td .cell__main.cell__title {
+      font-weight: var(--weight-bold);
+      color: var(--tone-info-fg);
+    }
+
     /* codes and references (SKU, MO-001 ...) stay on one line */
     & td .cell__main.mono {
       white-space: nowrap;
@@ -115,6 +121,13 @@
         font-weight: var(--weight-medium);
         color: var(--text-3);
       }
+    }
+
+    /* a row whose "more actions" menu is open sits above the rows below it and the pager, so the menu can be clicked */
+    & tr:has(details.menu[open]),
+    & td:has(details.menu[open]) {
+      position: relative;
+      z-index: var(--z-popover);
     }
 
     & .cell-actions {

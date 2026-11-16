@@ -1,6 +1,7 @@
 import { Voucher } from '../../shared/print';
 import { fmtAmount, fmtAmount2, fmtDate, fmtMoney, fmtNumber } from '../../shared/format';
 import { DistInvoice, PaymentRequest, ProductionOrder } from './factory.api';
+import { richToPlain } from '../../ui/rich-text';
 
 /** The printed vouchers of the new chain: production order, manufacturer payment request, distributor sales invoice. */
 
@@ -12,7 +13,7 @@ export function orderVoucher(o: ProductionOrder, company?: string): Voucher {
       ['Order date', fmtDate(o.date)], ['Manufacturer', o.manufacturer.name], ['Status', o.status + (o.stage ? ` · ${o.stage}` : '')],
       ['Deliver to', o.destination === 'Warehouse' ? 'Zen Foods warehouse' : o.distributor?.name ?? ''],
       ['Deliver by', o.dueDate ? fmtDate(o.dueDate) : '-'], ['Advance on order', `${o.advancePct}% · ${fmtMoney(o.advanceAmount)}`],
-      ...(o.notes ? [['Notes', o.notes] as [string, string]] : []),
+      ...(o.notes ? [['Notes', richToPlain(o.notes)] as [string, string]] : []),
     ],
     table: {
       head: ['Product', 'Containers', 'Bundles', 'Packets', 'Rate / packet', 'Value (PKR)'],
@@ -32,7 +33,7 @@ export function requestVoucher(r: PaymentRequest, company?: string): Voucher {
       ['Against order', `${r.order.refNo} · ${r.order.product.sku}`], ['Amount', fmtMoney(r.amount)],
       ['Pay into', `${r.bank.bank} · ${r.bank.account}`], ['Account title', r.bank.title + (r.bank.branch ? ` · ${r.bank.branch}` : '')],
       ['Status', r.state], ['Approved by seats', r.signatures.length ? r.signatures.join(' + ') : '-'],
-      ...(r.reason ? [['Reason', r.reason] as [string, string]] : []),
+      ...(r.reason ? [['Reason', richToPlain(r.reason)] as [string, string]] : []),
     ],
     table: r.payments.length ? {
       head: ['Payment', 'Date', 'Method', 'Amount (PKR)'],
@@ -50,7 +51,7 @@ export function salesInvoiceVoucher(i: DistInvoice, company?: string): Voucher {
     facts: [
       ['Date', fmtDate(i.date)], ['Distributor', i.distributor.name], ['Their invoice no.', i.invoiceNo ?? '-'],
       ['Due', fmtDate(i.dueDate)], ['Status', i.state], ['Paid', fmtMoney(i.paid)], ['Still due', fmtMoney(i.due)],
-      ...(i.reason ? [['Reason', i.reason] as [string, string]] : []),
+      ...(i.reason ? [['Reason', richToPlain(i.reason)] as [string, string]] : []),
     ],
     table: {
       head: ['Product', 'Containers', 'Packets', 'Price / packet', 'Amount (PKR)'],

@@ -5,6 +5,11 @@
       <button appBtn icon="package" (click)="openProduct()">Add product / SKU</button>
     </ng-container>
   }
+  @if (canManufacturers()) {
+    <ng-container pageActions>
+      <button appBtn icon="factory" (click)="manufacturerOpen.set(true)">Add manufacturer</button>
+    </ng-container>
+  }
 </app-page-header>
 
 <div class="stack">
@@ -41,6 +46,10 @@
 
     <ng-template appTabPanel="products">
       <app-products-panel [version]="tick()" (changed)="reload()" />
+    </ng-template>
+
+    <ng-template appTabPanel="makers">
+      <app-manufacturers-card [tick]="tick()" (changed)="reload()" />
     </ng-template>
 
     <ng-template appTabPanel="warehouse">
@@ -99,3 +108,5 @@
 <app-product-form [(open)]="productOpen" [product]="editingProduct()" [manufacturers]="manufacturers.value() ?? []"
   [distributors]="distributors.value() ?? []" (saved)="reload()" />
 <app-pay-manufacturer-form [(open)]="payOpen" [batch]="payingBatch()" (saved)="reload()" />
+
+<app-manufacturer-form [(open)]="manufacturerOpen" [manufacturer]="null" (saved)="reload()" />

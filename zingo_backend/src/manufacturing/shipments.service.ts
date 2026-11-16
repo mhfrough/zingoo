@@ -6,10 +6,11 @@ import { Role } from '../common/enums';
 import { round2 } from '../common/numeric.transformer';
 import { nextRef } from '../common/ref';
 import { PostingService } from '../ledger/posting.service';
+import { Lookup } from '../setup/setup.entities';
 import { SettingsService } from '../setup/setup.service';
 import { LINK, NotificationsService, TEAM } from '../notifications/notifications.service';
 import { ProductionOrder, ProductionOrderEvent } from './production-orders.entities';
-import { ReceiveDto, ShipDto } from './shipments.dto';
+import { PickupDto, ReceiveDto, ShipDto } from './shipments.dto';
 import { ProductionShipment } from './shipments.entities';
 
 const today = () => new Date().toISOString().slice(0, 10);
@@ -124,37 +125,121 @@ export class ShipmentsService {
       if (user.role === 'Manufacturer' && o.manufacturerId !== this.own(user.manufacturerId, 'manufacturer')) {
         throw new ForbiddenException('This order belongs to another manufacturer.');
       }
-      if (o.status !== 'Accepted') throw new BadRequestException(`${o.refNo} is ${o.status.toLowerCase()}: only an accepted order can be shipped.`);
-      if (dto.date > today()) throw new BadRequestException('A shipment cannot be dated in the future.');
-      if (dto.date < o.date) throw new BadRequestException('A shipment cannot be dated before its order.');
-      const [{ sent }] = await em.query(`SELECT COALESCE(SUM(containers), 0)::int AS sent FROM production_shipments WHERE "orderId" = $1`, [o.id]);
-      const left = o.containers - Number(sent);
-      if (left <= 0) throw new BadRequestException(`Every container of ${o.refNo} was already shipped.`);
-      if (dto.containers > left) throw new BadRequestException(`Only ${left} container${left > 1 ? 's are' : ' is'} left to ship on ${o.refNo}.`);
-      const s = await this.settings.get(em);
-      const refNo = await nextRef(em, ProductionShipment, s.docPrefixes['shipment'] ?? 'SH', 3);
-      const row = await em.save(em.create(ProductionShipment, {
-        refNo, orderId: o.id, productId: o.productId, manufacturerId: o.manufacturerId, destination: o.destination,
-        distributorId: o.distributorId, shipDate: dto.date, containers: dto.containers, bundlesPerContainer: o.bundlesPerContainer,
-        packetsPerBundle: o.packetsPerBundle, rate: o.rate, vehicle: dto.vehicle?.trim() || null, waybill: dto.waybill?.trim() || null,
-        note: dto.note?.trim() || null, shippedBy: user.name, status: 'In transit',
-      }));
-      await this.event(em, o.id, user, `Shipped ${dto.containers} container${dto.containers > 1 ? 's' : ''} (${refNo})`,
-        [dto.vehicle && `Vehicle ${dto.vehicle}`, dto.waybill && `Waybill ${dto.waybill}`].filter(Boolean).join(' · ') || null);
+      const row = await this.move(em, user, o, dto, 'Delivery');
       const full = await this.one(em, row.id);
       const what = `${dto.containers} container${dto.containers > 1 ? 's' : ''} of ${full.product.sku} (${o.refNo})`;
       const via = [dto.vehicle && `vehicle ${dto.vehicle}`, dto.waybill && `waybill ${dto.waybill}`].filter(Boolean).join(' · ');
       const to = o.destination === 'Warehouse' ? 'the Zen Foods warehouse' : full.distributor?.name ?? 'the distributor';
       await this.notes.send(em, user,
-        { to: { distributorId: o.destination === 'Distributor' ? o.distributorId : null }, kind: 'shipment.dispatched', tone: 'warning', refNo, link: LINK.portal('stock'),
+        { to: { distributorId: o.destination === 'Distributor' ? o.distributorId : null }, kind: 'shipment.dispatched', tone: 'warning', refNo: row.refNo, link: LINK.portal('stock'),
           title: `${full.manufacturer.name} dispatched ${what} to you`, body: [via, 'Confirm what arrives on Deliveries & stock.'].filter(Boolean).join(' · ') },
-        { to: { staff: [...TEAM.manufacturing, 'Distribution'] }, kind: 'shipment.dispatched', refNo, link: LINK.manufacturing('orders'),
+        { to: { staff: [...TEAM.manufacturing, 'Distribution'] }, kind: 'shipment.dispatched', refNo: row.refNo, link: LINK.manufacturing('orders'),
           title: `${full.manufacturer.name} dispatched ${what} to ${to}`, body: via || null },
-        { to: { manufacturerId: o.manufacturerId }, kind: 'shipment.dispatched', refNo, link: LINK.factory,
-          title: `Shipment ${refNo} on its way to ${to}`, body: what },
+        { to: { manufacturerId: o.manufacturerId }, kind: 'shipment.dispatched', refNo: row.refNo, link: LINK.factory,
+          title: `Shipment ${row.refNo} on its way to ${to}`, body: what },
       );
       return full;
     });
+  }
+
+  /**
+   * The distributor collects containers of its order from the factory, once the manufacturer has reported the last
+   * production step (ready). The load is then on the road until the distributor confirms it at its warehouse.
+   */
+  async pickup(user: ShipmentUser, dto: PickupDto) {
+    return this.db.transaction(async (em) => {
+      const o = await em.findOne(ProductionOrder, { where: { id: dto.orderId }, relations: ['manufacturer', 'distributor', 'product'] });
+      if (!o) throw new NotFoundException('Production order not found');
+      if (user.role === 'Distributor' && o.distributorId !== this.own(user.distributorId, 'distributor')) {
+        throw new ForbiddenException('This order is for another distributor.');
+      }
+      if (o.destination !== 'Distributor' || !o.distributorId) throw new BadRequestException(`${o.refNo} goes to the warehouse; a distributor cannot collect it.`);
+      if (o.status === 'Accepted') {
+        const stages = await this.stages(em);
+        if (stages.length && o.stage !== stages[stages.length - 1]) {
+          throw new BadRequestException(`${o.manufacturer.name} has not reported ${o.refNo} ready yet${o.stage ? ` (it is at "${o.stage}")` : ''}.`);
+        }
+      }
+      const collected = dto.collectedBy?.trim();
+      const row = await this.move(em, user, o, {
+        orderId: o.id, date: dto.date, containers: dto.containers, vehicle: dto.vehicle,
+        note: [collected && `Collected by ${collected}`, dto.note?.trim()].filter(Boolean).join(' · ') || undefined,
+      }, 'Pickup');
+      const full = await this.one(em, row.id);
+      const what = `${dto.containers} container${dto.containers > 1 ? 's' : ''} of ${o.product.sku} (${o.refNo})`;
+      const via = [dto.vehicle && `vehicle ${dto.vehicle}`, collected && `collected by ${collected}`].filter(Boolean).join(' · ');
+      const who = o.distributor?.name ?? 'The distributor';
+      await this.notes.send(em, user,
+        { to: { manufacturerId: o.manufacturerId }, kind: 'shipment.picked-up', tone: 'success', refNo: row.refNo, link: LINK.factory,
+          title: `${who} collected ${what} from your factory`, body: via || null },
+        { to: { staff: [...TEAM.manufacturing, 'Distribution'] }, kind: 'shipment.picked-up', refNo: row.refNo, link: LINK.manufacturing('orders'),
+          title: `${who} collected ${what} from ${o.manufacturer.name}`, body: via || null },
+        { to: { distributorId: o.distributorId }, kind: 'shipment.picked-up', refNo: row.refNo, link: LINK.portal('stock'),
+          title: `Pickup ${row.refNo} recorded: ${what}`, body: 'Confirm what reaches your warehouse on Deliveries & stock.' },
+      );
+      return full;
+    });
+  }
+
+  /**
+   * Orders on their way to a distributor that have not fully left the factory: waiting for the manufacturer, in
+   * production, or ready to collect. A distributor sees its own; staff one distributor or all.
+   */
+  async incoming(user: ShipmentUser, distributorId?: string) {
+    const scope = user.role === 'Distributor' ? this.own(user.distributorId, 'distributor') : distributorId;
+    const em = this.db.manager;
+    const qb = em.getRepository(ProductionOrder).createQueryBuilder('o')
+      .leftJoinAndSelect('o.product', 'p').leftJoinAndSelect('o.manufacturer', 'm').leftJoinAndSelect('o.distributor', 'd')
+      .where(`o.destination = 'Distributor'`).andWhere(`o.status IN ('Sent', 'Accepted')`)
+      .orderBy('o.date', 'DESC').addOrderBy('o.refNo', 'DESC');
+    if (scope) qb.andWhere('o.distributorId = :scope', { scope });
+    const [orders, stages, moved] = await Promise.all([
+      qb.getMany(),
+      this.stages(em),
+      em.query(`SELECT "orderId", SUM(containers)::int AS n FROM production_shipments GROUP BY "orderId"`) as Promise<{ orderId: string; n: number }[]>,
+    ]);
+    const shipped = Object.fromEntries(moved.map((r) => [r.orderId, Number(r.n)]));
+    const last = stages[stages.length - 1] ?? null;
+    return orders
+      .map((o) => ({
+        id: o.id, refNo: o.refNo, date: o.date, status: o.status, stage: o.stage, readyDate: o.readyDate, dueDate: o.dueDate,
+        product: { id: o.product.id, sku: o.product.sku, name: o.product.name },
+        manufacturer: { id: o.manufacturer.id, name: o.manufacturer.name },
+        distributor: o.distributor ? { id: o.distributor.id, name: o.distributor.name } : null,
+        containers: o.containers, shippedContainers: shipped[o.id] ?? 0, left: o.containers - (shipped[o.id] ?? 0),
+        bundlesPerContainer: o.bundlesPerContainer, packetsPerBundle: o.packetsPerBundle,
+        /** the manufacturer reported the last step: the distributor may collect it */
+        ready: o.status === 'Accepted' && (!last || o.stage === last),
+      }))
+      .filter((o) => o.left > 0);
+  }
+
+  /** records containers leaving the factory on an accepted order: delivered by the manufacturer, or collected */
+  private async move(em: EntityManager, user: ShipmentUser, o: ProductionOrder, dto: ShipDto, method: 'Delivery' | 'Pickup') {
+    const what = method === 'Pickup' ? 'pickup' : 'shipment';
+    if (o.status !== 'Accepted') throw new BadRequestException(`${o.refNo} is ${o.status.toLowerCase()}: only an accepted order can be ${method === 'Pickup' ? 'collected' : 'shipped'}.`);
+    if (dto.date > today()) throw new BadRequestException(`A ${what} cannot be dated in the future.`);
+    if (dto.date < o.date) throw new BadRequestException(`A ${what} cannot be dated before its order.`);
+    const [{ sent }] = await em.query(`SELECT COALESCE(SUM(containers), 0)::int AS sent FROM production_shipments WHERE "orderId" = $1`, [o.id]);
+    const left = o.containers - Number(sent);
+    if (left <= 0) throw new BadRequestException(`Every container of ${o.refNo} was already shipped.`);
+    if (dto.containers > left) throw new BadRequestException(`Only ${left} container${left > 1 ? 's are' : ' is'} left to ship on ${o.refNo}.`);
+    const s = await this.settings.get(em);
+    const refNo = await nextRef(em, ProductionShipment, s.docPrefixes['shipment'] ?? 'SH', 3);
+    const row = await em.save(em.create(ProductionShipment, {
+      refNo, orderId: o.id, productId: o.productId, manufacturerId: o.manufacturerId, destination: o.destination,
+      distributorId: o.distributorId, shipDate: dto.date, containers: dto.containers, bundlesPerContainer: o.bundlesPerContainer,
+      packetsPerBundle: o.packetsPerBundle, rate: o.rate, vehicle: dto.vehicle?.trim() || null, waybill: dto.waybill?.trim() || null,
+      note: dto.note?.trim() || null, shippedBy: user.name, status: 'In transit', method,
+    }));
+    const n = `${dto.containers} container${dto.containers > 1 ? 's' : ''}`;
+    await this.event(em, o.id, user, method === 'Pickup' ? `Collected ${n} from the factory (${refNo})` : `Shipped ${n} (${refNo})`,
+      [dto.vehicle && `Vehicle ${dto.vehicle}`, dto.waybill && `Waybill ${dto.waybill}`, method === 'Pickup' ? dto.note : null].filter(Boolean).join(' · ') || null);
+    return row;
+  }
+
+  private async stages(em: EntityManager) {
+    return (await em.find(Lookup, { where: { list: 'ORDER_STAGE', active: true }, order: { sortOrder: 'ASC' } })).map((l) => l.code);
   }
 
   // ───────────── receiving side ─────────────

@@ -1,7 +1,7 @@
 import { Body, Controller, Get, Param, ParseUUIDPipe, Post, Query, Request } from '@nestjs/common';
 import { ApiOperation, ApiQuery, ApiTags } from '@nestjs/swagger';
 import { Permit, Read, Roles } from '../auth/roles.decorator';
-import { ReceiveDto, ShipDto } from './shipments.dto';
+import { PickupDto, ReceiveDto, ShipDto } from './shipments.dto';
 import { ShipmentsService } from './shipments.service';
 
 /**
@@ -35,6 +35,22 @@ export class ShipmentsController {
   @ApiOperation({ summary: 'Each delivery from shipment to cash: shipped, received, sold, on hand, sales and collected' })
   trail(@Request() req: any, @Query('distributorId') distributorId?: string) {
     return this.service.trail(req.user, { distributorId: distributorId || undefined });
+  }
+
+  @Get('incoming')
+  @Read('manufacturing', 'portal', 'distribution')
+  @ApiQuery({ name: 'distributorId', required: false })
+  @ApiOperation({ summary: 'Orders on their way to a distributor: waiting, in production, or ready to collect' })
+  incoming(@Request() req: any, @Query('distributorId') distributorId?: string) {
+    return this.service.incoming(req.user, distributorId || undefined);
+  }
+
+  @Post('pickup')
+  @Roles('Admin', 'Manufacturing', 'Distribution', 'Distributor')
+  @Permit('receipts')
+  @ApiOperation({ summary: 'The distributor collects containers of a ready order from the factory' })
+  pickup(@Request() req: any, @Body() dto: PickupDto) {
+    return this.service.pickup(req.user, dto);
   }
 
   @Post()

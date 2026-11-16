@@ -101,6 +101,8 @@ export interface Shipment {
   waybill: string | null;
   note: string | null;
   shippedBy: string;
+  /** Delivery = the manufacturer sent it; Pickup = the distributor collected it from the factory */
+  method?: 'Delivery' | 'Pickup';
   status: 'In transit' | 'Received';
   receivedDate: string | null;
   receivedContainers: number | null;
@@ -305,6 +307,50 @@ export interface Position {
   totals: { value: number; advance: number; requested: number; approved: number; paid: number; toPay: number };
 }
 
+/** an order on its way to a distributor that has not fully left the factory */
+export interface IncomingOrder {
+  id: string;
+  refNo: string;
+  date: string;
+  status: 'Sent' | 'Accepted';
+  stage: string | null;
+  readyDate: string | null;
+  dueDate: string | null;
+  product: { id: string; sku: string; name: string };
+  manufacturer: { id: string; name: string };
+  distributor: { id: string; name: string } | null;
+  containers: number;
+  shippedContainers: number;
+  left: number;
+  bundlesPerContainer: number;
+  packetsPerBundle: number;
+  /** the manufacturer reported the last production step: the distributor may collect it */
+  ready: boolean;
+}
+
+/** bundles a distributor sent to one of its customers */
+export interface DistDispatch {
+  id: string;
+  refNo: string;
+  date: string;
+  distributorId: string;
+  distributor: { name: string };
+  shipmentId: string;
+  shipment: { refNo: string };
+  productId: string;
+  product: { sku: string; name: string };
+  bundles: number;
+  customer: string;
+  area: string | null;
+  vehicle: string | null;
+  note: string | null;
+  dispatchedBy: string;
+  status: 'Dispatched' | 'Delivered' | 'Returned';
+  closedDate: string | null;
+  closedNote: string | null;
+  closedBy: string | null;
+}
+
 /** Every call about production orders and payment requests (company desk and factory portal). */
 @Injectable({ providedIn: 'root' })
 export class FactoryApi {
@@ -333,6 +379,12 @@ export class FactoryApi {
   stock = (distributorId?: string) => this.api.get<DistributorStock>('production-shipments/stock', { distributorId });
   ship = (body: unknown) => this.api.post<Shipment>('production-shipments', body);
   receive = (id: string, body: unknown) => this.api.post<Shipment>(`production-shipments/${id}/receive`, body);
+  incoming = (distributorId?: string) => this.api.get<IncomingOrder[]>('production-shipments/incoming', { distributorId });
+  pickup = (body: unknown) => this.api.post<Shipment>('production-shipments/pickup', body);
+
+  dispatches = (distributorId?: string) => this.api.get<DistDispatch[]>('distributor-dispatches', { distributorId });
+  dispatch = (body: unknown) => this.api.post<DistDispatch>('distributor-dispatches', body);
+  closeDispatch = (id: string, body: unknown) => this.api.post<DistDispatch>(`distributor-dispatches/${id}/close`, body);
 
   deliveryClaims = (filter: { distributorId?: string; manufacturerId?: string } = {}) => this.api.get<DeliveryClaim[]>('delivery-claims', filter);
   raiseClaim = (body: unknown) => this.api.post<DeliveryClaim>('delivery-claims', body);

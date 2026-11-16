@@ -1,5 +1,5 @@
 import {
-  IsDateString, IsIn, IsInt, IsNotEmpty, IsNumber, IsOptional, IsPositive, IsString, IsUUID, Max, MaxLength, Min,
+  IsBoolean, IsDateString, IsIn, IsInt, IsNotEmpty, IsNumber, IsOptional, IsPositive, IsString, IsUUID, Max, MaxLength, Min,
 } from 'class-validator';
 
 /** a small attachment (image or PDF) sent as base64; the server checks the size and the type */
@@ -22,6 +22,14 @@ export class CreateRequestDto {
 
 /** Staff accept a request into a draft sales order; the price and terms are locked on that order. */
 export class AcceptRequestDto {
+  /** Production = order it from the manufacturer (default); Sales = a warehouse sales order (only with sales orders on) */
+  @IsOptional() @IsIn(['Production', 'Sales']) into?: 'Production' | 'Sales';
+  /** production: containers to order (empty = the bundles asked for, rounded up to whole containers) */
+  @IsOptional() @IsInt() @Min(1) @Max(100000) containers?: number;
+  @IsOptional() @IsString() @MaxLength(60) packaging?: string;
+  @IsOptional() @IsDateString() dueDate?: string | null;
+  /** production: false keeps the order as a draft instead of sending it to the manufacturer */
+  @IsOptional() @IsBoolean() send?: boolean;
   @IsOptional() @IsNumber() @IsPositive() rate?: number;
   @IsOptional() @IsInt() @Min(0) terms?: number;
   @IsOptional() @IsNumber() @Min(0) @Max(100) advancePct?: number;

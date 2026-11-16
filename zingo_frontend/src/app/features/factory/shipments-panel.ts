@@ -230,7 +230,7 @@ export class ShipmentsPanel {
     {
       id: 'route', label: this.mode() === 'distributor' ? 'From' : 'Route', priority: 2,
       value: (s) => (this.mode() === 'distributor' ? s.manufacturer.name : destinationOf(s)),
-      sub: (s) => (this.mode() === 'company' ? `from ${s.manufacturer.name}` : s.vehicle),
+      sub: (s) => [this.mode() === 'company' ? `from ${s.manufacturer.name}` : s.vehicle, s.method === 'Pickup' ? 'Collected by the distributor' : null].filter(Boolean).join(' · ') || null,
     },
     { id: 'value', label: 'Value', kind: 'money', priority: 2, value: (s) => (s.status === 'Received' ? s.receivedValue : s.value) },
     {

@@ -4,6 +4,8 @@ import { ShipmentsPanel } from '../factory/shipments-panel';
 import { DeliveryClaimsPanel } from '../factory/delivery-claims-panel';
 import { InvoicesPanel } from '../factory/invoices-panel';
 import { TrailPanel } from '../factory/trail-panel';
+import { IncomingPanel } from '../factory/incoming-panel';
+import { DispatchesPanel } from '../factory/dispatches-panel';
 import { rxResource } from '@angular/core/rxjs-interop';
 import { Observable } from 'rxjs';
 import { AuthService } from '../../core/auth.service';
@@ -41,7 +43,7 @@ const tone = (s: string): Tone => STATUS_TONE[s] ?? 'neutral';
   selector: 'app-portal',
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [
-    Btn, DataTable, Kpi, PageHeader, Tag, Tabs, TabPanel, RequestForm, ReceiptForm, AdviceForm, AcceptForm, ReasonForm, ShipmentsPanel, DeliveryClaimsPanel, InvoicesPanel, TrailPanel, IntlPortal,
+    Btn, DataTable, Kpi, PageHeader, Tag, Tabs, TabPanel, RequestForm, ReceiptForm, AdviceForm, AcceptForm, ReasonForm, ShipmentsPanel, DeliveryClaimsPanel, InvoicesPanel, TrailPanel, IntlPortal, IncomingPanel, DispatchesPanel,
   ],
   templateUrl: './portal.html',
   styleUrl: './portal.css',
@@ -77,12 +79,17 @@ export class Portal {
   protected deliveries = rxResource({ params: () => this.params(), stream: ({ params }) => this.factory.shipments({ distributorId: params.d }) });
   protected consignment = rxResource({ params: () => this.params(), stream: ({ params }) => this.factory.stock(params.d) });
   protected trail = rxResource({ params: () => this.params(), stream: ({ params }) => this.factory.trail(params.d) });
+  /** production orders on their way to this distributor (waiting, in production, ready to collect) */
+  protected incoming = rxResource({ params: () => this.params(), stream: ({ params }) => this.factory.incoming(params.d) });
+  /** what the distributor sent on to its own customers */
+  protected dispatches = rxResource({ params: () => this.params(), stream: ({ params }) => this.factory.dispatches(params.d) });
   protected salesInvoices = rxResource({ params: () => this.params(), stream: ({ params }) => this.factory.invoices(params.d) });
   /** Admin, Finance and Distribution verify invoices and record payments */
   protected canManageInvoices = computed(() => ['Admin', 'Finance', 'Distribution'].includes(this.auth.user()?.role ?? ''));
   /** the earlier stock-request flow (requests become warehouse sales orders) */
   protected legacy = computed(() => !!this.profile.value()?.salesOrdersEnabled);
-  protected toConfirm = computed(() => (this.deliveries.value() ?? []).filter((s) => s.status === 'In transit').length);
+  protected toConfirm = computed(() => (this.deliveries.value() ?? []).filter((s) => s.status === 'In transit').length
+    + (this.incoming.value() ?? []).filter((o) => o.ready).length);
   /** the distributor itself, or Admin / Distribution for it */
   protected canReceiveDelivery = computed(() => this.isDistributor() || ['Admin', 'Distribution'].includes(this.auth.user()?.role ?? ''));
   /** faulty goods claims: Owner, Sales or Warehouse logins of the distributor, or Admin / Distribution for it */
@@ -166,7 +173,9 @@ export class Portal {
     { id: 'wanted', label: 'Wanted by', kind: 'date', value: (r) => r.requestedDate, priority: 3 },
     {
       id: 'status', label: 'Status', kind: 'tag', value: (r) => r.status, tone: (r): Tone => tone(r.status),
-      sub: (r) => (r.order ? `Order ${r.order.refNo}` : r.reviewNote),
+      sub: (r) => (r.productionOrder
+        ? `${r.productionOrder.refNo} · ${r.productionOrder.status === 'Accepted' ? r.productionOrder.stage ?? 'In production' : r.productionOrder.status === 'Sent' ? 'With the manufacturer' : r.productionOrder.status}${r.productionOrder.readyDate ? ` · ready ${fmtDate(r.productionOrder.readyDate)}` : ''}`
+        : r.order ? `Order ${r.order.refNo}` : r.reviewNote),
     },
   ];
 

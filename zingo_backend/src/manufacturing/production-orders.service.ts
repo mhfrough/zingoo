@@ -83,14 +83,20 @@ export class ProductionOrdersService {
 
   async create(user: OrderUser, dto: CreateProductionOrderDto) {
     return this.db.transaction(async (em) => {
-      const fields = await this.resolve(em, dto, null);
-      const s = await this.settings.get(em);
-      const refNo = await nextRef(em, ProductionOrder, s.docPrefixes['production'] ?? 'MO', 3, 1);
-      const o = await em.save(em.create(ProductionOrder, { ...fields, refNo, status: 'Draft' }));
-      await this.event(em, o.id, user, 'Created', null);
-      if (dto.send) await this.markSent(em, o, user);
+      const o = await this.createIn(em, user, dto);
       return this.shape(await this.load(em, o.id), (await this.movedMap(em))[o.id]);
     });
+  }
+
+  /** places an order inside the caller's transaction (also used when a distributor's stock request is accepted) */
+  async createIn(em: EntityManager, user: OrderUser, dto: CreateProductionOrderDto, origin: string | null = null) {
+    const fields = await this.resolve(em, dto, null);
+    const s = await this.settings.get(em);
+    const refNo = await nextRef(em, ProductionOrder, s.docPrefixes['production'] ?? 'MO', 3, 1);
+    const o = await em.save(em.create(ProductionOrder, { ...fields, refNo, status: 'Draft' }));
+    await this.event(em, o.id, user, 'Created', origin);
+    if (dto.send) await this.markSent(em, o, user);
+    return o;
   }
 
   async update(user: OrderUser, id: string, dto: UpdateProductionOrderDto) {
@@ -190,7 +196,10 @@ export class ProductionOrdersService {
       o.stage = dto.stage;
       await em.save(o);
       await this.event(em, o.id, user, dto.stage, dto.note?.trim() || null);
-      await this.answered(em, user, o, 'order.stage', 'info', `Order ${o.refNo} is now at "${dto.stage}"`, dto.note?.trim() || null);
+      // the last step means the goods are ready: the distributor may collect them, or the manufacturer dispatches
+      const ready = next === stages.length - 1;
+      await this.answered(em, user, o, ready ? 'order.ready' : 'order.stage', ready ? 'success' : 'info',
+        ready ? `Order ${o.refNo} is ready at ${o.manufacturer.name} ("${dto.stage}")` : `Order ${o.refNo} is now at "${dto.stage}"`, dto.note?.trim() || null);
       return this.shape(await this.load(em, id), (await this.movedMap(em))[id]);
     });
   }
@@ -246,7 +255,8 @@ export class ProductionOrdersService {
       { to: { staff: TEAM.manufacturing }, kind, tone, refNo: o.refNo, link: LINK.manufacturing('orders'), title, body },
       { to: { manufacturerId: o.manufacturerId }, kind, tone, refNo: o.refNo, link: LINK.factory, title, body },
       ...(o.distributorId && kind !== 'order.rejected' ? [{ to: { distributorId: o.distributorId }, kind, tone, refNo: o.refNo, link: LINK.portal('stock'),
-        title: kind === 'order.accepted' ? `Goods on the way: order ${o.refNo} is in production` : title, body }] : []),
+        title: kind === 'order.accepted' ? `Goods on the way: order ${o.refNo} is in production`
+          : kind === 'order.ready' ? `Order ${o.refNo} is ready: collect it from ${o.manufacturer.name} or wait for dispatch` : title, body }] : []),
     );
   }
 

@@ -4,8 +4,9 @@ import { AppEntity } from '../common/app.entity';
 import { DocEntity } from '../common/doc.entity';
 import { numeric } from '../common/numeric.transformer';
 import { SalesOrder } from '../distribution/distribution.entities';
+import { ProductionOrder } from '../manufacturing/production-orders.entities';
 
-/** Distributor asks for stock; staff accept it into a sales order. */
+/** Distributor asks for stock; staff accept it into a production order (or, with sales orders on, a warehouse sales order). */
 @Entity('portal_requests')
 export class PortalRequest extends DocEntity {
   @Column({ type: 'date' })
@@ -46,6 +47,14 @@ export class PortalRequest extends DocEntity {
 
   @Column({ type: 'uuid', nullable: true })
   orderId: string | null;
+
+  /** the production order the request became (the manufacturer makes it and sends it to the distributor) */
+  @ManyToOne(() => ProductionOrder, { nullable: true, onDelete: 'SET NULL' })
+  @JoinColumn({ name: 'productionOrderId' })
+  productionOrder: ProductionOrder | null;
+
+  @Column({ type: 'uuid', nullable: true })
+  productionOrderId: string | null;
 
   /** staff note when the request is rejected */
   @Column({ type: 'text', nullable: true })

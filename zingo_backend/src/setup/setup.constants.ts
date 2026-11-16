@@ -21,7 +21,7 @@ export const DEFAULT_SETTINGS = {
   profitAllocationPerPack: 0,
   paymentCycles: [15, 30, 45, 60],
   defaultPaymentCycle: 30,
-  docPrefixes: { sales: 'SO', batch: 'B', finance: 'FIN', accounting: 'ACC', export: 'EXP', production: 'MO', mfrRequest: 'PR', mfrPayment: 'MPY', shipment: 'SH', distInvoice: 'DI', distReceipt: 'DRC' },
+  docPrefixes: { sales: 'SO', batch: 'B', finance: 'FIN', accounting: 'ACC', export: 'EXP', production: 'MO', mfrRequest: 'PR', mfrPayment: 'MPY', shipment: 'SH', distInvoice: 'DI', distReceipt: 'DRC', distDispatch: 'DSP' },
   agingBuckets: [30, 60, 90],
 };
 

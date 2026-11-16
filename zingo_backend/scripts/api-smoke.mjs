@@ -346,6 +346,8 @@ ok('the permission matrix is readable', access?.pages?.Admin?.includes('settings
 
 
 // ── Distributor partner portal ──
+// the older flow: a request becomes a warehouse sales order (needs sales orders switched on in Settings)
+await call(T.owner, 'PATCH', '/settings', { salesOrdersEnabled: true });
 const p7prof = await call(T.dist, 'GET', '/portal/profile');
 ok('a distributor login sees its own profile', p7prof.status === 200 && p7prof.json?.distributor?.name && p7prof.json?.paymentMethods?.includes('Bank Transfer'), JSON.stringify(p7prof.json).slice(0, 100));
 const p7me = p7prof.json?.distributor?.id;
@@ -362,7 +364,7 @@ const p7req = await call(T.dist, 'POST', '/portal/requests', { date: '2026-11-10
 ok('a distributor files a stock request', p7req.status === 201 && p7req.json?.status === 'Requested', JSON.stringify(p7req.json).slice(0, 100));
 ok('a distributor cannot accept its own request -> 403', (await call(T.dist, 'POST', `/portal/requests/${p7req.json.id}/accept`, {})).status === 403);
 ok('the approval desk lists it for staff', (await call(T.sales, 'GET', '/portal/desk')).json?.requests?.some((r) => r.id === p7req.json.id));
-const p7acc = await call(T.sales, 'POST', `/portal/requests/${p7req.json.id}/accept`, { advancePct: 20 });
+const p7acc = await call(T.sales, 'POST', `/portal/requests/${p7req.json.id}/accept`, { into: 'Sales', advancePct: 20 });
 ok('staff accept it into a draft sales order with the price locked', p7acc.status === 201 && p7acc.json?.order?.status === 'Draft' && p7acc.json?.order?.poRef === 'PO-77', JSON.stringify(p7acc.json).slice(0, 140));
 const p7order = p7acc.json.order;
 ok('accepting twice -> 400', (await call(T.sales, 'POST', `/portal/requests/${p7req.json.id}/accept`, {})).status === 400);
@@ -413,7 +415,7 @@ ok('approving the same claim again -> 400', (await call(T.sales, 'POST', `/porta
 
 // a claim on an order that is already paid: the whole credit is owed back
 const p7req2 = (await call(T.dist, 'POST', '/portal/requests', { date: '2026-11-10', productId: p7sku.id, cartons: 2 })).json;
-const p7o2 = (await call(T.sales, 'POST', `/portal/requests/${p7req2.id}/accept`, {})).json.order;
+const p7o2 = (await call(T.sales, 'POST', `/portal/requests/${p7req2.id}/accept`, { into: 'Sales' })).json.order;
 await call(T.sales, 'POST', `/orders/${p7o2.id}/dispatch`);
 const p7bill2 = Math.round(p7o2.cartons * p7sku.packsPerCarton * Number(p7o2.rate) * 100) / 100;
 const p7adv2 = (await call(T.dist, 'POST', '/portal/advices', { orderId: p7o2.id, date: '2026-11-13', amount: p7bill2 })).json;
@@ -424,7 +426,7 @@ ok('a claim on a fully paid order is all refund (credit owed back)', Number(p7cn
 const p7tb4 = (await call(T.owner, 'GET', '/reports/trial-balance')).json;
 ok('the refund is booked as credit payable to the distributor', Math.abs(-(p7tb4.accounts.find((a) => a.name === 'Distributor Credit Payable')?.net ?? 0) - Number(p7cn2.refund)) < 0.01 && p7tb4.balanced === true);
 const p7rej2 = (await call(T.dist, 'POST', '/portal/requests', { date: '2026-11-10', productId: p7sku.id, cartons: 1 })).json;
-const p7o3 = (await call(T.sales, 'POST', `/portal/requests/${p7rej2.id}/accept`, {})).json.order;
+const p7o3 = (await call(T.sales, 'POST', `/portal/requests/${p7rej2.id}/accept`, { into: 'Sales' })).json.order;
 await call(T.sales, 'POST', `/orders/${p7o3.id}/dispatch`);
 const p7rec3 = (await call(T.dist, 'POST', '/portal/receipts', { orderId: p7o3.id, date: '2026-11-14', goodCartons: 0, damagedCartons: 1, missingCartons: 0, condition: 'Wet', reason: 'Rain damage' })).json;
 ok('rejecting a claim needs a reason -> 400', (await call(T.sales, 'POST', `/portal/receipts/${p7rec3.id}/reject`, {})).status === 400);
@@ -438,13 +440,14 @@ await call(T.sales, 'PUT', '/distributor-rates', { distributorId: p7me, productI
 const p7rates = (await call(T.dist, 'GET', '/portal/rates')).json;
 ok('the agreed rate shows on the distributor\'s price list', p7rates.find((r) => r.productId === p7sku.id)?.agreed === true && p7rates.find((r) => r.productId === p7sku.id)?.rate === 5.5);
 const p7req4 = (await call(T.dist, 'POST', '/portal/requests', { date: '2026-11-10', productId: p7sku.id, cartons: 1 })).json;
-const p7o4 = (await call(T.sales, 'POST', `/portal/requests/${p7req4.id}/accept`, {})).json.order;
+const p7o4 = (await call(T.sales, 'POST', `/portal/requests/${p7req4.id}/accept`, { into: 'Sales' })).json.order;
 ok('a new request starts from the agreed rate', Number(p7o4.rate) === 5.5, String(p7o4.rate));
 const p7after = (await call(T.dist, 'GET', '/portal/profile')).json;
 ok('the profile counts deliveries still to acknowledge', typeof p7after.toAcknowledge === 'number' && p7after.creditHeld > 0, JSON.stringify(p7after).slice(0, 160));
 const p7desk = (await call(T.finance, 'GET', '/portal/desk')).json;
 ok('the desk shows the audit trail', p7desk.audit.some((a) => a.event === 'Credit note approved'));
 ok('the books still balance after the portal flows', (await call(T.owner, 'GET', '/reports/trial-balance')).json.balanced === true);
+await call(T.owner, 'PATCH', '/settings', { salesOrdersEnabled: false });
 
 
 // ── file uploads and the JSON size limit ──
@@ -1741,6 +1744,71 @@ ok('opening a notice marks only it read', nBefore >= 2 && nAfter === nBefore - 1
 ok('reading it as the distributor does not mark it read for staff', (await nList(T.owner)).unread > 0);
 ok('ids must be uuids -> 400', (await call(T.dist, 'POST', '/notifications/read', { ids: ['x'] })).status === 400);
 ok('mark all read clears the badge', (await call(T.dist, 'POST', '/notifications/read', {})).json?.unread === 0);
+
+// ── K gaps: a request becomes a production order; the distributor collects from the factory; distributor dispatches ──
+const kDay = nDay;
+const kIncoming = async () => (await call(T.dist, 'GET', '/production-shipments/incoming')).json ?? [];
+const kReq = (await call(T.dist, 'POST', '/portal/requests', { date: kDay, productId: p5Mo.productId, cartons: 25, requestedDate: kDay, poRef: 'PO-G1' })).json;
+ok('a warehouse sales order is refused while sales orders are off -> 400', (await call(T.sales, 'POST', `/portal/requests/${kReq.id}/accept`, { into: 'Sales' })).status === 400);
+const kAcc = await call(T.sales, 'POST', `/portal/requests/${kReq.id}/accept`, {});
+const kMo = kAcc.json?.productionOrder;
+ok('accepting a request places a production order with the product\'s manufacturer, for this distributor, sent at once',
+  kAcc.status === 201 && kMo?.status === 'Sent' && kMo?.distributorId === p5Mo.distributorId && kMo?.manufacturerId === p5Mo.manufacturerId && kMo?.dueDate === kDay, JSON.stringify(kAcc.json).slice(0, 220));
+ok('25 bundles are rounded up to whole containers', kMo?.containers === Math.ceil(25 / kMo?.bundlesPerContainer), JSON.stringify([kMo?.containers, kMo?.bundlesPerContainer]));
+ok('the manufacturer is told about the order', await nHas(p3Maker, 'order.sent', kMo?.refNo));
+ok('the distributor is told its request became a production order', (await nList(T.dist)).items.some((n) => n.kind === 'request.accepted' && n.refNo === kReq.refNo && n.title.includes(kMo?.refNo)));
+ok('the request shows its production order', ((await call(T.dist, 'GET', '/portal/requests')).json ?? []).find((r) => r.id === kReq.id)?.productionOrder?.refNo === kMo?.refNo);
+ok('the distributor sees the order coming, waiting for the manufacturer', (await kIncoming()).some((o) => o.id === kMo.id && o.status === 'Sent' && !o.ready));
+const kReqDraft = (await call(T.dist, 'POST', '/portal/requests', { date: kDay, productId: p5Mo.productId, cartons: 5 })).json;
+const kDraft = (await call(T.sales, 'POST', `/portal/requests/${kReqDraft.id}/accept`, { send: false, containers: 2 })).json?.productionOrder;
+ok('a request can be accepted as a draft order (the manufacturer is not told yet)', kDraft?.status === 'Draft' && kDraft?.containers === 2 && !(await nHas(p3Maker, 'order.sent', kDraft?.refNo)));
+ok('a distributor never sees a draft order coming', !(await kIncoming()).some((o) => o.id === kDraft?.id));
+
+await call(p3Maker, 'POST', `/production-orders/${kMo.id}/accept`, { readyDate: kDay });
+ok('collecting before the manufacturer reports it ready -> 400', (await call(T.dist, 'POST', '/production-shipments/pickup', { orderId: kMo.id, date: kDay, containers: 1 })).status === 400);
+const kStages = (await call(T.owner, 'GET', `/production-orders/profile?manufacturerId=${kMo.manufacturerId}`)).json?.stages ?? [];
+await call(p3Maker, 'POST', `/production-orders/${kMo.id}/stage`, { stage: kStages[kStages.length - 1] });
+ok('reporting the last step tells the distributor and the company the order is ready', await nHas(T.dist, 'order.ready', kMo.refNo) && await nHas(T.owner, 'order.ready', kMo.refNo));
+ok('the distributor sees it ready to collect, with the ready date', (await kIncoming()).some((o) => o.id === kMo.id && o.ready && o.readyDate === kDay));
+ok('the manufacturer cannot record a pickup -> 403', (await call(p3Maker, 'POST', '/production-shipments/pickup', { orderId: kMo.id, date: kDay, containers: 1 })).status === 403);
+ok('collecting more than is left -> 400', (await call(T.dist, 'POST', '/production-shipments/pickup', { orderId: kMo.id, date: kDay, containers: 99 })).status === 400);
+ok('a future pickup date -> 400', (await call(T.dist, 'POST', '/production-shipments/pickup', { orderId: kMo.id, date: '2999-01-01', containers: 1 })).status === 400);
+const kPick = await call(T.dist, 'POST', '/production-shipments/pickup', { orderId: kMo.id, date: kDay, containers: 2, vehicle: 'LHR-7', collectedBy: 'Driver Aslam' });
+ok('the distributor records the pickup: a shipment marked Pickup, on the road', kPick.status === 201 && kPick.json?.method === 'Pickup' && kPick.json?.status === 'In transit' && kPick.json?.note?.includes('Driver Aslam'), JSON.stringify(kPick.json).slice(0, 200));
+ok('the manufacturer and the company are told about the pickup', await nHas(p3Maker, 'shipment.picked-up', kPick.json?.refNo) && await nHas(T.owner, 'shipment.picked-up', kPick.json?.refNo) && await nHas(T.factory, 'shipment.picked-up', kPick.json?.refNo));
+ok('the order timeline shows the pickup', ((await call(T.owner, 'GET', `/production-orders/${kMo.id}`)).json?.events ?? []).some((e) => e.event.startsWith('Collected 2 containers') && e.side === 'Distributor'));
+ok('the rest of the order is still at the factory', (await kIncoming()).find((o) => o.id === kMo.id)?.left === kMo.containers - 2);
+ok('the pickup waits on the distributor to confirm receipt', (await nWait(T.dist)).some((w) => w.refNo === kPick.json?.refNo && w.mine));
+await call(T.dist, 'POST', `/production-shipments/${kPick.json.id}/receive`, { date: kDay, receivedContainers: 2 });
+const kLot = kPick.json;
+const kLotBundles = 2 * kLot.bundlesPerContainer;
+const kShip = (await call(p3Maker, 'POST', '/production-shipments', { orderId: kMo.id, date: kDay, containers: kMo.containers - 2 })).json;
+ok('the manufacturer can still deliver the rest itself', kShip?.method === 'Delivery' && kShip?.status === 'In transit');
+ok('a fully moved order leaves the incoming list', !(await kIncoming()).some((o) => o.id === kMo.id));
+
+ok('dispatching from a delivery still on the road -> 400', (await call(T.dist, 'POST', '/distributor-dispatches', { shipmentId: kShip.id, date: kDay, bundles: 1, customer: 'X' })).status === 400);
+ok('the manufacturer cannot dispatch for a distributor -> 403', (await call(p3Maker, 'POST', '/distributor-dispatches', { shipmentId: kLot.id, date: kDay, bundles: 1, customer: 'X' })).status === 403);
+ok('a dispatch needs a customer -> 400', (await call(T.dist, 'POST', '/distributor-dispatches', { shipmentId: kLot.id, date: kDay, bundles: 1, customer: '' })).status === 400);
+ok('more bundles than arrived -> 400', (await call(T.dist, 'POST', '/distributor-dispatches', { shipmentId: kLot.id, date: kDay, bundles: kLotBundles + 1, customer: 'X' })).status === 400);
+const kD = await call(T.dist, 'POST', '/distributor-dispatches', { shipmentId: kLot.id, date: kDay, bundles: kLotBundles - 3, customer: 'Al-Madina Store', area: 'Saddar', vehicle: 'Suzuki-3' });
+ok('the distributor dispatches bundles to a customer (DSP-)', kD.status === 201 && /^DSP-\d{3}$/.test(kD.json?.refNo) && kD.json?.status === 'Dispatched' && kD.json?.customer === 'Al-Madina Store', JSON.stringify(kD.json).slice(0, 200));
+ok('Zen Foods (Admin and Distribution) is told about the dispatch', await nHas(T.owner, 'dist-dispatch.sent', kD.json?.refNo) && await nHas(T.sales, 'dist-dispatch.sent', kD.json?.refNo));
+ok('the manufacturer is not told about distributor dispatches', !(await nHas(p3Maker, 'dist-dispatch.sent', kD.json?.refNo)));
+ok('an open dispatch waits on the distributor', (await nWait(T.dist)).some((w) => w.refNo === kD.json?.refNo && w.mine));
+ok('only what is left on the delivery can go out -> 400', (await call(T.dist, 'POST', '/distributor-dispatches', { shipmentId: kLot.id, date: kDay, bundles: 4, customer: 'Y' })).status === 400);
+ok('a return needs a reason -> 400', (await call(T.dist, 'POST', `/distributor-dispatches/${kD.json.id}/close`, { outcome: 'Returned', date: kDay })).status === 400);
+const kDel = await call(T.dist, 'POST', `/distributor-dispatches/${kD.json.id}/close`, { outcome: 'Delivered', date: kDay, deliveredNote: 'Signed by shop owner' });
+ok('marking it delivered tells Zen Foods', kDel.json?.status === 'Delivered' && kDel.json?.closedNote === 'Signed by shop owner' && await nHas(T.sales, 'dist-dispatch.delivered', kD.json.refNo));
+ok('closing twice -> 400', (await call(T.dist, 'POST', `/distributor-dispatches/${kD.json.id}/close`, { outcome: 'Delivered', date: kDay })).status === 400);
+const kD2 = (await call(T.dist, 'POST', '/distributor-dispatches', { shipmentId: kLot.id, date: kDay, bundles: 3, customer: 'Bismillah Traders' })).json;
+await call(T.dist, 'POST', `/distributor-dispatches/${kD2.id}/close`, { outcome: 'Returned', date: kDay, note: 'Shop was closed' });
+ok('a return tells Zen Foods with the reason', (await nList(T.sales)).items.some((n) => n.kind === 'dist-dispatch.returned' && n.refNo === kD2.refNo && n.body === 'Shop was closed'));
+ok('returned bundles can go out again', (await call(T.dist, 'POST', '/distributor-dispatches', { shipmentId: kLot.id, date: kDay, bundles: 3, customer: 'Bismillah Traders' })).status === 201);
+ok('staff see every dispatch; a distributor only its own', ((await call(T.owner, 'GET', '/distributor-dispatches')).json ?? []).some((d) => d.id === kD.json.id)
+  && ((await call(T.dist, 'GET', '/distributor-dispatches')).json ?? []).every((d) => d.distributorId === p5Mo.distributorId));
+ok('Viewer cannot dispatch -> 403', (await call(T.audit, 'POST', '/distributor-dispatches', { shipmentId: kLot.id, date: kDay, bundles: 1, customer: 'X' })).status === 403);
+ok('a dispatch posts nothing to the ledger', !((await call(T.finance, 'GET', '/reports/journal?period=all')).json ?? []).some((l) => l.reference === kD.json.refNo));
+ok('the ledger still balances after pickups and dispatches', (await call(T.owner, 'GET', '/reports/trial-balance')).json?.balanced === true);
 
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

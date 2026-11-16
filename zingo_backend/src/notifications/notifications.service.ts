@@ -221,7 +221,7 @@ export class NotificationsService {
   private async waitingForDistributor(id: string): Promise<WaitItem[]> {
     const q = (sql: string) => this.db.query(sql, [id]) as Promise<any[]>;
     const zen = 'Zen Foods';
-    const [reqs, advices, claims, dclaims, invoices, transit, xclaims, radvices] = await Promise.all([
+    const [reqs, advices, claims, dclaims, invoices, transit, xclaims, radvices, dispatches] = await Promise.all([
       q(`SELECT r."refNo", r.date::text AS since, r.cartons, p.sku FROM portal_requests r JOIN products p ON p.id = r."productId" WHERE r.status = 'Requested' AND r."distributorId" = $1`),
       q(`SELECT "refNo", date::text AS since, amount::float8 AS amount FROM payment_advices WHERE status = 'Submitted' AND "distributorId" = $1`),
       q(`SELECT c."refNo", c.date::text AS since, c."damagedCartons" + c."missingCartons" AS n FROM cargo_receipts c JOIN sales_orders o ON o.id = c."orderId" WHERE c.status = 'Disputed' AND o."distributorId" = $1`),
@@ -232,9 +232,12 @@ export class NotificationsService {
            WHERE s.status = 'In transit' AND s."distributorId" = $1`),
       q(`SELECT "refNo", date::text AS since, kind FROM export_claims WHERE status = 'Submitted' AND "distributorId" = $1`),
       q(`SELECT "refNo", date::text AS since, currency, amount::float8 AS amount FROM remittance_advices WHERE status = 'Submitted' AND "distributorId" = $1`),
+      q(`SELECT x."refNo", x.date::text AS since, x.bundles, x.customer, p.sku FROM distributor_dispatches x JOIN products p ON p.id = x."productId"
+           WHERE x.status = 'Dispatched' AND x."distributorId" = $1`),
     ]);
     const you = 'You';
     return [
+      ...dispatches.map((r): WaitItem => ({ kind: 'Dispatch to close', refNo: r.refNo, title: `${plural(r.bundles, 'bundle')} of ${r.sku} to ${r.customer}`, party: r.customer, waitingOn: you, mine: true, since: r.since, link: LINK.portal('stock'), tone: 'info' })),
       ...transit.map((r): WaitItem => ({ kind: 'Delivery to receive', refNo: r.refNo, title: `${plural(r.containers, 'container')} from ${r.mfr}`, party: r.mfr, waitingOn: you, mine: true, since: r.since, link: LINK.portal('stock'), tone: 'warning' })),
       ...reqs.map((r): WaitItem => ({ kind: 'Stock request', refNo: r.refNo, title: `${plural(r.cartons, 'bundle')} of ${r.sku}`, party: zen, waitingOn: zen, mine: false, since: r.since, link: LINK.portal('orders'), tone: 'info' })),
       ...advices.map((r): WaitItem => ({ kind: 'Payment advice', refNo: r.refNo, title: `PKR ${fmt(r.amount)} reported paid`, party: zen, waitingOn: zen, mine: false, since: r.since, link: LINK.portal('payments'), tone: 'info' })),

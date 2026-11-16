@@ -20,11 +20,14 @@ import { ProductionOrdersService } from './production-orders.service';
 import { DeliveryClaimsController } from './delivery-claims.controller';
 import { DeliveryClaim } from './delivery-claims.entities';
 import { DeliveryClaimsService } from './delivery-claims.service';
+import { DistDispatchesController } from './dist-dispatches.controller';
+import { DistributorDispatch } from './dist-dispatches.entities';
+import { DistDispatchesService } from './dist-dispatches.service';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([ProductionBatch, ManufacturerPayment, ProductionOrder, ProductionOrderEvent, MfrPaymentRequest, MfrRequestPayment, ProductionShipment, DistributorInvoice, DistributorInvoiceLine, DistributorInvoicePayment, DeliveryClaim]), LedgerModule, SetupModule],
-  controllers: [BatchesController, MfrPaymentsController, ProductionOrdersController, PaymentRequestsController, ShipmentsController, DistInvoicesController, DeliveryClaimsController],
-  providers: [BatchesService, MfrPaymentsService, ProductionOrdersService, PaymentRequestsService, ShipmentsService, DistInvoicesService, DeliveryClaimsService],
+  imports: [TypeOrmModule.forFeature([ProductionBatch, ManufacturerPayment, ProductionOrder, ProductionOrderEvent, MfrPaymentRequest, MfrRequestPayment, ProductionShipment, DistributorInvoice, DistributorInvoiceLine, DistributorInvoicePayment, DeliveryClaim, DistributorDispatch]), LedgerModule, SetupModule],
+  controllers: [BatchesController, MfrPaymentsController, ProductionOrdersController, PaymentRequestsController, ShipmentsController, DistInvoicesController, DeliveryClaimsController, DistDispatchesController],
+  providers: [BatchesService, MfrPaymentsService, ProductionOrdersService, PaymentRequestsService, ShipmentsService, DistInvoicesService, DeliveryClaimsService, DistDispatchesService],
   exports: [BatchesService, MfrPaymentsService, ProductionOrdersService, PaymentRequestsService, ShipmentsService, DistInvoicesService],
 })
 export class ManufacturingModule {}

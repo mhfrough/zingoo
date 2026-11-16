@@ -1,9 +1,7 @@
 <app-page-header eyebrow="Zingoo · Zen Foods" title="Distributor partner portal"
   description="Order requests, deliveries and claims, payments, prices and your statement in one place.">
   <ng-container pageActions>
-    @if (legacy()) {
-      <button appBtn variant="primary" icon="plus" (click)="requestOpen.set(true)">Request stock</button>
-    }
+    <button appBtn variant="primary" icon="plus" (click)="requestOpen.set(true)">Request stock</button>
     <button appBtn icon="download" (click)="downloadStatement()">Statement CSV</button>
   </ng-container>
 </app-page-header>
@@ -74,7 +72,7 @@
             </div>
           </div>
           <div class="card" data-flush>
-            <div class="card__head"><div><h2>Recent requests</h2><p>Zingo reviews each one before an order is made</p></div></div>
+            <div class="card__head"><div><h2>Recent requests</h2><p>Zingo reviews each one and orders it from the manufacturer</p></div></div>
             <div class="card__body">
               <app-data-table [columns]="requestColumns" [rows]="requests.value() ?? []" [searchable]="false" [loading]="requests.isLoading()"
                 emptyTitle="No requests yet" emptyText="Use Request stock to ask for more." />
@@ -98,7 +96,7 @@
           </div>
         </div>
         <div class="card" data-flush>
-          <div class="card__head"><div><h2>Stock requests</h2><p>Zingo accepts them into orders or says why not</p></div></div>
+          <div class="card__head"><div><h2>Stock requests</h2><p>Zingo orders them from the manufacturer or says why not</p></div></div>
           <div class="card__body">
             <app-data-table [columns]="requestColumns" [rows]="requests.value() ?? []" [loading]="requests.isLoading()" searchPlaceholder="Search requests"
               emptyTitle="No requests yet" emptyText="Use Request stock to ask for more." />
@@ -109,9 +107,13 @@
 
     <ng-template appTabPanel="stock">
       <div class="stack">
+        <app-incoming-panel [orders]="incoming.value() ?? []" [loading]="incoming.isLoading()" [error]="incoming.error() ? 'The server did not answer.' : null"
+          [canPickup]="canReceiveDelivery()" (changed)="reload()" />
         <app-shipments-panel mode="distributor" [shipments]="deliveries.value() ?? []" [stock]="consignment.value() ?? null"
           [loading]="deliveries.isLoading()" [error]="deliveries.error() ? 'The server did not answer.' : null"
           [canReceive]="canReceiveDelivery()" (changed)="reload()" />
+        <app-dispatches-panel [dispatches]="dispatches.value() ?? []" [shipments]="deliveries.value() ?? []" [loading]="dispatches.isLoading()"
+          [error]="dispatches.error() ? 'The server did not answer.' : null" [canDispatch]="canReceiveDelivery()" (changed)="reload()" />
         <app-invoices-panel mode="distributor" [invoices]="salesInvoices.value() ?? []" [shipments]="deliveries.value() ?? []"
           [distributorId]="isDistributor() ? null : (dist() ?? null)" [loading]="salesInvoices.isLoading()"
           [error]="salesInvoices.error() ? 'The server did not answer.' : null"
@@ -214,7 +216,7 @@
         <div class="stack">
           <div class="card" data-flush>
             <div class="card__head">
-              <div><h2>Requests to accept <app-tag [tone]="(desk.value()?.requests?.length ?? 0) ? 'warning' : 'success'">{{ desk.value()?.requests?.length ?? 0 }}</app-tag></h2><p>Accepting creates a draft sales order with the price and terms locked</p></div>
+              <div><h2>Requests to accept <app-tag [tone]="(desk.value()?.requests?.length ?? 0) ? 'warning' : 'success'">{{ desk.value()?.requests?.length ?? 0 }}</app-tag></h2><p>Accepting orders the goods from the product's manufacturer, delivered to the distributor</p></div>
             </div>
             <div class="card__body">
               <app-data-table [columns]="deskRequestColumns" [rows]="desk.value()?.requests ?? []" [actions]="deskRequestActions" [searchable]="false"
@@ -256,5 +258,5 @@
 <app-receipt-form [(open)]="receiptOpen" [order]="receiving()" [distributorId]="dist()" (saved)="reload()" />
 <app-advice-form [(open)]="adviceOpen" [orders]="orders.value() ?? []" [methods]="profile.value()?.paymentMethods ?? ['Bank Transfer']" [orderId]="payingOrder()" [distributorId]="dist()" (saved)="reload()" />
 <app-accept-form [(open)]="acceptOpen" [req]="accepting()" [cycles]="profile.value()?.paymentCycles ?? [15, 30, 45, 60]"
-  [defaultTerms]="profile.value()?.distributor?.paymentDays ?? 30" (saved)="reload()" />
+  [defaultTerms]="profile.value()?.distributor?.paymentDays ?? 30" [salesEnabled]="legacy()" (saved)="reload()" />
 <app-reason-form [(open)]="reasonOpen" [heading]="reasonHeading()" [subject]="reasonSubject()" [actionLabel]="reasonLabel()" [run]="reasonRun()" (saved)="reload()" />

@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { DistributionModule } from '../distribution/distribution.module';
 import { LedgerModule } from '../ledger/ledger.module';
+import { ManufacturingModule } from '../manufacturing/manufacturing.module';
 import { SetupModule } from '../setup/setup.module';
 import { PortalController } from './portal.controller';
 import { AuditLog, CargoReceipt, CreditNote, PaymentAdvice, PortalRequest } from './portal.entities';
@@ -11,7 +12,7 @@ import { PortalService } from './portal.service';
 @Module({
   imports: [
     TypeOrmModule.forFeature([PortalRequest, CargoReceipt, PaymentAdvice, CreditNote, AuditLog]),
-    DistributionModule, LedgerModule, SetupModule,
+    DistributionModule, LedgerModule, SetupModule, ManufacturingModule,
   ],
   controllers: [PortalController],
   providers: [PortalService],

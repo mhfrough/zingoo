@@ -44,6 +44,8 @@ export interface PortalRequest {
   reviewNote: string | null;
   product: { sku: string; name: string };
   order: { refNo: string } | null;
+  /** the production order the request became */
+  productionOrder: { refNo: string; status: string; stage: string | null; readyDate: string | null } | null;
 }
 
 export interface PortalReceipt {
@@ -131,6 +133,10 @@ export interface Statement {
 
 export interface DeskRequest extends PortalRequest {
   distributor: { name: string };
+  product: {
+    sku: string; name: string; bundlesPerContainer?: number; manufacturer?: { name: string } | null;
+    packagings?: { name: string; isDefault?: boolean; bundlesPerContainer: number }[];
+  };
   rate: number;
   value: number;
 }

@@ -7,6 +7,9 @@ import { nextRef } from '../common/ref';
 import { CollectionsService, OrdersService } from '../distribution/distribution.service';
 import { Collection, SalesOrder } from '../distribution/distribution.entities';
 import { PostingService } from '../ledger/posting.service';
+import { Role } from '../common/enums';
+import { ProductionOrder } from '../manufacturing/production-orders.entities';
+import { ProductionOrdersService } from '../manufacturing/production-orders.service';
 import { LookupsService } from '../setup/lookups.service';
 import { SettingsService } from '../setup/setup.service';
 import { LINK, NotificationsService, TEAM, plural } from '../notifications/notifications.service';
@@ -45,6 +48,7 @@ export class PortalService {
     private readonly settings: SettingsService,
     private readonly lookups: LookupsService,
     private readonly notes: NotificationsService,
+    private readonly production: ProductionOrdersService,
   ) {}
 
   private distName = async (em: EntityManager, id: string) => (await em.findOne(Distributor, { where: { id } }))?.name ?? 'A distributor';
@@ -153,7 +157,7 @@ export class PortalService {
   }
 
   requestsOf(distributorId: string) {
-    return this.db.manager.find(PortalRequest, { where: { distributorId }, relations: ['product', 'order'], order: { date: 'DESC', refNo: 'DESC' } });
+    return this.db.manager.find(PortalRequest, { where: { distributorId }, relations: ['product', 'order', 'productionOrder'], order: { date: 'DESC', refNo: 'DESC' } });
   }
 
   async receiptsOf(distributorId: string) {
@@ -242,7 +246,7 @@ export class PortalService {
     const em = this.db.manager;
     const s = await this.settings.get();
     const [requests, advices, receipts, audit] = await Promise.all([
-      em.find(PortalRequest, { where: { status: 'Requested' }, relations: ['distributor', 'product'], order: { date: 'ASC' } }),
+      em.find(PortalRequest, { where: { status: 'Requested' }, relations: ['distributor', 'product', 'product.manufacturer'], order: { date: 'ASC' } }),
       em.find(PaymentAdvice, { where: { status: 'Submitted' }, relations: ['order', 'order.distributor'], order: { date: 'ASC' } }),
       em.find(CargoReceipt, { where: { status: 'Disputed' }, relations: ['order', 'order.distributor', 'order.product'], order: { date: 'ASC' } }),
       em.find(AuditLog, { order: { createdAt: 'DESC' }, take: 25 }),
@@ -289,6 +293,8 @@ export class PortalService {
       const r = await em.findOne(PortalRequest, { where: { id }, relations: ['product', 'distributor'] });
       if (!r || r.status !== 'Requested') throw new BadRequestException('This request is no longer waiting.');
       const s = await this.settings.get(em);
+      if ((dto.into ?? 'Production') === 'Production') return this.requestToProduction(em, r, dto, user);
+      if (!s.salesOrdersEnabled) throw new BadRequestException('Warehouse sales orders are switched off in Settings & Data; accept the request into a production order.');
       const agreed = await em.findOne(DistributorRate, { where: { distributorId: r.distributorId, productId: r.productId } });
       const rate = dto.rate ?? (agreed ? Number(agreed.rate) : Number(r.product.rate));
       const refNo = await nextRef(em, SalesOrder, s.docPrefixes['sales'] ?? 'SO', 3, 201);
@@ -311,6 +317,39 @@ export class PortalService {
       );
       return { request: r, order };
     });
+  }
+
+  /**
+   * The request becomes a production order with the product's manufacturer, delivered to this distributor, and is
+   * sent to the manufacturer straight away (unless kept as a draft). Bundles are rounded up to whole containers.
+   */
+  private async requestToProduction(em: EntityManager, r: PortalRequest, dto: AcceptRequestDto, user: PortalUser) {
+    const templates = r.product.packagings ?? [];
+    const tpl = dto.packaging ? templates.find((t) => t.name === dto.packaging) : templates.find((t) => t.isDefault);
+    const perContainer = tpl?.bundlesPerContainer || r.product.bundlesPerContainer || 1;
+    const containers = dto.containers ?? Math.max(1, Math.ceil(r.cartons / perContainer));
+    const date = today();
+    const dueDate = dto.dueDate !== undefined ? dto.dueDate : r.requestedDate && r.requestedDate >= date ? r.requestedDate : null;
+    const send = dto.send ?? true;
+    const note = [`From stock request ${r.refNo}`, r.poRef && `PO ${r.poRef}`, dto.note?.trim()].filter(Boolean).join(' · ');
+    const o = await this.production.createIn(em, { id: user.id, name: user.name, role: user.role as Role }, {
+      date, productId: r.productId, destination: 'Distributor', distributorId: r.distributorId, containers,
+      packaging: dto.packaging ?? null, dueDate, notes: note, send,
+    }, `From stock request ${r.refNo}`);
+    const full = await em.findOneOrFail(ProductionOrder, { where: { id: o.id }, relations: ['manufacturer'] });
+    r.status = 'Accepted';
+    r.productionOrderId = o.id;
+    await em.save(r);
+    await this.audit(em, user, 'Request accepted', r.refNo, `Created ${o.refNo}${send ? ` and sent it to ${full.manufacturer.name}` : ' (draft)'}`);
+    const what = `${plural(containers, 'container')} (${plural(containers * o.bundlesPerContainer, 'bundle')}) of ${r.product.sku}`;
+    await this.notes.send(em, user,
+      { to: { distributorId: r.distributorId }, kind: 'request.accepted', tone: 'success', refNo: r.refNo, link: LINK.portal('stock'),
+        title: `Request ${r.refNo} accepted: production order ${o.refNo}`,
+        body: `${what}${send ? ` ordered from ${full.manufacturer.name}. You will be told when it is accepted, ready and dispatched.` : '. Zen Foods sends it to the manufacturer next.'}` },
+      { to: { staff: TEAM.desk }, kind: 'request.accepted', tone: 'success', refNo: r.refNo, link: LINK.manufacturing('orders'),
+        title: `Request ${r.refNo} (${r.distributor.name}) accepted into ${o.refNo}`, body: `By ${user.name} · ${what}` },
+    );
+    return { request: r, productionOrder: full };
   }
 
   rejectRequest(id: string, note: string, user: PortalUser) {

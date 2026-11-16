@@ -7,6 +7,9 @@ import { OrderDestination, ProductionOrder } from './production-orders.entities'
 /** In transit until the distributor (or the warehouse) confirms what arrived. */
 export const SHIPMENT_STATUS = ['In transit', 'Received'] as const;
 export type ShipmentStatus = (typeof SHIPMENT_STATUS)[number];
+/** Delivery = the manufacturer sends it; Pickup = the distributor collects it from the factory */
+export const SHIPMENT_METHODS = ['Delivery', 'Pickup'] as const;
+export type ShipmentMethod = (typeof SHIPMENT_METHODS)[number];
 
 /**
  * Containers the manufacturer sends against an accepted order, straight to the order's distributor (or into the
@@ -81,6 +84,10 @@ export class ProductionShipment extends AppEntity {
 
   @Column({ type: 'varchar', length: 120 })
   shippedBy: string;
+
+  /** who moved it: the manufacturer delivered, or the distributor collected it from the factory */
+  @Column({ type: 'varchar', length: 10, default: 'Delivery' })
+  method: ShipmentMethod;
 
   @Column({ type: 'varchar', length: 12, default: 'In transit' })
   status: ShipmentStatus;

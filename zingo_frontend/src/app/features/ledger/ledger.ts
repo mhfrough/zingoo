@@ -3,7 +3,7 @@ import { rxResource } from '@angular/core/rxjs-interop';
 import { AuthService } from '../../core/auth.service';
 import { downloadCsv } from '../../shared/csv';
 import { errorText } from '../../shared/errors';
-import { Tone, fmtAmount2, fmtDate, fmtMoney } from '../../shared/format';
+import { docDate, Tone, fmtAmount2, fmtDate, fmtMoney } from '../../shared/format';
 import {
   Btn, ConfirmService, DataTable, Kpi, PageHeader, RowAction, RowActionEvent, TabItem, TabPanel, Tabs, Tag, TableColumn, ToastService,
 } from '../../ui';
@@ -127,7 +127,7 @@ export class Ledger {
 
   // ───────────── vouchers ─────────────
   protected voucherColumns: TableColumn<Voucher>[] = [
-    { id: 'ref', label: 'Voucher', value: (v) => v.refNo, sub: (v) => fmtDate(v.date) },
+    { id: 'ref', label: 'Voucher', value: (v) => v.refNo, sub: (v) => docDate(v) },
     { id: 'memo', label: 'Description', value: (v) => v.memo, sub: (v) => (v.reverses ? `Reverses ${v.reverses}` : `${v.lines.length} lines`), priority: 2 },
     {
       id: 'amount', label: 'Amount', kind: 'mono', align: 'end',

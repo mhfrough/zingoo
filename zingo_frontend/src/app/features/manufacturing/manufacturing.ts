@@ -3,7 +3,7 @@ import { rxResource } from '@angular/core/rxjs-interop';
 import { Router } from '@angular/router';
 import { AuthService } from '../../core/auth.service';
 import { errorText } from '../../shared/errors';
-import { Tone, fmtAmount, fmtDate, fmtMoney, fmtNumber } from '../../shared/format';
+import { docDate, Tone, fmtAmount, fmtDate, fmtMoney, fmtNumber } from '../../shared/format';
 import {
   Btn, ConfirmService, DataTable, Kpi, PageHeader, RowAction, RowActionEvent, TabItem, TabPanel, Tabs, TableColumn, ToastService,
 } from '../../ui';
@@ -154,7 +154,7 @@ export class Manufacturing {
   protected stockActions = (): RowAction[] => (this.canWrite() ? [{ id: 'edit', label: 'Edit SKU' }] : []);
 
   protected batchColumns: TableColumn<Batch>[] = [
-    { id: 'batch', label: 'Batch', value: (b) => b.refNo, sub: (b) => fmtDate(b.date) },
+    { id: 'batch', label: 'Batch', value: (b) => b.refNo, sub: (b) => docDate(b) },
     { id: 'product', label: 'Product', value: (b) => `${b.product.name} · Rs ${b.product.pack}`, sub: (b) => b.product.sku },
     { id: 'cartons', label: 'Bundles made', kind: 'number', value: (b) => b.producedCartons, sub: (b) => `Target ${b.targetCartons}` },
     { id: 'qc', label: 'QC', kind: 'tag', value: (b) => b.qc, tone: (b) => QC_TONE[b.qc] ?? 'neutral', priority: 3 },
@@ -170,7 +170,7 @@ export class Manufacturing {
   };
 
   protected payableColumns: TableColumn<Batch>[] = [
-    { id: 'batch', label: 'Batch', value: (b) => b.refNo, sub: (b) => fmtDate(b.date) },
+    { id: 'batch', label: 'Batch', value: (b) => b.refNo, sub: (b) => docDate(b) },
     { id: 'manufacturer', label: 'Manufacturer', value: (b) => b.manufacturer.name, sub: (b) => `Terms ${b.manufacturer.paymentDays} days` },
     { id: 'cost', label: 'Accrued (PKR)', kind: 'money', value: (b) => b.cost, sub: (b) => `Paid ${fmtAmount(b.paid)}`, priority: 2 },
     { id: 'due', label: 'Remaining (PKR)', kind: 'money', value: (b) => b.due },

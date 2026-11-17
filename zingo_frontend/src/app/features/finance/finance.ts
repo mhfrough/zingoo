@@ -3,7 +3,7 @@ import { rxResource } from '@angular/core/rxjs-interop';
 import { AttachmentsApi } from '../../core/attachments.api';
 import { AuthService } from '../../core/auth.service';
 import { errorText } from '../../shared/errors';
-import { Tone, fmtDate, fmtMoney, fmtNumber, fmtPct } from '../../shared/format';
+import { docDate, Tone, fmtDate, fmtMoney, fmtNumber, fmtPct } from '../../shared/format';
 import {
   Btn, ConfirmService, DataTable, Kpi, PageHeader, RowAction, RowActionEvent, TableColumn, Tag, ToastService,
 } from '../../ui';
@@ -204,7 +204,7 @@ export class Finance {
   }
 
   protected deskColumns: TableColumn<FinanceEntry>[] = [
-    { id: 'ref', label: 'Request', value: (e) => e.refNo, sub: (e) => fmtDate(e.date) },
+    { id: 'ref', label: 'Request', value: (e) => e.refNo, sub: (e) => docDate(e) },
     { id: 'stream', label: 'Stream / payee', value: (e) => e.category, sub: (e) => e.party },
     { id: 'amount', label: 'Amount (PKR)', kind: 'money', value: (e) => e.amount },
     {
@@ -223,7 +223,7 @@ export class Finance {
   };
 
   protected entryColumns: TableColumn<FinanceEntry>[] = [
-    { id: 'ref', label: 'Entry', value: (e) => e.refNo, sub: (e) => fmtDate(e.date) },
+    { id: 'ref', label: 'Entry', value: (e) => e.refNo, sub: (e) => docDate(e) },
     {
       id: 'type', label: 'Type', kind: 'tag', value: (e) => e.type, tone: (e): Tone => TYPE_TONE[e.type] ?? 'neutral',
       sub: (e) => (e.type === 'Capital Injection' ? [e.funding || 'Equity', e.paymentSource].filter(Boolean).join(' · ') : null),
@@ -276,7 +276,7 @@ export class Finance {
   }
 
   protected loanColumns: TableColumn<FinanceEntry>[] = [
-    { id: 'ref', label: 'Reference', value: (e) => e.refNo, sub: (e) => fmtDate(e.date) },
+    { id: 'ref', label: 'Reference', value: (e) => e.refNo, sub: (e) => docDate(e) },
     { id: 'party', label: 'Account', value: (e) => e.party, sub: (e) => `${e.funding}${e.direction === 'out' ? ' paid out' : ''}` },
     { id: 'amount', label: 'Funding (PKR)', kind: 'money', value: (e) => e.amount },
     { id: 'repaid', label: 'Repaid (PKR)', kind: 'money', value: (e) => e.repaid, priority: 2 },

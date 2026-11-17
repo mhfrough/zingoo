@@ -2,7 +2,7 @@ import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@a
 import { rxResource } from '@angular/core/rxjs-interop';
 import { RouterLink } from '@angular/router';
 import { AuthService } from '../../core/auth.service';
-import { Tone, fmtAmount, fmtDate, fmtMoney, fmtNumber, productLabel } from '../../shared/format';
+import { docDate, subLine, Tone, fmtAmount, fmtDate, fmtMoney, fmtNumber, productLabel } from '../../shared/format';
 import { Btn, DataTable, EmptyState, IconComponent, Kpi, PageHeader, TableColumn, Tag } from '../../ui';
 import { Alert, Dashboard } from '../ops/models';
 import { OpsApi } from '../ops/ops.api';
@@ -16,7 +16,7 @@ type LatestOrder = Dashboard['latestOrders'][number];
 /** where a distributor order stands: waiting for Zingo, with the manufacturer, in production, declined */
 const latestState = (o: LatestOrder): [string, Tone] => {
   const p = o.productionOrder;
-  if (!p) return o.status === 'Requested' ? ['Waiting for Zingo', 'warning'] : [o.status, o.status === 'Rejected' ? 'danger' : 'neutral'];
+  if (!p) return o.status === 'Requested' ? ['Waiting', 'warning'] : [o.status, o.status === 'Rejected' ? 'danger' : 'neutral'];
   if (p.status === 'Sent') return ['With the manufacturer', 'warning'];
   if (p.status === 'Accepted') {
     if (p.containers && p.received >= p.containers) return ['Delivered', 'success'];
@@ -69,7 +69,7 @@ export class Overview {
 
   protected orderColumns: TableColumn<LatestOrder>[] = [
     { id: 'order', label: 'Order / Distributor', kind: 'title', value: (o) => productLabel(o), sub: (o) => o.distributor },
-    { id: 'ref', label: 'Order no. / bundles', kind: 'mono', value: (o) => o.refNo, sub: (o) => `${fmtDate(o.date)} · ${fmtNumber(o.cartons)} bundles`, priority: 2 },
+    { id: 'ref', label: 'Order no. / bundles', kind: 'mono', value: (o) => o.refNo, sub: (o) => subLine(docDate(o), `${fmtNumber(o.cartons)} bundles`), priority: 2 },
     { id: 'mfr', label: 'Manufacturer', value: (o) => o.productionOrder?.manufacturer ?? '-', sub: (o) => o.productionOrder?.refNo ?? null, priority: 2 },
     {
       id: 'status', label: 'Status', kind: 'tag', value: (o) => latestState(o)[0], tone: (o) => latestState(o)[1],

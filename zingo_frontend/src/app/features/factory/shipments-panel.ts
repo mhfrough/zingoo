@@ -1,7 +1,7 @@
 import { ChangeDetectionStrategy, Component, computed, inject, input, output, signal } from '@angular/core';
 import { takeUntilDestroyed, toSignal } from '@angular/core/rxjs-interop';
 import { ReactiveFormsModule, Validators } from '@angular/forms';
-import { Tone, fmtDate, fmtMoney, fmtNumber, productLabel, qtyLabel } from '../../shared/format';
+import { docDate, subLine, Tone, fmtDate, fmtMoney, fmtNumber, productLabel, qtyLabel } from '../../shared/format';
 import { Btn, DataTable, Field, Offcanvas, RichText, RowAction, RowActionEvent, Select, SelectOption, TableColumn } from '../../ui';
 import { FormModal } from '../ops/form-modal';
 import { AuthService } from '../../core/auth.service';
@@ -235,7 +235,7 @@ export class ShipmentsPanel {
     },
     {
       id: 'ref', label: 'Shipment no. / quantity', kind: 'mono', value: (s) => s.refNo, sortValue: (s) => s.shipDate,
-      sub: (s) => `${fmtDate(s.shipDate)} · ${qtyLabel(s.containers, s.containers * s.bundlesPerContainer)} · order ${s.order.refNo}`,
+      sub: (s) => subLine(docDate(s, s.shipDate), qtyLabel(s.containers, s.containers * s.bundlesPerContainer), `order ${s.order.refNo}`),
     },
     {
       id: 'route', label: 'Transport', priority: 3,

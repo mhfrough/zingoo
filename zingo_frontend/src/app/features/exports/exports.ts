@@ -4,7 +4,7 @@ import { AuthService } from '../../core/auth.service';
 import { SettingsStore } from '../../core/settings.store';
 import { downloadCsv } from '../../shared/csv';
 import { errorText } from '../../shared/errors';
-import { Tone, fmtAmount2, fmtDate, fmtMoney, fmtNumber, fmtPct } from '../../shared/format';
+import { docDate, Tone, fmtAmount2, fmtDate, fmtMoney, fmtNumber, fmtPct } from '../../shared/format';
 import {
   Btn, ConfirmService, DataTable, Kpi, PageHeader, RowAction, RowActionEvent, TabItem, TabPanel, Tabs, TableColumn, ToastService,
 } from '../../ui';
@@ -123,7 +123,7 @@ export class Exports {
   ];
 
   protected claimColumns: TableColumn<ExportClaim>[] = [
-    { id: 'ref', label: 'Claim', value: (c) => c.refNo, sub: (c) => fmtDate(c.date) },
+    { id: 'ref', label: 'Claim', value: (c) => c.refNo, sub: (c) => docDate(c) },
     { id: 'ship', label: 'Container', value: (c) => c.shipment.refNo, sub: (c) => c.raisedBy, priority: 2 },
     { id: 'what', label: 'What', value: (c) => `${c.kind} · ${c.quantity} bundle(s)`, sub: (c) => c.description },
     {
@@ -210,7 +210,7 @@ export class Exports {
 
   // ───────────── collections tab ─────────────
   protected receiptColumns: TableColumn<ExportReceipt>[] = [
-    { id: 'ref', label: 'Receipt', value: (r) => r.refNo, sub: (r) => fmtDate(r.date) },
+    { id: 'ref', label: 'Receipt', value: (r) => r.refNo, sub: (r) => docDate(r) },
     { id: 'container', label: 'Container', value: (r) => r.shipment.refNo, sub: (r) => r.shipment.buyer, priority: 2 },
     {
       id: 'foreign', label: 'Received', kind: 'mono', align: 'end', value: (r) => `${r.shipment.currency} ${fmtAmount2(r.foreignAmount)}`,
@@ -227,7 +227,7 @@ export class Exports {
   ];
 
   protected costColumns: TableColumn<ExportCostPayment>[] = [
-    { id: 'ref', label: 'Payment', value: (p) => p.refNo, sub: (p) => fmtDate(p.date) },
+    { id: 'ref', label: 'Payment', value: (p) => p.refNo, sub: (p) => docDate(p) },
     { id: 'container', label: 'Container', value: (p) => p.shipment.refNo, sub: (p) => p.shipment.buyer, priority: 2 },
     { id: 'amount', label: 'Amount (PKR)', kind: 'money', value: (p) => p.amount },
     { id: 'method', label: 'Method', value: (p) => p.method, sub: (p) => p.note, priority: 3 },

@@ -61,3 +61,15 @@ export const fmtMoney2 = (v: number | string | null | undefined, cur = 'PKR', dp
 
 /** a percentage with one decimal: 38.4 -> "38.4%" */
 export const fmtPct = (v: number | string | null | undefined) => `${Number(v ?? 0).toFixed(1)}%`;
+
+/**
+ * A record's own date for the line under its number, or null when it is the day the record was added
+ * (the "Last update" column already shows that, so the date is not repeated). Rows without createdAt keep it.
+ */
+export const docDate = (r: object, date = (r as { date?: string | null }).date) => {
+  const added = (r as { createdAt?: string | null }).createdAt;
+  if (!date) return null;
+  return added && fmtDate(date) === fmtDate(added) ? null : fmtDate(date);
+};
+/** "a · b · c" from the parts that are present (null when none is) */
+export const subLine = (...parts: (string | null | undefined | false)[]) => parts.filter(Boolean).join(' · ') || null;

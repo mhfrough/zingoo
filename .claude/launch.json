@@ -7,6 +7,13 @@
       "runtimeArgs": ["ng", "serve", "--port", "4270"],
       "cwd": "zingo_frontend",
       "port": 4270
+    },
+    {
+      "name": "zingo-api",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "start"],
+      "cwd": "zingo_backend",
+      "port": 3020
     }
   ]
 }

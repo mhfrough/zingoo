@@ -12,7 +12,7 @@ import { AuthService } from '../../core/auth.service';
 import { downloadCsv } from '../../shared/csv';
 import { errorText } from '../../shared/errors';
 import { downloadBase64, downloadText } from '../../shared/files';
-import { Tone, fmtAmount2, fmtDate, fmtMoney, fmtNumber, fmtPct, productLabel, setNumberLocale } from '../../shared/format';
+import { docDate, subLine, Tone, fmtAmount2, fmtDate, fmtMoney, fmtNumber, fmtPct, productLabel, setNumberLocale } from '../../shared/format';
 import {
   Btn, ConfirmService, DataTable, Kpi, PageHeader, RowAction, RowActionEvent, TabItem, TabPanel, Tabs, Tag, TableColumn, ToastService,
 } from '../../ui';
@@ -37,7 +37,7 @@ const tone = (s: string): Tone => STATUS_TONE[s] ?? 'neutral';
 /** where a distributor order stands: the manufacturer's answer and progress once it became a production order */
 const orderState = (r: PortalRequest): { label: string; tone: Tone } => {
   const o = r.productionOrder;
-  if (!o) return { label: r.status === 'Requested' ? 'Waiting for Zingo' : r.status, tone: tone(r.status) };
+  if (!o) return { label: r.status === 'Requested' ? 'Waiting' : r.status, tone: tone(r.status) };
   switch (o.status) {
     case 'Draft': return { label: 'Accepted by Zingo', tone: 'info' };
     case 'Sent': return { label: 'With the manufacturer', tone: 'warning' };
@@ -185,7 +185,7 @@ export class Portal {
 
   protected orderColumns: TableColumn<PortalOrder>[] = [
     { id: 'sku', label: 'Product', kind: 'title', value: (o) => productLabel(o.product), sub: (o) => `${fmtNumber(o.cartons)} bundles` },
-    { id: 'ref', label: 'Order no.', kind: 'mono', value: (o) => o.refNo, sortValue: (o) => o.date, sub: (o) => `${fmtDate(o.date)} · ${o.poRef ?? 'No PO ref'}`, priority: 2 },
+    { id: 'ref', label: 'Order no.', kind: 'mono', value: (o) => o.refNo, sortValue: (o) => o.date, sub: (o) => subLine(docDate(o), o.poRef ?? 'No PO ref'), priority: 2 },
     { id: 'rate', label: 'Rate / pack', kind: 'mono', align: 'end', value: (o) => fmtAmount2(o.rate), sortValue: (o) => Number(o.rate), priority: 3 },
     { id: 'total', label: 'Total (PKR)', kind: 'money', value: (o) => o.billed, sub: (o) => o.voucher },
     this.statusCol('status', 'Status', (o) => o.portalStatus, (o) => (o.status === 'Dispatched' ? `Due ${fmtDate(o.dueDate)}` : 'Due at dispatch')),
@@ -198,7 +198,7 @@ export class Portal {
 
   protected requestColumns: TableColumn<PortalRequest>[] = [
     { id: 'product', label: 'Product', kind: 'title', value: (r) => productLabel(r.product), sub: (r) => `${fmtNumber(r.cartons)} bundles` },
-    { id: 'ref', label: 'Order no.', kind: 'mono', value: (r) => r.refNo, sub: (r) => fmtDate(r.date), sortValue: (r) => `${r.date}|${r.createdAt ?? ''}` },
+    { id: 'ref', label: 'Order no.', kind: 'mono', value: (r) => r.refNo, sub: (r) => docDate(r), sortValue: (r) => `${r.date}|${r.createdAt ?? ''}` },
     { id: 'wanted', label: 'Wanted by', kind: 'date', value: (r) => r.requestedDate, priority: 3 },
     { id: 'status', label: 'Status', kind: 'tag', value: (r) => orderState(r).label, tone: (r) => orderState(r).tone, sub: orderLine },
   ];
@@ -215,7 +215,7 @@ export class Portal {
   protected cargoActions = (o: PortalOrder): RowAction[] => (o.receipt ? [] : [{ id: 'receive', label: 'Confirm cargo', tone: 'success' }]);
 
   protected claimColumns: TableColumn<PortalReceipt>[] = [
-    { id: 'ref', label: 'Claim', value: (r) => r.order.refNo, sub: (r) => `${r.refNo} · ${fmtDate(r.date)}` },
+    { id: 'ref', label: 'Claim', value: (r) => r.order.refNo, sub: (r) => subLine(r.refNo, docDate(r)) },
     { id: 'qty', label: 'Damaged / missing', value: (r) => `${r.damagedCartons} / ${r.missingCartons}`, sub: (r) => r.condition, priority: 2 },
     { id: 'value', label: 'Claim value (PKR)', kind: 'money', value: (r) => r.claimValue },
     { id: 'status', label: 'Status', kind: 'tag', value: (r) => r.status, tone: (r): Tone => tone(r.status), sub: (r) => r.reviewNote },
@@ -224,7 +224,7 @@ export class Portal {
   protected claimActions = (r: PortalReceipt): RowAction[] => (r.hasEvidence ? [{ id: 'evidence', label: 'Evidence' }] : []);
 
   protected adviceColumns: TableColumn<PortalAdvice>[] = [
-    { id: 'ref', label: 'Advice', value: (a) => a.refNo, sub: (a) => fmtDate(a.date) },
+    { id: 'ref', label: 'Advice', value: (a) => a.refNo, sub: (a) => docDate(a) },
     { id: 'order', label: 'Order', value: (a) => a.order.refNo, sub: (a) => (a.isAdvance ? 'Advance' : 'Instalment'), priority: 3 },
     { id: 'amount', label: 'Amount (PKR)', kind: 'money', value: (a) => a.amount },
     { id: 'method', label: 'Mode / reference', value: (a) => a.method, sub: (a) => a.bankRef, priority: 2 },
@@ -272,7 +272,7 @@ export class Portal {
   // desk
   protected deskRequestColumns: TableColumn<DeskRequest>[] = [
     { id: 'order', label: 'Order / Distributor', kind: 'title', value: (r) => productLabel(r.product), sub: (r) => r.distributor.name },
-    { id: 'ref', label: 'Order no. / bundles', kind: 'mono', value: (r) => r.refNo, sub: (r) => `${fmtDate(r.date)} · ${fmtNumber(r.cartons)} bundles`, priority: 2 },
+    { id: 'ref', label: 'Order no. / bundles', kind: 'mono', value: (r) => r.refNo, sub: (r) => subLine(docDate(r), `${fmtNumber(r.cartons)} bundles`), priority: 2 },
     { id: 'value', label: 'Value (PKR)', kind: 'money', value: (r) => r.value, sub: (r) => `${fmtAmount2(r.rate)} / pack` },
     { id: 'wanted', label: 'Wanted by', kind: 'date', value: (r) => r.requestedDate, priority: 3 },
   ];
@@ -280,7 +280,7 @@ export class Portal {
   /** the desk watches distributor orders with the manufacturers (no action: the manufacturer answers them) */
   protected deskOrderColumns: TableColumn<DeskOrder>[] = [
     { id: 'order', label: 'Order / Distributor', kind: 'title', value: (r) => productLabel(r.product), sub: (r) => r.distributor.name },
-    { id: 'ref', label: 'Order no. / bundles', kind: 'mono', value: (r) => r.refNo, sub: (r) => `${fmtDate(r.date)} · ${fmtNumber(r.cartons)} bundles`, priority: 2 },
+    { id: 'ref', label: 'Order no. / bundles', kind: 'mono', value: (r) => r.refNo, sub: (r) => subLine(docDate(r), `${fmtNumber(r.cartons)} bundles`), priority: 2 },
     { id: 'mfr', label: 'Manufacturer', value: (r) => r.productionOrder?.manufacturer?.name ?? '-', sub: (r) => r.productionOrder?.refNo ?? null },
     { id: 'status', label: 'Status', kind: 'tag', value: (r) => orderState(r).label, tone: (r) => orderState(r).tone,
       sub: (r) => (r.productionOrder?.readyDate ? `Ready ${fmtDate(r.productionOrder.readyDate)}` : r.productionOrder?.reason ?? r.reviewNote) },
@@ -288,7 +288,7 @@ export class Portal {
   protected deskRequestActions = (): RowAction[] => [{ id: 'accept', label: 'Accept', tone: 'success' }, { id: 'reject', label: 'Reject', tone: 'danger' }];
 
   protected deskAdviceColumns: TableColumn<PortalAdvice>[] = [
-    { id: 'ref', label: 'Advice', value: (a) => a.refNo, sub: (a) => fmtDate(a.date) },
+    { id: 'ref', label: 'Advice', value: (a) => a.refNo, sub: (a) => docDate(a) },
     { id: 'who', label: 'Distributor', value: (a) => a.distributorName ?? '', sub: (a) => a.order.refNo, priority: 2 },
     { id: 'amount', label: 'Amount (PKR)', kind: 'money', value: (a) => a.amount, sub: (a) => (a.isAdvance ? 'Advance' : 'Instalment') },
     { id: 'ref2', label: 'Mode / reference', value: (a) => a.method, sub: (a) => a.bankRef, priority: 3 },
@@ -300,7 +300,7 @@ export class Portal {
   ];
 
   protected deskClaimColumns: TableColumn<PortalReceipt>[] = [
-    { id: 'ref', label: 'Claim', value: (r) => r.order.refNo, sub: (r) => `${r.refNo} · ${fmtDate(r.date)}` },
+    { id: 'ref', label: 'Claim', value: (r) => r.order.refNo, sub: (r) => subLine(r.refNo, docDate(r)) },
     { id: 'who', label: 'Distributor', value: (r) => r.distributorName ?? '', sub: (r) => r.reason, priority: 2 },
     { id: 'qty', label: 'Damaged / missing', value: (r) => `${r.damagedCartons} / ${r.missingCartons}`, sub: (r) => r.condition, priority: 3 },
     { id: 'value', label: 'Claim value (PKR)', kind: 'money', value: (r) => r.claimValue },

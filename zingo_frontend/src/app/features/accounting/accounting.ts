@@ -3,7 +3,7 @@ import { rxResource } from '@angular/core/rxjs-interop';
 import { AuthService } from '../../core/auth.service';
 import { downloadCsv } from '../../shared/csv';
 import { errorText } from '../../shared/errors';
-import { Tone, fmtDate, fmtMoney, fmtNumber } from '../../shared/format';
+import { docDate, Tone, fmtDate, fmtMoney, fmtNumber } from '../../shared/format';
 import {
   Btn, ConfirmService, DataTable, Kpi, PageHeader, RowAction, RowActionEvent, TabItem, TabPanel, Tabs, Tag,
   TableColumn, ToastService,
@@ -157,7 +157,7 @@ export class Accounting {
   private locked = (d: AccountingDoc) => d.paid > 0 || (d.kind === 'Expense' && d.approved);
 
   protected docColumns: TableColumn<AccountingDoc>[] = [
-    { id: 'ref', label: 'Document', value: (d) => d.refNo, sub: (d) => fmtDate(d.date) },
+    { id: 'ref', label: 'Document', value: (d) => d.refNo, sub: (d) => docDate(d) },
     {
       id: 'kind', label: 'Type', kind: 'tag', value: (d) => d.kind, tone: (d): Tone => (d.kind === 'Income' ? 'success' : 'warning'),
       sub: (d) => d.category, priority: 2,
@@ -190,7 +190,7 @@ export class Accounting {
   };
 
   protected settlementColumns: TableColumn<Settlement>[] = [
-    { id: 'ref', label: 'Entry', value: (s) => s.refNo, sub: (s) => fmtDate(s.date) },
+    { id: 'ref', label: 'Entry', value: (s) => s.refNo, sub: (s) => docDate(s) },
     { id: 'doc', label: 'Document', value: (s) => s.document.refNo, sub: (s) => s.document.party, priority: 2 },
     {
       id: 'flow', label: 'Flow', kind: 'tag', value: (s) => (s.document.kind === 'Income' ? 'Receipt' : 'Payment'),

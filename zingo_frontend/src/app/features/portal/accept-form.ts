@@ -46,7 +46,7 @@ const today = () => new Date().toISOString().slice(0, 10);
                      [hint]="fmt(bundles()) + ' bundles'">
             <input type="number" formControlName="containers" min="1" step="1" />
           </app-field>
-          <app-field label="Needed by" [hint]="req()?.requestedDate ? 'Asked for ' + req()!.requestedDate : ''">
+          <app-field label="Due date" [hint]="req()?.requestedDate ? 'Asked for ' + req()!.requestedDate : ''">
             <input type="date" formControlName="dueDate" [min]="minDate" />
           </app-field>
           <app-field label="Note to the manufacturer" [wide]="true"><input type="text" formControlName="note" maxlength="500" /></app-field>

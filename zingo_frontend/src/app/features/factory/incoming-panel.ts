@@ -1,6 +1,6 @@
 import { ChangeDetectionStrategy, Component, computed, inject, input, output, signal } from '@angular/core';
 import { ReactiveFormsModule, Validators } from '@angular/forms';
-import { Tone, fmtDate, fmtNumber, productLabel, qtyLabel } from '../../shared/format';
+import { docDate, subLine, Tone, fmtDate, fmtNumber, productLabel, qtyLabel } from '../../shared/format';
 import { Btn, DataTable, Field, Offcanvas, RichText, RowAction, RowActionEvent, TableColumn } from '../../ui';
 import { FormModal } from '../ops/form-modal';
 import { FactoryApi, IncomingOrder } from './factory.api';
@@ -107,7 +107,7 @@ export class IncomingPanel {
   protected current = signal<IncomingOrder | null>(null);
 
   private state = (o: IncomingOrder): [string, Tone] => {
-    if (o.status === 'Sent') return ['Waiting for the manufacturer', 'warning'];
+    if (o.status === 'Sent') return ['Waiting', 'warning'];
     if (o.ready) return [o.shippedContainers ? `Ready · ${o.left} left` : 'Ready to collect', 'success'];
     return [o.stage ?? 'Accepted', 'info'];
   };
@@ -119,7 +119,7 @@ export class IncomingPanel {
     },
     {
       id: 'ref', label: 'Order no. / quantity', kind: 'mono', value: (o) => o.refNo, sortValue: (o) => o.date,
-      sub: (o) => `${fmtDate(o.date)} · ${qtyLabel(o.containers, o.containers * o.bundlesPerContainer)}${o.shippedContainers ? ` · ${fmtNumber(o.shippedContainers)} sent` : ''}`,
+      sub: (o) => subLine(docDate(o), qtyLabel(o.containers, o.containers * o.bundlesPerContainer), o.shippedContainers ? `${fmtNumber(o.shippedContainers)} sent` : null),
     },
     {
       id: 'from', label: this.showDistributor() ? 'Route' : 'Manufacturer', priority: 2,
@@ -128,7 +128,7 @@ export class IncomingPanel {
     },
     {
       id: 'ready', label: 'Ready by', kind: 'date', priority: 2, value: (o) => o.readyDate,
-      sub: (o) => (o.dueDate ? `Needed ${fmtDate(o.dueDate)}` : null),
+      sub: (o) => (o.dueDate ? `Due ${fmtDate(o.dueDate)}` : null),
     },
     { id: 'status', label: 'Status', kind: 'tag', value: (o) => this.state(o)[0], tone: (o) => this.state(o)[1] },
   ]);

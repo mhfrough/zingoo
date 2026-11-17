@@ -175,8 +175,8 @@
     --border-strong: var(--slate-200);
 
     --text: var(--slate-900);
-    --text-2: var(--slate-600);
-    --text-3: var(--slate-500);
+    --text-2: var(--slate-700);
+    --text-3: var(--slate-600);
     --text-inverse: var(--slate-0);
 
     --accent: var(--orange-600);

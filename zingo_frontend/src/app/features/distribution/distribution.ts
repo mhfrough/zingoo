@@ -8,7 +8,7 @@ import { DeliveryClaimsPanel } from '../factory/delivery-claims-panel';
 import { InvoicesPanel } from '../factory/invoices-panel';
 import { TrailPanel } from '../factory/trail-panel';
 import { errorText } from '../../shared/errors';
-import { Tone, fmtAmount, fmtDate, fmtMoney, fmtNumber } from '../../shared/format';
+import { docDate, Tone, fmtAmount, fmtDate, fmtMoney, fmtNumber } from '../../shared/format';
 import {
   Btn, ConfirmService, DataTable, Kpi, PageHeader, RowAction, RowActionEvent, TabItem, TabPanel, Tabs, TableColumn, ToastService,
 } from '../../ui';
@@ -123,7 +123,7 @@ export class Distribution {
 
   // ───────────── sales orders ─────────────
   protected orderColumns: TableColumn<Order>[] = [
-    { id: 'order', label: 'Order', value: (o) => o.refNo, sub: (o) => fmtDate(o.date) },
+    { id: 'order', label: 'Order', value: (o) => o.refNo, sub: (o) => docDate(o) },
     { id: 'distributor', label: 'Distributor', value: (o) => o.distributor.name, sub: (o) => o.distributor.region },
     { id: 'product', label: 'Product', value: (o) => `${o.product.name} · Rs ${o.product.pack}`, sub: (o) => o.product.sku, priority: 2 },
     { id: 'cartons', label: 'Bundles', kind: 'number', value: (o) => o.cartons, priority: 3 },
@@ -222,7 +222,7 @@ export class Distribution {
 
   // ───────────── collections ─────────────
   protected collectionColumns: TableColumn<CollectionRow>[] = [
-    { id: 'receipt', label: 'Receipt', value: (c) => c.refNo, sub: (c) => fmtDate(c.date) },
+    { id: 'receipt', label: 'Receipt', value: (c) => c.refNo, sub: (c) => docDate(c) },
     { id: 'order', label: 'Sales order', value: (c) => c.order.refNo, sub: (c) => c.order.distributor.name },
     { id: 'amount', label: 'Received (PKR)', kind: 'money', value: (c) => c.amount },
     { id: 'method', label: 'Method', value: (c) => c.method, sub: (c) => c.note, priority: 2 },

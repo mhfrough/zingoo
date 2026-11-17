@@ -1,7 +1,7 @@
 import { ChangeDetectionStrategy, Component, computed, inject, input, output, signal } from '@angular/core';
 import { takeUntilDestroyed, toSignal } from '@angular/core/rxjs-interop';
 import { ReactiveFormsModule, Validators } from '@angular/forms';
-import { Tone, fmtDate, fmtNumber, productLabel } from '../../shared/format';
+import { docDate, subLine, Tone, fmtDate, fmtNumber, productLabel } from '../../shared/format';
 import { Btn, DataTable, Field, Offcanvas, RichText, RowAction, RowActionEvent, Select, SelectOption, TableColumn } from '../../ui';
 import { FormModal } from '../ops/form-modal';
 import { DistDispatch, FactoryApi, Shipment } from './factory.api';
@@ -199,7 +199,7 @@ export class DispatchesPanel {
 
   protected columns = computed<TableColumn<DistDispatch>[]>(() => [
     { id: 'goods', label: 'Goods / Customer', kind: 'title', value: (d) => productLabel(d.product), sub: (d) => d.customer },
-    { id: 'ref', label: 'Dispatch no. / bundles', kind: 'mono', value: (d) => d.refNo, sortValue: (d) => d.date, sub: (d) => `${fmtDate(d.date)} · ${fmtNumber(d.bundles)} bundles · from ${d.shipment.refNo}` },
+    { id: 'ref', label: 'Dispatch no. / bundles', kind: 'mono', value: (d) => d.refNo, sortValue: (d) => d.date, sub: (d) => subLine(docDate(d), `${fmtNumber(d.bundles)} bundles`, `from ${d.shipment.refNo}`) },
     {
       id: 'to', label: 'Area', value: (d) => d.area || '-', priority: 2,
       sub: (d) => [this.showDistributor() ? `by ${d.distributor.name}` : null, d.vehicle].filter(Boolean).join(' · ') || null,

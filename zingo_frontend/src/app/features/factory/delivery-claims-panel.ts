@@ -3,7 +3,7 @@ import { rxResource, toSignal } from '@angular/core/rxjs-interop';
 import { ReactiveFormsModule, Validators } from '@angular/forms';
 import { errorText } from '../../shared/errors';
 import { ProofFile, downloadBase64, readProof } from '../../shared/files';
-import { Tone, fmtDate, fmtMoney, fmtNumber, productLabel } from '../../shared/format';
+import { docDate, subLine, Tone, fmtDate, fmtMoney, fmtNumber, productLabel } from '../../shared/format';
 import { Btn, DataTable, Field, Offcanvas, PlainPipe, RichText, RowAction, RowActionEvent, Select, SelectOption, TableColumn, ToastService } from '../../ui';
 import { FormModal } from '../ops/form-modal';
 import { DeliveryClaim, FactoryApi, Shipment } from './factory.api';
@@ -251,7 +251,7 @@ export class DeliveryClaimsPanel {
 
   protected columns = computed<TableColumn<DeliveryClaim>[]>(() => [
     { id: 'what', label: 'Faulty goods', kind: 'title', value: (c) => productLabel({ name: c.productName, sku: c.sku ?? '' }), sub: (c) => `${fmtNumber(c.bundles)} bundles · ${KIND_TEXT[c.kind] ?? c.kind}` },
-    { id: 'ref', label: 'Claim no.', kind: 'mono', value: (c) => c.refNo, sortValue: (c) => c.date, sub: (c) => `${fmtDate(c.date)} · ${c.shipmentRef} · by ${c.raisedBy}` },
+    { id: 'ref', label: 'Claim no.', kind: 'mono', value: (c) => c.refNo, sortValue: (c) => c.date, sub: (c) => subLine(docDate(c), c.shipmentRef, `by ${c.raisedBy}`) },
     {
       id: 'party', label: this.mode() === 'factory' ? 'Distributor' : this.mode() === 'distributor' ? 'Manufacturer' : 'Distributor / manufacturer', priority: 2,
       value: (c) => (this.mode() === 'factory' ? c.distributor : this.mode() === 'distributor' ? c.manufacturer : c.distributor) ?? '',
@@ -260,7 +260,7 @@ export class DeliveryClaimsPanel {
     ...(this.mode() === 'distributor' ? [] : [{ id: 'value', label: 'Value', kind: 'money', value: (c: DeliveryClaim) => c.value, priority: 2 } as TableColumn<DeliveryClaim>]),
     {
       id: 'status', label: 'Status', kind: 'tag',
-      value: (c) => (c.status === 'Pending' ? `Waiting for ${this.mode() === 'factory' ? 'you' : c.manufacturer}` : c.status === 'Rejected' ? 'Rejected' : c.resolution === 'Credit' ? 'Accepted · credit' : 'Accepted · replacement'),
+      value: (c) => (c.status === 'Pending' ? 'Waiting' : c.status === 'Rejected' ? 'Rejected' : c.resolution === 'Credit' ? 'Accepted · credit' : 'Accepted · replacement'),
       tone: (c): Tone => (c.status === 'Pending' ? 'warning' : c.status === 'Rejected' ? 'danger' : 'success'),
       sub: (c) => (c.decidedBy ? `${c.decidedBy} · ${fmtDate(c.decidedDate)}${c.decisionNote ? ` · ${c.decisionNote}` : ''}` : null),
     },

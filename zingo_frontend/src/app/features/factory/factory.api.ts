@@ -413,5 +413,5 @@ export const ORDER_TONE: Record<ProductionOrderStatus, 'neutral' | 'info' | 'suc
 export const orderState = (o: ProductionOrder) => {
   if (o.status === 'Accepted' && o.receivedContainers >= o.containers) return 'Delivered';
   if (o.status === 'Accepted' && o.shippedContainers > 0) return `Shipped ${o.shippedContainers}/${o.containers}`;
-  return o.status === 'Accepted' && o.stage ? o.stage : o.status === 'Sent' ? 'Waiting for answer' : o.status;
+  return o.status === 'Accepted' && o.stage ? o.stage : o.status === 'Sent' ? 'Waiting' : o.status;
 };

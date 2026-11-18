@@ -25,7 +25,7 @@ const withCurrent = (list: string[], current: string | null | undefined): Select
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [MoneyInput, ReactiveFormsModule, Offcanvas, Field, Btn, Select, MultiSelect, RichText],
   template: `
-    <app-offcanvas #oc [(open)]="open" [title]="product() ? 'Edit product / SKU' : 'Add product / SKU'"
+    <app-offcanvas #oc [(open)]="open" [title]="product() ? 'Edit product / SKU' : copyOf() ? 'Duplicate ' + copyOf()!.sku : 'Add product / SKU'"
                subtitle="Rates are per packet, in PKR." size="xl" [dirty]="form.dirty">
       @if (error()) {
         <div class="notice" data-tone="danger" role="alert">{{ error() }}</div>
@@ -361,6 +361,8 @@ export class ProductForm extends FormModal {
   private toasts = inject(ToastService);
 
   readonly product = input<Product | null>(null);
+  /** a new SKU that starts as a copy of this one (every field, packaging, manufacturers and rates); saved as new */
+  readonly copyOf = input<Product | null>(null);
   readonly manufacturers = input<Manufacturer[]>([]);
   readonly distributors = input<Distributor[]>([]);
   readonly formId = 'form-product';
@@ -557,7 +559,7 @@ export class ProductForm extends FormModal {
   });
 
   protected reset() {
-    const p = this.product();
+    const p = this.product() ?? this.copyOf();
     const s = this.store.settings();
     this.adding.set(null);
     this.templates.clear();
@@ -584,6 +586,12 @@ export class ProductForm extends FormModal {
     templates.forEach((t, i) => this.templates.at(i).reset({ ...t, isDefault: !!t.isDefault }));
     this.others.clear();
     for (const m of (p?.makers ?? []).filter((x) => !x.isDefault && x.manufacturerId !== p?.manufacturerId)) this.others.push(this.makerGroup(m));
+    // a duplicate needs its own SKU code: suggest one, the person changes it
+    const c = !this.product() ? this.copyOf() : null;
+    if (c) {
+      this.form.patchValue({ sku: `${c.sku}-COPY`, name: `${c.name} (copy)` });
+      this.form.markAsDirty();
+    }
   }
 
   protected request() {
@@ -607,6 +615,6 @@ export class ProductForm extends FormModal {
   }
 
   protected successMessage() {
-    return this.product() ? 'SKU updated.' : 'SKU added to the catalogue.';
+    return this.product() ? 'SKU updated.' : this.copyOf() ? 'Copy added to the catalogue.' : 'SKU added to the catalogue.';
   }
 }

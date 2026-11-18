@@ -40,7 +40,7 @@ const perContainer = (p: Product) => p.packetsPerContainer ?? p.packsPerCarton *
       </div>
     </div>
 
-    <app-product-form [(open)]="formOpen" [product]="editing()" [manufacturers]="manufacturers.value() ?? []"
+    <app-product-form [(open)]="formOpen" [product]="editing()" [copyOf]="copying()" [manufacturers]="manufacturers.value() ?? []"
       [distributors]="distributors.value() ?? []" (saved)="saved()" />
   `,
 })
@@ -61,6 +61,7 @@ export class ProductsPanel {
   protected canWrite = computed(() => this.auth.can('manufacturing'));
   protected formOpen = signal(false);
   protected editing = signal<Product | null>(null);
+  protected copying = signal<Product | null>(null);
   /** SKUs still missing a manufacturer or a distributor */
   protected unassigned = computed(() => (this.products.value() ?? []).filter((p) => p.active && (!p.manufacturerId || !p.distributorId)).length);
 
@@ -86,16 +87,25 @@ export class ProductsPanel {
     { id: 'rate', label: 'Packet price', align: 'end', value: (p) => fmtAmount2(p.rate), sub: (p) => `MRP ${fmtAmount2(p.mrp)}`, priority: 3 },
     { id: 'status', label: 'Status', kind: 'tag', value: (p) => (p.active ? 'Active' : 'Inactive'), tone: (p) => (p.active ? 'success' : 'neutral'), priority: 3 },
   ];
-  protected actions = (): RowAction[] => (this.canWrite() ? [{ id: 'edit', label: 'Edit product' }] : []);
+  protected actions = (): RowAction[] => (this.canWrite() ? [{ id: 'edit', label: 'Edit product' }, { id: 'copy', label: 'Duplicate' }] : []);
 
   /** open the form: a new SKU, or the one to change */
   open(p: Product | null) {
     this.editing.set(p);
+    this.copying.set(null);
+    this.formOpen.set(true);
+  }
+
+  /** a new SKU filled from this one (the person gives it its own SKU code) */
+  duplicate(p: Product) {
+    this.editing.set(null);
+    this.copying.set(p);
     this.formOpen.set(true);
   }
 
   protected onAction(e: RowActionEvent<Product>) {
     if (e.id === 'edit') this.open(e.row);
+    if (e.id === 'copy') this.duplicate(e.row);
   }
 
   protected reload() {

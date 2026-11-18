@@ -174,7 +174,7 @@ interface LineValue {
                 <div class="form-grid">
                   <app-field label="Product" [required]="true" [wide]="true" [error]="lineInvalid(i, 'productId') ? 'Choose a product' : null"
                     [hint]="rate?.manufacturerName && (rate?.madeBy?.length ?? 0) < 2 ? 'Made by ' + rate!.manufacturerName : undefined">
-                    <app-select formControlName="productId" [options]="productOptions()" placeholder="Choose a product" />
+                    <app-select formControlName="productId" [options]="optionsFor(i)" placeholder="Choose a product" />
                   </app-field>
                   @if ((rate?.madeBy?.length ?? 0) > 1) {
                     <app-field label="Manufacturer"
@@ -321,6 +321,23 @@ export class RequestForm extends FormModal {
       disabled: this.direct() && !r.manufacturerName,
     })));
 
+  /**
+   * The product list of one line: a product already on another line of this order is greyed out ("on product 2"),
+   * so the same SKU is never ordered twice in one order; add containers on its line instead.
+   */
+  protected optionsFor(i: number): SelectOption<string>[] {
+    this.lineValues();
+    const taken = new Map<string, number>();
+    this.lines.controls.forEach((g, j) => {
+      const id = g.get('productId')?.value;
+      if (id && j !== i) taken.set(id, j + 1);
+    });
+    return this.productOptions().map((o) => {
+      const on = taken.get(o.value);
+      return on ? { ...o, disabled: true, sub: `Already on product ${on} · add containers there` } : o;
+    });
+  }
+
   /** containers, bundles, packets and value per line; `changed` = the packing differs from the template */
   protected sums = computed(() => {
     this.lineValues();
@@ -400,8 +417,11 @@ export class RequestForm extends FormModal {
     if (tpl) this.lines.at(i).patchValue({ packetsPerBundle: tpl.packetsPerBundle, bundlesPerContainer: tpl.bundlesPerContainer, containerUnit: tpl.containerUnit ?? '' });
   }
 
+  /** a new line starts on the first product not already in the order */
   protected addLine() {
-    this.lines.push(this.lineGroup());
+    const used = new Set(this.lines.controls.map((g) => g.get('productId')?.value).filter(Boolean));
+    const next = this.rates().find((r) => !used.has(r.productId) && (!this.direct() || r.manufacturerName));
+    this.lines.push(this.lineGroup(next?.productId ?? ''));
   }
 
   protected removeLine(i: number) {

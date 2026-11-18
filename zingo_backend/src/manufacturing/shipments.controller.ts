@@ -1,7 +1,7 @@
 import { Body, Controller, Get, Param, ParseUUIDPipe, Post, Query, Request } from '@nestjs/common';
 import { ApiOperation, ApiQuery, ApiTags } from '@nestjs/swagger';
 import { Permit, Read, Roles } from '../auth/roles.decorator';
-import { PickupDto, ReceiveDto, ShipDto } from './shipments.dto';
+import { DispatchDto, PickupDto, ReceiveDispatchDto, ReceiveDto, ShipDto } from './shipments.dto';
 import { ShipmentsService } from './shipments.service';
 
 /**
@@ -45,6 +45,13 @@ export class ShipmentsController {
     return this.service.incoming(req.user, distributorId || undefined);
   }
 
+  @Post('dispatch')
+  @Roles('Admin', 'Manufacturing', 'Manufacturer')
+  @ApiOperation({ summary: 'Ready to Dispatch: the manufacturer loads the distributor\'s vehicle for a whole order (quantities, vehicle, driver, proof of handover)' })
+  dispatch(@Request() req: any, @Body() dto: DispatchDto) {
+    return this.service.dispatchGroup(req.user, dto);
+  }
+
   @Post('pickup')
   @Roles('Admin', 'Manufacturing', 'Distribution', 'Distributor')
   @Permit('receipts')
@@ -58,6 +65,14 @@ export class ShipmentsController {
   @ApiOperation({ summary: 'Ship containers of an accepted order' })
   ship(@Request() req: any, @Body() dto: ShipDto) {
     return this.service.ship(req.user, dto);
+  }
+
+  @Post('receive-dispatch')
+  @Roles('Admin', 'Manufacturing', 'Distribution', 'Distributor')
+  @Permit('receipts')
+  @ApiOperation({ summary: 'Receive a whole dispatch: accept it, or report damage on arrival (a dispute the manufacturer answers)' })
+  receiveDispatch(@Request() req: any, @Body() dto: ReceiveDispatchDto) {
+    return this.service.receiveDispatch(req.user, dto);
   }
 
   @Post(':id/receive')

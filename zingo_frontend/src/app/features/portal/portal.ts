@@ -1,3 +1,4 @@
+import { concat, toArray } from 'rxjs';
 import { OrderTimeline } from '../factory/answer-forms';
 import { recall, remember } from '../../shared/remember';
 import { ChangeDetectionStrategy, Component, computed, effect, inject, signal } from '@angular/core';
@@ -69,6 +70,32 @@ const orderLine = (r: PortalRequest) => {
  * payments and credit, agreed prices and the statement. Staff see the same for any distributor, and the approval desk:
  * requests to accept, payment advices to verify and damage claims to review. Only verified payments reach cash.
  */
+/**
+ * One row per distributor order: the product lines of one DO- number together (`byMaker` also splits them per
+ * manufacturer, as the manufacturer sees them). A request without a DO- number is its own row.
+ */
+type Grouped<T> = T & { group: T[] };
+function groupRequests<T extends PortalRequest>(list: T[], byMaker = false): Grouped<T>[] {
+  const key = (r: T) => (r.groupRef ? `${r.groupRef}${byMaker ? `|${r.productionOrder?.manufacturer?.name ?? ''}` : ''}` : r.id);
+  const map = new Map<string, T[]>();
+  for (const r of list) map.set(key(r), [...(map.get(key(r)) ?? []), r]);
+  return [...map.values()].map((g) => {
+    const sorted = [...g].sort((a, b) => a.refNo.localeCompare(b.refNo));
+    return { ...sorted[0], group: sorted };
+  });
+}
+
+/** "2 products: Masala Masti, Ketchup Tango" or the product */
+const groupTitle = <T extends PortalRequest>(r: Grouped<T>) => (r.group.length > 1 ? `${r.group.length} products` : productLabel(r.product));
+/** each line's quantity, or the one line's */
+const groupQty = <T extends PortalRequest>(r: Grouped<T>) =>
+  (r.group.length > 1 ? r.group.map((x) => `${x.product.sku}: ${reqQty(x)}`).join(' · ') : reqQty(r));
+/** the status of each manufacturer's part when they differ */
+const groupLine = <T extends PortalRequest>(r: Grouped<T>) => {
+  const parts = [...new Set(r.group.map((x) => [x.productionOrder?.manufacturer?.name, orderState(x).label].filter(Boolean).join(': ')))];
+  return parts.length > 1 ? parts.join(' · ') : orderLine(r);
+};
+
 /** "2 containers (Bora) · 10 bundles" for a request that asked for containers, else "10 bundles" (older requests) */
 function reqQty(r: PortalRequest): string {
   return r.containers ? qtyLabel(r.containers, r.cartons, r.containerUnit ?? r.product.containerUnit) : `${fmtNumber(r.cartons)} bundles`;
@@ -246,17 +273,20 @@ export class Portal {
     ...(payableOf(o) > 0 ? [{ id: 'pay', label: o.status === 'Dispatched' ? 'Pay' : 'Advance' }] : []),
   ];
 
-  protected requestColumns: TableColumn<PortalRequest>[] = [
+  /** the distributor's orders: one row per order (its products together) */
+  protected requestRows = computed(() => groupRequests(this.requests.value() ?? []));
+  protected requestColumns: TableColumn<Grouped<PortalRequest>>[] = [
     {
-      id: 'product', label: 'Product', kind: 'title', value: (r) => productLabel(r.product),
-      sub: (r) => reqQty(r),
+      id: 'product', label: 'Product', kind: 'title', value: (r) => groupTitle(r),
+      sub: (r) => groupQty(r),
     },
     {
-      id: 'ref', label: 'Order no.', kind: 'mono', value: (r) => r.groupRef ?? r.refNo, sub: (r) => subLine(r.groupRef ? r.refNo : null, docDate(r)),
+      id: 'ref', label: 'Order no.', kind: 'mono', value: (r) => r.groupRef ?? r.refNo,
+      sub: (r) => subLine(r.groupRef ? r.group.map((x) => x.refNo).join(', ') : null, docDate(r)),
       sortValue: (r) => `${r.date}|${r.createdAt ?? ''}`,
     },
     { id: 'wanted', label: 'Wanted by', kind: 'date', value: (r) => r.requestedDate, priority: 3 },
-    { id: 'status', label: 'Status', kind: 'tag', value: (r) => orderState(r).label, tone: (r) => orderState(r).tone, sub: orderLine },
+    { id: 'status', label: 'Status', kind: 'tag', value: (r) => orderState(r).label, tone: (r) => orderState(r).tone, sub: (r) => groupLine(r) },
   ];
 
   protected cargoColumns: TableColumn<PortalOrder>[] = [
@@ -335,10 +365,18 @@ export class Portal {
   protected voucherAction = (): RowAction[] => [{ id: 'voucher', label: 'Voucher' }];
 
   // desk
-  protected deskRequestColumns: TableColumn<DeskRequest>[] = [
-    { id: 'order', label: 'Order / Distributor', kind: 'title', value: (r) => productLabel(r.product), sub: (r) => r.distributor.name },
-    { id: 'ref', label: 'Order no. / quantity', kind: 'mono', value: (r) => r.groupRef ?? r.refNo, sub: (r) => subLine(r.groupRef ? r.refNo : null, docDate(r), reqQty(r)), priority: 2 },
-    { id: 'value', label: 'Value (PKR)', kind: 'money', value: (r) => r.value, sub: (r) => `${fmtAmount2(r.rate)} / pack` },
+  /** requests waiting on the desk: one row per distributor order */
+  protected deskRequestRows = computed(() => groupRequests(this.desk.value()?.requests ?? []));
+  protected deskRequestColumns: TableColumn<Grouped<DeskRequest>>[] = [
+    { id: 'order', label: 'Order / Distributor', kind: 'title', value: (r) => groupTitle(r), sub: (r) => r.distributor.name },
+    {
+      id: 'ref', label: 'Order no. / quantity', kind: 'mono', value: (r) => r.groupRef ?? r.refNo,
+      sub: (r) => subLine(r.groupRef ? r.group.map((x) => x.refNo).join(', ') : null, docDate(r), groupQty(r)), priority: 2,
+    },
+    {
+      id: 'value', label: 'Value (PKR)', kind: 'money', value: (r) => r.group.reduce((n, x) => n + x.value, 0),
+      sub: (r) => (r.group.length > 1 ? null : `${fmtAmount2(r.rate)} / pack`),
+    },
     { id: 'wanted', label: 'Wanted by', kind: 'date', value: (r) => r.requestedDate, priority: 3 },
   ];
 
@@ -346,8 +384,8 @@ export class Portal {
   /** the production order open in the order panel (from the desk) */
   protected orderViewOpen = signal(false);
   protected viewingOrder = signal<{ id: string; refNo: string } | null>(null);
-  protected deskOrderActions = (r: DeskOrder): RowAction[] => (r.productionOrder?.id ? [{ id: 'view', label: 'View order' }] : []);
-  protected onDeskOrderAction(e: RowActionEvent<DeskOrder>) {
+  protected deskOrderActions = (r: Grouped<DeskOrder>): RowAction[] => (r.productionOrder?.id ? [{ id: 'view', label: 'View order' }] : []);
+  protected onDeskOrderAction(e: RowActionEvent<Grouped<DeskOrder>>) {
     const o = e.row.productionOrder;
     if (e.id === 'view' && o?.id) {
       this.viewingOrder.set({ id: o.id, refNo: o.refNo });
@@ -355,10 +393,18 @@ export class Portal {
     }
   }
 
-  protected deskOrderColumns: TableColumn<DeskOrder>[] = [
-    { id: 'order', label: 'Order / Distributor', kind: 'title', value: (r) => productLabel(r.product), sub: (r) => r.distributor.name },
-    { id: 'ref', label: 'Order no. / quantity', kind: 'mono', value: (r) => r.groupRef ?? r.refNo, sub: (r) => subLine(r.groupRef ? r.refNo : null, docDate(r), reqQty(r)), priority: 2 },
-    { id: 'mfr', label: 'Manufacturer', value: (r) => r.productionOrder?.manufacturer?.name ?? '-', sub: (r) => r.productionOrder?.refNo ?? null },
+  /** distributor orders with the manufacturers: one row per order and manufacturer */
+  protected deskOrderRows = computed(() => groupRequests(this.desk.value()?.recent ?? [], true));
+  protected deskOrderColumns: TableColumn<Grouped<DeskOrder>>[] = [
+    { id: 'order', label: 'Order / Distributor', kind: 'title', value: (r) => groupTitle(r), sub: (r) => r.distributor.name },
+    {
+      id: 'ref', label: 'Order no. / quantity', kind: 'mono', value: (r) => r.groupRef ?? r.refNo,
+      sub: (r) => subLine(r.groupRef ? r.group.map((x) => x.refNo).join(', ') : null, docDate(r), groupQty(r)), priority: 2,
+    },
+    {
+      id: 'mfr', label: 'Manufacturer', value: (r) => r.productionOrder?.manufacturer?.name ?? '-',
+      sub: (r) => r.group.map((x) => x.productionOrder?.refNo).filter(Boolean).join(', ') || null,
+    },
     { id: 'status', label: 'Status', kind: 'tag', value: (r) => orderState(r).label, tone: (r) => orderState(r).tone,
       sub: (r) => (r.productionOrder?.readyDate ? `Ready ${fmtDate(r.productionOrder.readyDate)}` : r.productionOrder?.reason ?? r.reviewNote) },
   ];
@@ -450,9 +496,26 @@ export class Portal {
     if (e.id === 'proof') this.download(this.api.proof(e.row.id));
   }
 
-  protected onRequestAction(e: RowActionEvent<DeskRequest>) {
-    if (e.id === 'accept') { this.accepting.set(e.row); this.acceptOpen.set(true); return; }
-    this.askReason('Reject request', `${e.row.refNo} · ${e.row.distributor.name} · ${e.row.product.sku}`, 'Reject request', (note) => this.api.rejectRequest(e.row.id, note));
+  protected async onRequestAction(e: RowActionEvent<Grouped<DeskRequest>>) {
+    const r = e.row;
+    const many = r.group.length > 1;
+    if (e.id === 'accept' && !many) { this.accepting.set(r); this.acceptOpen.set(true); return; }
+    if (e.id === 'accept') {
+      const ok = await this.confirm.ask({
+        title: `Accept order ${r.groupRef}?`,
+        message: `${r.group.length} products for ${r.distributor.name}: ${groupQty(r)}. Each goes to its manufacturer with the packing the distributor asked for.`,
+        confirmLabel: 'Accept and send to the manufacturers',
+      });
+      if (!ok) return;
+      this.api.acceptRequestGroup(r.group.map((x) => x.id)).subscribe({
+        next: () => { this.toast.success(`Order ${r.groupRef} accepted and sent to the manufacturers.`); this.reload(); },
+        error: (err) => this.toast.error(errorText(err)),
+      });
+      return;
+    }
+    this.askReason(many ? `Reject order ${r.groupRef}` : 'Reject request', `${r.groupRef ?? r.refNo} · ${r.distributor.name} · ${r.group.map((x) => x.product.sku).join(', ')}`,
+      many ? 'Reject order' : 'Reject request',
+      (note) => concat(...r.group.map((x) => this.api.rejectRequest(x.id, note))).pipe(toArray()));
   }
 
   protected async onDeskAdvice(e: RowActionEvent<PortalAdvice>) {

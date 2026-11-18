@@ -67,6 +67,44 @@ export function dispatchVoucher(o: ProductionOrder, load?: OrderLoad | null, com
   };
 }
 
+/**
+ * The dispatch voucher of a whole order (several products on one vehicle), from what the factory types on the Ready
+ * to Dispatch form: ready containers per product, the vehicle, the driver; boxes to sign. No prices.
+ */
+export function dispatchVoucherFor(orders: ProductionOrder[], d: {
+  ref: string; date: string; ready: Record<string, number>; damaged?: Record<string, number | null>;
+  vehicleNo?: string; driverName?: string; driverPhone?: string; transporter?: string; biltyNo?: string;
+}, company?: string): Voucher {
+  const lead = orders[0];
+  const rows = orders.map((o) => {
+    const c = d.ready[o.id] ?? o.containers;
+    const unit = o.containerUnit ?? o.product.containerUnit ?? null;
+    return [`${o.product.sku} · ${o.product.name}`, fmtNumber(o.containers), `${fmtNumber(c)}${unit ? ` ${unit}` : ''}`, fmtNumber(c * o.bundlesPerContainer),
+      fmtNumber(c * o.bundlesPerContainer * o.packetsPerBundle), d.damaged?.[o.id] ? fmtNumber(d.damaged[o.id]!) : '-'];
+  });
+  const total = (i: number) => fmtNumber(orders.reduce((n, o) => n + (i === 1 ? o.containers : (d.ready[o.id] ?? o.containers) * (i === 3 ? o.bundlesPerContainer : i === 4 ? o.bundlesPerContainer * o.packetsPerBundle : 1)), 0));
+  return {
+    title: 'Dispatch voucher', ref: `DC-${d.ref}`, company,
+    facts: [
+      ['Date', fmtDate(d.date)],
+      ['Order', `${d.ref}${orders.length > 1 ? ` (${orders.map((o) => o.refNo).join(', ')})` : ''}`],
+      ['From (manufacturer)', lead?.manufacturer.name ?? ''],
+      ['Deliver to', lead?.destination === 'Warehouse' ? 'Zen Foods warehouse'
+        : [lead?.distributor?.name, (lead?.distributor as { address?: string | null } | null)?.address].filter(Boolean).join(', ')],
+      ['Vehicle registration no.', d.vehicleNo || '-'],
+      ['Driver', [d.driverName, d.driverPhone].filter(Boolean).join(' · ') || '-'],
+      ['Transporter', [d.transporter, d.biltyNo && `bilty ${d.biltyNo}`].filter(Boolean).join(' · ') || '-'],
+    ],
+    table: {
+      head: ['Product', 'Ordered', 'Loaded (containers)', 'Bundles', 'Packets', 'Damaged in production'],
+      rows,
+      foot: ['Total', total(1), total(2), total(3), total(4), ''],
+    },
+    note: 'The driver counts the containers when loading and signs below. Photograph or scan this signed voucher and attach it as the proof of handover.',
+    signatures: ['Loaded by (factory)', 'Driver', 'Received by (distributor)'],
+  };
+}
+
 /** a manufacturer's payment invoice (advance or balance) */
 export function requestVoucher(r: PaymentRequest, company?: string): Voucher {
   return {

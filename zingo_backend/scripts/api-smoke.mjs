@@ -1871,5 +1871,66 @@ ok('a distributor order shows how much was shipped and received', bReqs.some((r)
   && bReqs.some((r) => (r.productionOrder?.received ?? 0) > 0), JSON.stringify(bReqs.map((r) => r.productionOrder && [r.productionOrder.refNo, r.productionOrder.shipped, r.productionOrder.received])));
 ok('the overview lists distributor orders with shipped and received', ((await call(T.owner, 'GET', '/reports/dashboard')).json?.latestOrders ?? []).every((o) => !o.productionOrder || typeof o.productionOrder.received === 'number'));
 
+// ───────────── J: combined order, Ready to Dispatch, receipt with dispute (2026-11-18) ─────────────
+const jProducts = (await call(T.owner, 'GET', '/products')).json ?? [];
+const jBase = (Array.isArray(jProducts) ? jProducts : jProducts.items ?? []).find((p) => p.id === p5Mo.productId);
+const jNew = (await call(T.owner, 'POST', '/products', {
+  sku: `J-${Date.now() % 100000}`, name: 'J flow second SKU', pack: jBase.pack, mrp: jBase.mrp, rate: jBase.rate,
+  manufacturerId: jBase.manufacturerId, manufacturerRate: jBase.manufacturerRate, distributorIds: jBase.distributorIds,
+  packsPerCarton: 10, bundlesPerContainer: 5,
+  packagings: [{ name: 'Standard', packetsPerBundle: 10, bundlesPerContainer: 5, containerUnit: 'Carton', isDefault: true }],
+})).json;
+ok('a second SKU of the same manufacturer is made for the combined order', !!jNew?.id, JSON.stringify(jNew));
+const jOrder = (await call(T.dist, 'POST', '/portal/requests', {
+  date: kDay, lines: [{ productId: jBase.id, containers: 2 }, { productId: jNew?.id, containers: 3 }],
+  transport: { vehicleNo: 'J-TRUCK', driverName: 'J Driver' },
+})).json;
+const jMos = (jOrder?.requests ?? []).map((r) => r.productionOrder?.id).filter(Boolean);
+ok('a two-product order makes two production orders under one DO- number', !!jOrder?.groupRef && jMos.length === 2, JSON.stringify(jOrder));
+const jDetail = (await call(p3Maker, 'GET', `/production-orders/${jMos[0]}/detail`)).json;
+ok('the order panel shows both products of the combined order', jDetail?.lines?.length === 2, JSON.stringify(jDetail?.lines?.map((l) => l.refNo)));
+const jAcc = await call(p3Maker, 'POST', '/production-orders/group/accept', { ids: jMos, readyDate: kDay });
+ok('the manufacturer accepts the whole order at once', jAcc.status === 201 && (jAcc.json ?? []).every((o) => o.status === 'Accepted'), JSON.stringify(jAcc.json));
+const jStages = (await call(p3Maker, 'GET', '/production-orders/profile')).json?.stages ?? [];
+const jStep = await call(p3Maker, 'POST', '/production-orders/group/stage', { ids: jMos, stage: jStages[0] });
+ok('a progress step is reported for every product at once', jStep.status === 201 && (jStep.json ?? []).every((o) => o.stage === jStages[0]), JSON.stringify(jStep.json));
+const jNoProof = await call(p3Maker, 'POST', '/production-shipments/dispatch', {
+  lines: [{ orderId: jMos[0], ready: 2 }, { orderId: jMos[1], ready: 4 }], date: kDay, vehicleNo: 'J-TRUCK', driverName: 'J Driver', driverPhone: '0300', proofIds: [],
+});
+ok('Ready to Dispatch needs the proof of handover', jNoProof.status === 400, JSON.stringify(jNoProof.json));
+const jForm = new FormData();
+jForm.append('kind', 'HANDOVER');
+jForm.append('file', new Blob(['%PDF-1.4\n%%EOF'], { type: 'application/pdf' }), 'signed-gate-pass.pdf');
+const jProof = await (await fetch(`${BASE}/production-orders/${jMos[0]}/documents`, { method: 'POST', headers: { Authorization: `Bearer ${p3Maker}` }, body: jForm })).json();
+ok('the manufacturer attaches the signed gate pass to the order', !!jProof?.id && jProof.kind === 'HANDOVER', JSON.stringify(jProof));
+const jNoDriver = await call(p3Maker, 'POST', '/production-shipments/dispatch', {
+  lines: [{ orderId: jMos[0], ready: 2 }], date: kDay, vehicleNo: 'J-TRUCK', driverName: '', driverPhone: '0300', proofIds: [jProof?.id],
+});
+ok('Ready to Dispatch needs the driver', jNoDriver.status === 400);
+const jDisp = await call(p3Maker, 'POST', '/production-shipments/dispatch', {
+  lines: [{ orderId: jMos[0], ready: 2, damaged: 1 }, { orderId: jMos[1], ready: 4 }], date: kDay,
+  vehicleNo: 'J-TRUCK', driverName: 'J Driver', driverPhone: '0300-1234567', transporter: 'J Goods', biltyNo: 'B-77', proofIds: [jProof?.id],
+});
+ok('the whole order is dispatched on one vehicle with one DC- number', jDisp.status === 201 && /^DC-/.test(jDisp.json?.dispatchRef ?? '') && jDisp.json?.loads === 2, JSON.stringify(jDisp.json));
+const jLoads = ((await call(T.dist, 'GET', '/production-shipments')).json ?? []).filter((s) => s.dispatchRef === jDisp.json?.dispatchRef);
+ok('the distributor sees both loads with the vehicle and the driver', jLoads.length === 2 && jLoads.every((s) => s.vehicle === 'J-TRUCK' && s.driverName === 'J Driver' && s.driverPhone === '0300-1234567'), JSON.stringify(jLoads.map((s) => [s.refNo, s.vehicle, s.driverName])));
+ok('more than ordered can be ready (4 of 3) and is loaded', jLoads.some((s) => s.containers === 4));
+const jAfter = (await call(T.owner, 'GET', `/production-orders/${jMos[0]}/detail`)).json;
+ok('the order keeps what was ready and damaged in production', jAfter?.lines?.find((l) => l.id === jMos[0])?.readyContainers === 2 && jAfter?.lines?.find((l) => l.id === jMos[0])?.productionDamaged === 1);
+ok('the distributor can see the proof of handover', ((await call(T.dist, 'GET', `/production-orders/${jMos[0]}/detail`)).json?.documents ?? []).some((f) => f.kind === 'HANDOVER'));
+const jTwice = await call(p3Maker, 'POST', '/production-shipments/dispatch', {
+  lines: [{ orderId: jMos[0], ready: 1 }], date: kDay, vehicleNo: 'X', driverName: 'X', driverPhone: '1', proofIds: [jProof?.id],
+});
+ok('an order is dispatched once', jTwice.status === 400);
+const jNoNote = await call(T.dist, 'POST', '/production-shipments/receive-dispatch', { date: kDay, lines: jLoads.map((s) => ({ shipmentId: s.id, damaged: s.containers === 4 ? 3 : null })) });
+ok('a dispute needs to say what was damaged', jNoNote.status === 400);
+const jRec = await call(T.dist, 'POST', '/production-shipments/receive-dispatch', {
+  date: kDay, note: 'Three bundles crushed (J test)', lines: jLoads.map((s) => ({ shipmentId: s.id, damaged: s.containers === 4 ? 3 : null })),
+});
+ok('the distributor receives the dispatch and opens a dispute for the damage', jRec.status === 201 && jRec.json?.claims === 1, JSON.stringify(jRec.json));
+const jClaims = ((await call(p3Maker, 'GET', '/delivery-claims')).json ?? []).filter((c) => jLoads.some((s) => s.id === c.shipmentId));
+ok('the manufacturer gets the dispute with the damaged bundles', jClaims.length === 1 && jClaims[0].bundles === 3 && jClaims[0].status === 'Pending', JSON.stringify(jClaims.map((c) => [c.refNo, c.bundles, c.status])));
+ok('both loads are received in full', ((await call(T.dist, 'GET', '/production-shipments')).json ?? []).filter((s) => s.dispatchRef === jDisp.json?.dispatchRef).every((s) => s.status === 'Received' && s.receivedContainers === s.containers));
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

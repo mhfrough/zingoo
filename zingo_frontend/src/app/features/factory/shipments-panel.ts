@@ -1,3 +1,4 @@
+import { DispatchReceive } from './dispatch-receive';
 import { OrderDetail } from './order-detail';
 import { DamageLine, DamageLines, damagesBody, damagesValid } from './damage-lines';
 import { ChangeDetectionStrategy, Component, computed, inject, input, output, signal } from '@angular/core';
@@ -181,6 +182,9 @@ export class ReceiveForm extends FormModal {
   }
 }
 
+/** a dispatch: the loads of one vehicle together (one load for older shipments) */
+type LoadRow = Shipment & { group: Shipment[] };
+
 /**
  * Shipments and the stock they become, for every side:
  * - `factory`: the manufacturer ships containers and follows them;
@@ -190,7 +194,7 @@ export class ReceiveForm extends FormModal {
 @Component({
   selector: 'app-shipments-panel',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [Btn, DataTable, ShipForm, ReceiveForm],
+  imports: [Btn, DataTable, ShipForm, ReceiveForm, DispatchReceive],
   template: `
     <div class="card" data-flush>
       <div class="card__head">
@@ -205,7 +209,7 @@ export class ReceiveForm extends FormModal {
         }
       </div>
       <div class="card__body">
-        <app-data-table [columns]="columns()" [rows]="shipments()" [actions]="actions" [loading]="loading()" [error]="error()"
+        <app-data-table [columns]="columns()" [rows]="rows()" [actions]="actions" [loading]="loading()" [error]="error()"
           searchPlaceholder="Search shipments" emptyTitle="No shipments yet" [emptyText]="emptyText()" (retry)="changed.emit()" (action)="onAction($event)" />
       </div>
     </div>
@@ -225,6 +229,7 @@ export class ReceiveForm extends FormModal {
 
     <app-ship-form [(open)]="shipOpen" [orders]="orders()" (saved)="changed.emit()" />
     <app-receive-form [(open)]="receiveOpen" [s]="current()" (saved)="changed.emit()" />
+    <app-dispatch-receive [(open)]="dispatchOpen" [loads]="current()?.group ?? []" (saved)="changed.emit()" />
   `,
 })
 export class ShipmentsPanel {
@@ -246,25 +251,39 @@ export class ShipmentsPanel {
 
   protected shipOpen = signal(false);
   protected receiveOpen = signal(false);
-  protected current = signal<Shipment | null>(null);
+  protected dispatchOpen = signal(false);
+  protected current = signal<LoadRow | null>(null);
+  /** one row per dispatch: the loads of one vehicle (one DC- number) together; older loads stay one row each */
+  protected rows = computed<LoadRow[]>(() => {
+    const map = new Map<string, Shipment[]>();
+    for (const s of this.shipments()) {
+      const k = s.dispatchRef ?? s.id;
+      map.set(k, [...(map.get(k) ?? []), s]);
+    }
+    return [...map.values()].map((g) => ({ ...g[0], group: g }));
+  });
   protected shippable = computed(() => this.orders().some((o) => o.status === 'Accepted' && o.shippedContainers < o.containers));
   protected emptyText = computed(() => (this.mode() === 'factory' ? 'Ship an accepted order when it is ready.' : 'Shipments from the manufacturer appear here.'));
 
-  protected columns = computed<TableColumn<Shipment>[]>(() => [
+  protected columns = computed<TableColumn<LoadRow>[]>(() => [
     {
-      id: 'product', label: this.mode() === 'distributor' ? 'Delivery / From' : 'Shipment / To', kind: 'title', value: (s) => productLabel(s.product),
+      id: 'product', label: this.mode() === 'distributor' ? 'Delivery / From' : 'Shipment / To', kind: 'title',
+      value: (s) => (s.group.length > 1 ? `${s.group.length} products` : productLabel(s.product)),
       sub: (s) => (this.mode() === 'distributor' ? s.manufacturer.name : this.mode() === 'company' ? `${s.manufacturer.name} → ${destinationOf(s)}` : destinationOf(s)),
     },
     {
-      id: 'ref', label: 'Shipment no. / quantity', kind: 'mono', value: (s) => s.refNo, sortValue: (s) => s.shipDate,
-      sub: (s) => subLine(docDate(s, s.shipDate), qtyLabel(s.containers, s.containers * s.bundlesPerContainer, s.order?.containerUnit ?? s.product.containerUnit), `order ${s.order.refNo}`),
+      id: 'ref', label: 'Shipment no. / quantity', kind: 'mono', value: (s) => s.dispatchRef ?? s.refNo, sortValue: (s) => s.shipDate,
+      sub: (s) => subLine(docDate(s, s.shipDate),
+        s.group.length > 1 ? s.group.map((x) => `${x.containers} × ${x.product.sku}`).join(', ')
+          : qtyLabel(s.containers, s.containers * s.bundlesPerContainer, s.order?.containerUnit ?? s.product.containerUnit),
+        `order ${s.order.groupRef ?? s.order.refNo}`),
     },
     {
       id: 'route', label: 'Transport', priority: 3,
-      value: (s) => (s.method === 'Pickup' ? 'Collected by the distributor' : s.vehicle || 'Delivery'),
-      sub: (s) => s.waybill || null,
+      value: (s) => (s.vehicle ? `Vehicle ${s.vehicle}` : s.method === 'Pickup' ? 'Collected by the distributor' : 'Delivery'),
+      sub: (s) => subLine(s.driverName ? `${s.driverName}${s.driverPhone ? ` (${s.driverPhone})` : ''}` : null, s.waybill ? `bilty ${s.waybill}` : null),
     },
-    { id: 'value', label: 'Value', kind: 'money', priority: 2, value: (s) => (s.status === 'Received' ? s.receivedValue : s.value) },
+    { id: 'value', label: 'Value', kind: 'money', priority: 2, value: (s) => s.group.reduce((n, x) => n + (x.status === 'Received' ? x.receivedValue : x.value), 0) },
     {
       id: 'status', label: 'Status', kind: 'tag', tone: (s): Tone => (s.status === 'In transit' ? 'warning' : s.overdue ? 'danger' : 'success'),
       value: (s) => (s.status === 'In transit' ? 'In transit' : s.receivedContainers === s.containers ? 'Received' : `Received ${s.receivedContainers}/${s.containers}`),
@@ -272,10 +291,13 @@ export class ShipmentsPanel {
     },
   ]);
 
-  protected actions = (s: Shipment): RowAction[] => {
+  protected actions = (s: LoadRow): RowAction[] => {
     if (s.status !== 'In transit') return [];
     const ok = s.destination === 'Warehouse' ? this.canReceiveWarehouse() : this.canReceive();
-    return ok ? [{ id: 'receive', label: this.mode() === 'company' ? 'Receive for the receiver' : 'Confirm receipt', tone: 'success' }] : [];
+    if (!ok) return [];
+    // a dispatch to a distributor: the receipt panel with the damage column and the dispute
+    if (s.dispatchRef && s.destination === 'Distributor') return [{ id: 'receive-dispatch', label: this.mode() === 'company' ? 'Receive for the distributor' : 'Receive delivery', tone: 'success' }];
+    return [{ id: 'receive', label: this.mode() === 'company' ? 'Receive for the receiver' : 'Confirm receipt', tone: 'success' }];
   };
 
   protected stockColumns = computed<TableColumn<DistributorStockRow>[]>(() => [
@@ -292,8 +314,9 @@ export class ShipmentsPanel {
     return rows.length ? { sku: 'Total', containers: fmtNumber(rows.reduce((n, r) => n + r.containers, 0)), value: fmtMoney(rows.reduce((n, r) => n + r.value, 0)) } : undefined;
   });
 
-  protected onAction(e: RowActionEvent<Shipment>) {
+  protected onAction(e: RowActionEvent<LoadRow>) {
     this.current.set(e.row);
     if (e.id === 'receive') this.receiveOpen.set(true);
+    if (e.id === 'receive-dispatch') this.dispatchOpen.set(true);
   }
 }

@@ -28,6 +28,8 @@ export class PortalApi {
   createAdvice = (body: unknown) => this.api.post('portal/advices', body);
 
   acceptRequest = (id: string, body: unknown) => this.api.post(`portal/requests/${id}/accept`, body);
+  /** accept every product of a combined order at once (each with its own packing) */
+  acceptRequestGroup = (ids: string[]) => this.api.post('portal/requests/group/accept', { ids });
   rejectRequest = (id: string, note: string) => this.api.post(`portal/requests/${id}/reject`, { note });
   approveClaim = (id: string) => this.api.post(`portal/receipts/${id}/approve`, {});
   rejectClaim = (id: string, note: string) => this.api.post(`portal/receipts/${id}/reject`, { note });

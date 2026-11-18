@@ -12,13 +12,14 @@ import {
   AcceptProductionOrderDto, CreateProductionOrderDto, ReasonDto, StageDto, UpdateProductionOrderDto,
 } from './production-orders.dto';
 import { OrderTransport, ProductionOrder, ProductionOrderEvent } from './production-orders.entities';
+import { GroupAcceptDto, GroupReasonDto, GroupStageDto } from './production-orders.dto';
 import { ProductionShipment } from './shipments.entities';
 import { expectedDate } from './order-movement';
 import { Attachment } from '../attachments/attachment.entity';
 import { AttachmentsService } from '../attachments/attachments.service';
 
 /** what a file on an order is: the signed dispatch voucher, the manufacturer's invoice copy, anything else */
-export const ORDER_DOC_KINDS = ['CHALLAN', 'INVOICE', 'OTHER'] as const;
+export const ORDER_DOC_KINDS = ['CHALLAN', 'INVOICE', 'OTHER', 'HANDOVER'] as const;
 export type OrderDocKind = (typeof ORDER_DOC_KINDS)[number];
 const ORDER_DOC_TYPES: string[] = ORDER_DOC_KINDS.map((k) => `ORDER_${k}`);
 import { DeliveryClaim } from './delivery-claims.entities';
@@ -100,7 +101,7 @@ export class ProductionOrdersService {
 
   /** the order's files: signed dispatch vouchers, the manufacturer's invoice copies (never shown to the distributor), others */
   private async documentsOf(em: EntityManager, user: OrderUser, id: string) {
-    const kinds = user.role === 'Distributor' ? ['ORDER_CHALLAN', 'ORDER_OTHER'] : ORDER_DOC_TYPES;
+    const kinds = user.role === 'Distributor' ? ['ORDER_CHALLAN', 'ORDER_OTHER', 'ORDER_HANDOVER'] : ORDER_DOC_TYPES;
     const rows = await em.find(Attachment, { where: { ownerId: id, ownerType: In(kinds) }, order: { createdAt: 'ASC' } });
     return rows.map((a) => ({ id: a.id, name: a.name, mime: a.mime, size: a.size, kind: a.ownerType!.slice(6), uploadedBy: a.uploadedBy, createdAt: a.createdAt }));
   }
@@ -112,10 +113,10 @@ export class ProductionOrdersService {
   async addDocument(user: OrderUser, id: string, kind: OrderDocKind, file: Parameters<AttachmentsService['create']>[0]) {
     const em = this.db.manager;
     const o = await this.visible(em, user, id);
-    if (kind === 'INVOICE' && user.role === 'Distributor') throw new ForbiddenException('Only the manufacturer or Zen Foods attach its invoice.');
+    if ((kind === 'INVOICE' || kind === 'HANDOVER') && user.role === 'Distributor') throw new ForbiddenException('Only the manufacturer or Zen Foods attach this.');
     if (o.status !== 'Accepted') throw new BadRequestException(`${o.refNo} is ${o.status.toLowerCase()}: documents go on an accepted order.`);
     const meta = await this.attachments.create(file, user.name, { type: `ORDER_${kind}`, id });
-    const what = kind === 'CHALLAN' ? 'Signed dispatch voucher' : kind === 'INVOICE' ? 'Manufacturer invoice copy' : 'Document';
+    const what = kind === 'CHALLAN' ? 'Signed dispatch voucher' : kind === 'INVOICE' ? 'Manufacturer invoice copy' : kind === 'HANDOVER' ? 'Proof of handover' : 'Document';
     await this.event(em, id, user, `${what} attached`, meta.name);
     if (kind === 'CHALLAN') {
       await this.notes.send(em, user,
@@ -135,7 +136,7 @@ export class ProductionOrdersService {
     const em = this.db.manager;
     await this.visible(em, user, id);
     const a = await this.attachments.content(docId);
-    const allowed = user.role === 'Distributor' ? ['ORDER_CHALLAN', 'ORDER_OTHER'] : ORDER_DOC_TYPES;
+    const allowed = user.role === 'Distributor' ? ['ORDER_CHALLAN', 'ORDER_OTHER', 'ORDER_HANDOVER'] : ORDER_DOC_TYPES;
     if (a.ownerId !== id || !allowed.includes(a.ownerType ?? '')) throw new NotFoundException('File not found.');
     return a;
   }
@@ -157,22 +158,32 @@ export class ProductionOrdersService {
   async detail(user: OrderUser, id: string) {
     const em = this.db.manager;
     const o = await this.visible(em, user, id);
+    // the other products of the same combined order (same DO- number, same manufacturer)
+    const group = o.groupRef
+      ? (await em.find(ProductionOrder, { where: { groupRef: o.groupRef, manufacturerId: o.manufacturerId }, order: { refNo: 'ASC' } }))
+        .filter((x) => !(this.isManufacturer(user) && x.status === 'Draft'))
+      : [o];
+    const ids = group.map((x) => x.id);
+    const moved = await this.movedMap(em);
+    const lines = await Promise.all(group.map(async (x) => this.shape(await this.load(em, x.id), moved[x.id])));
     const [shipments, claims, stages] = await Promise.all([
-      em.find(ProductionShipment, { where: { orderId: id }, order: { shipDate: 'ASC', createdAt: 'ASC' } }),
-      em.find(DeliveryClaim, { where: { orderId: id }, order: { date: 'ASC', createdAt: 'ASC' } }),
+      em.find(ProductionShipment, { where: { orderId: In(ids) }, order: { shipDate: 'ASC', createdAt: 'ASC' } }),
+      em.find(DeliveryClaim, { where: { orderId: In(ids) }, order: { date: 'ASC', createdAt: 'ASC' } }),
       em.find(Lookup, { where: { list: 'ORDER_STAGE', active: true }, order: { sortOrder: 'ASC' } }),
     ]);
     const steps = stages.map((l) => l.code);
     const last = steps[steps.length - 1] ?? null;
     // the manufacturer's invoices on this order (never to the distributor: they carry the manufacturer's price)
-    const invoices = user.role === 'Distributor' ? [] : await this.invoicesOf(em, id);
+    const invoices = user.role === 'Distributor' ? [] : (await Promise.all(ids.map((x) => this.invoicesOf(em, x)))).flat();
     const s = await this.settings.get(em);
     return {
       order: this.shape(o, (await this.movedMap(em))[o.id]),
       /** ready date plus the transit days of Settings */
       expectedDate: expectedDate(o.readyDate, s.transitDays),
       transitDays: s.transitDays ?? 2,
-      documents: await this.documentsOf(em, user, id),
+      /** every product of the combined order (just this one when it is a single-product order) */
+      lines,
+      documents: (await Promise.all(ids.map((x) => this.documentsOf(em, user, x)))).flat(),
       invoices,
       stages: steps,
       /** the manufacturer reported the last step: the goods can be collected or sent */
@@ -180,6 +191,7 @@ export class ProductionOrdersService {
       shipments: shipments.map((s) => ({
         id: s.id, refNo: s.refNo, shipDate: s.shipDate, containers: s.containers, method: s.method, status: s.status,
         vehicle: s.vehicle, waybill: s.waybill, note: s.note, shippedBy: s.shippedBy,
+        driverName: s.driverName, driverPhone: s.driverPhone, transporter: s.transporter, dispatchRef: s.dispatchRef, orderId: s.orderId,
         receivedDate: s.receivedDate, receivedContainers: s.receivedContainers, receivedBy: s.receivedBy, receiptNote: s.receiptNote,
         bundlesPerContainer: s.bundlesPerContainer, packetsPerBundle: s.packetsPerBundle,
       })),
@@ -286,55 +298,100 @@ export class ProductionOrdersService {
   // ───────────── manufacturer side (staff may act for it) ─────────────
 
   async accept(user: OrderUser, id: string, dto: AcceptProductionOrderDto) {
-    return this.db.transaction(async (em) => {
-      const o = await this.load(em, id);
-      this.checkOwner(user, o);
-      if (o.status !== 'Sent') throw new BadRequestException(`${o.refNo} is ${o.status.toLowerCase()}, not waiting for an answer.`);
-      if (dto.readyDate && dto.readyDate < o.date) throw new BadRequestException('The ready date cannot be before the order date.');
-      o.status = 'Accepted';
-      o.readyDate = dto.readyDate ?? null;
-      await em.save(o);
-      const note = [dto.readyDate && `Ready by ${dto.readyDate}`, dto.note?.trim()].filter(Boolean).join(' · ') || null;
-      await this.event(em, o.id, user, 'Accepted', note);
-      await this.answered(em, user, o, 'order.accepted', 'success', `${o.manufacturer.name} accepted order ${o.refNo}`, note);
-      return this.shape(await this.load(em, id), (await this.movedMap(em))[id]);
-    });
+    return (await this.acceptGroup(user, { ids: [id], ...dto }))[0];
   }
 
   async reject(user: OrderUser, id: string, dto: ReasonDto) {
+    return (await this.rejectGroup(user, { ids: [id], reason: dto.reason }))[0];
+  }
+
+  async stage(user: OrderUser, id: string, dto: StageDto) {
+    return (await this.stageGroup(user, { ids: [id], ...dto }))[0];
+  }
+
+  /**
+   * The production orders of one combined order: same distributor order (DO- number) and same manufacturer. A
+   * distributor order of several products is one order to both sides; each product is still its own production
+   * order underneath. An order without a DO- number is its own group.
+   */
+  private async groupOf(em: EntityManager, user: OrderUser, ids: string[]) {
+    const list = await Promise.all([...new Set(ids)].map((id) => this.load(em, id)));
+    for (const o of list) this.checkOwner(user, o);
+    const key = (o: ProductionOrder) => (o.groupRef ? `${o.groupRef}|${o.manufacturerId}` : o.id);
+    if (new Set(list.map(key)).size > 1) throw new BadRequestException('These production orders do not belong to one order.');
+    return list.sort((a, b) => a.refNo.localeCompare(b.refNo));
+  }
+
+  /** "DO-001 (MO-020, MO-021)" or "MO-020" */
+  private label(list: ProductionOrder[]) {
+    const refs = list.map((o) => o.refNo).join(', ');
+    return list[0].groupRef ? `${list[0].groupRef} (${refs})` : refs;
+  }
+
+  /** the manufacturer accepts every product of the order at once, with one ready date */
+  async acceptGroup(user: OrderUser, dto: GroupAcceptDto) {
     return this.db.transaction(async (em) => {
-      const o = await this.load(em, id);
-      this.checkOwner(user, o);
-      if (o.status !== 'Sent') throw new BadRequestException(`${o.refNo} is ${o.status.toLowerCase()}, not waiting for an answer.`);
-      o.status = 'Rejected';
-      o.reason = dto.reason.trim();
-      await em.save(o);
-      await this.event(em, o.id, user, 'Rejected', o.reason);
-      await this.answered(em, user, o, 'order.rejected', 'danger', `${o.manufacturer.name} rejected order ${o.refNo}`, `Reason: ${o.reason}`);
-      return this.shape(await this.load(em, id), (await this.movedMap(em))[id]);
+      const list = await this.groupOf(em, user, dto.ids);
+      for (const o of list) {
+        if (o.status !== 'Sent') throw new BadRequestException(`${o.refNo} is ${o.status.toLowerCase()}, not waiting for an answer.`);
+        if (dto.readyDate && dto.readyDate < o.date) throw new BadRequestException('The ready date cannot be before the order date.');
+      }
+      const note = [dto.readyDate && `Ready by ${dto.readyDate}`, dto.note?.trim()].filter(Boolean).join(' · ') || null;
+      for (const o of list) {
+        o.status = 'Accepted';
+        o.readyDate = dto.readyDate ?? null;
+        await em.save(o);
+        await this.event(em, o.id, user, 'Accepted', note);
+      }
+      await this.answered(em, user, list, 'order.accepted', 'success', `${list[0].manufacturer.name} accepted order ${this.label(list)}`, note);
+      return this.reshape(em, list);
     });
   }
 
-  /** report the next production step; steps only move forward along the Settings list */
-  async stage(user: OrderUser, id: string, dto: StageDto) {
+  async rejectGroup(user: OrderUser, dto: GroupReasonDto) {
     return this.db.transaction(async (em) => {
-      const o = await this.load(em, id);
-      this.checkOwner(user, o);
-      if (o.status !== 'Accepted') throw new BadRequestException('Accept the order before reporting progress.');
+      const list = await this.groupOf(em, user, dto.ids);
+      for (const o of list) if (o.status !== 'Sent') throw new BadRequestException(`${o.refNo} is ${o.status.toLowerCase()}, not waiting for an answer.`);
+      for (const o of list) {
+        o.status = 'Rejected';
+        o.reason = dto.reason.trim();
+        await em.save(o);
+        await this.event(em, o.id, user, 'Rejected', o.reason);
+      }
+      await this.answered(em, user, list, 'order.rejected', 'danger', `${list[0].manufacturer.name} rejected order ${this.label(list)}`, `Reason: ${dto.reason.trim()}`);
+      return this.reshape(em, list);
+    });
+  }
+
+  /** report the next production step for every product of the order; steps only move forward (Settings list) */
+  async stageGroup(user: OrderUser, dto: GroupStageDto) {
+    return this.db.transaction(async (em) => {
+      const list = await this.groupOf(em, user, dto.ids);
       const stages = (await em.find(Lookup, { where: { list: 'ORDER_STAGE', active: true }, order: { sortOrder: 'ASC' } })).map((l) => l.code);
       const next = stages.indexOf(dto.stage);
       if (next < 0) throw new BadRequestException(`"${dto.stage}" is not a production stage. Choose one from Settings & Data.`);
-      const now = o.stage ? stages.indexOf(o.stage) : -1;
-      if (next <= now) throw new BadRequestException(`${o.refNo} is already at "${o.stage}". Report a later step.`);
-      o.stage = dto.stage;
-      await em.save(o);
-      await this.event(em, o.id, user, dto.stage, dto.note?.trim() || null);
-      // the last step means the goods are ready: the distributor may collect them, or the manufacturer dispatches
+      for (const o of list) {
+        if (o.status !== 'Accepted') throw new BadRequestException('Accept the order before reporting progress.');
+        const now = o.stage ? stages.indexOf(o.stage) : -1;
+        if (next <= now) throw new BadRequestException(`${o.refNo} is already at "${o.stage}". Report a later step.`);
+      }
+      for (const o of list) {
+        o.stage = dto.stage;
+        await em.save(o);
+        await this.event(em, o.id, user, dto.stage, dto.note?.trim() || null);
+      }
+      // the last step means the goods are ready to dispatch
       const ready = next === stages.length - 1;
-      await this.answered(em, user, o, ready ? 'order.ready' : 'order.stage', ready ? 'success' : 'info',
-        ready ? `Order ${o.refNo} is ready at ${o.manufacturer.name} ("${dto.stage}")` : `Order ${o.refNo} is now at "${dto.stage}"`, dto.note?.trim() || null);
-      return this.shape(await this.load(em, id), (await this.movedMap(em))[id]);
+      const name = this.label(list);
+      await this.answered(em, user, list, ready ? 'order.ready' : 'order.stage', ready ? 'success' : 'info',
+        ready ? `Order ${name} is ready at ${list[0].manufacturer.name} ("${dto.stage}")` : `Order ${name} is now at "${dto.stage}"`, dto.note?.trim() || null);
+      return this.reshape(em, list);
     });
+  }
+
+  private async reshape(em: EntityManager, list: ProductionOrder[]) {
+    const moved = await this.movedMap(em);
+    return Promise.all(list.map(async (o) => this.shape(await this.load(em, o.id), moved[o.id])));
   }
 
   // ───────────── helpers ─────────────
@@ -381,9 +438,11 @@ export class ProductionOrdersService {
     return `${plural(o.containers, 'container')} of ${o.product?.sku ?? 'the product'}${o.destination === 'Warehouse' ? ' for the warehouse' : o.distributor ? ` for ${o.distributor.name}` : ''}`;
   }
 
-  /** the manufacturer answered or reported progress: Zen Foods and the distributor the goods are for are told */
-  private async answered(em: EntityManager, user: OrderUser, o: ProductionOrder, kind: string, tone: Note['tone'], title: string, note: string | null) {
-    const body = [this.what(o), note].filter(Boolean).join(' · ');
+  /** the manufacturer answered or reported progress: Zen Foods and the distributor the goods are for are told (once per order) */
+  private async answered(em: EntityManager, user: OrderUser, group: ProductionOrder | ProductionOrder[], kind: string, tone: Note['tone'], title: string, note: string | null) {
+    const list = Array.isArray(group) ? group : [group];
+    const o = { ...list[0], refNo: this.label(list) } as ProductionOrder;
+    const body = [list.map((x) => this.what(x)).join(', '), note].filter(Boolean).join(' · ');
     await this.notes.send(em, user,
       { to: { staff: TEAM.manufacturing }, kind, tone, refNo: o.refNo, link: LINK.manufacturing('orders'), title, body },
       { to: { manufacturerId: o.manufacturerId }, kind, tone, refNo: o.refNo, link: LINK.factory, title, body },

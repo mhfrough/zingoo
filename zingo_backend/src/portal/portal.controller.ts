@@ -1,3 +1,4 @@
+import { GroupIdsDto } from '../manufacturing/production-orders.dto';
 import { Body, Controller, Get, Param, ParseUUIDPipe, Post, Query, Request } from '@nestjs/common';
 import { ApiOperation, ApiQuery, ApiTags } from '@nestjs/swagger';
 import { Permit, Read, Roles } from '../auth/roles.decorator';
@@ -110,6 +111,13 @@ export class PortalController {
   }
 
   // ── staff ──
+
+  @Post('requests/group/accept')
+  @Roles(...MANAGE)
+  @ApiOperation({ summary: 'Accept every product of a combined order at once: each goes to its manufacturer with its own packing' })
+  acceptGroup(@Body() dto: GroupIdsDto, @Request() req: any) {
+    return this.service.acceptRequestGroup(dto.ids, req.user);
+  }
 
   @Post('requests/:id/accept')
   @Roles(...MANAGE)

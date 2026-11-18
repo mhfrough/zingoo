@@ -69,7 +69,8 @@ export class PaymentRequestsService {
     const requests = await this.list(user, scope);
     const credited = await this.creditsByOrder(em, orders.map((o) => o.id));
     const rows = orders.map((o) => {
-      const value = round2(o.containers * o.bundlesPerContainer * o.packetsPerBundle * Number(o.rate));
+      // dispatched: the ready containers are what is owed (more or fewer than ordered)
+      const value = round2((o.readyContainers ?? o.containers) * o.bundlesPerContainer * o.packetsPerBundle * Number(o.rate));
       const advance = round2((value * Number(o.advancePct)) / 100);
       const mine = requests.filter((r) => r.orderId === o.id && r.status === 'Submitted');
       const sum = (list: ShapedRequest[], f: (r: ShapedRequest) => number) => round2(list.reduce((n, r) => n + f(r), 0));
@@ -142,7 +143,8 @@ export class PaymentRequestsService {
       const date = dto.date ?? today();
       if (date > today()) throw new BadRequestException('A request cannot be dated in the future.');
 
-      const gross = round2(order.containers * order.bundlesPerContainer * order.packetsPerBundle * Number(order.rate));
+      // once dispatched, the containers the factory made ready are what is paid for (more or fewer than ordered)
+      const gross = round2((order.readyContainers ?? order.containers) * order.bundlesPerContainer * order.packetsPerBundle * Number(order.rate));
       const advance = round2((gross * Number(order.advancePct)) / 100);
       const open = await em.find(MfrPaymentRequest, { where: { orderId: order.id, status: 'Submitted' } });
       // goods taken back by an accepted credit claim are not owed, and a claim still open (pending or on hold) is held back

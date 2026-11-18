@@ -439,3 +439,22 @@ Progress (2026-11-18):
 - Follow-ups (2026-11-18): staff partner picker remembers the last distributor / manufacturer in this browser (`shared/remember.ts`, guarded storage); approval desk "View order" opens the order panel; Accept request choice rows fixed. H1-H7 deployed 7a6da98; API checks 921/921 after reseed.
 
 Also done 2026-11-18: credits in the page source (meta author / owner / copyright, `humans.txt`, header comments in both `main.ts`), not shown on screen.
+
+## 17. Dispatch flow (2026-11-18, client voice notes)
+Defaults accepted; unit of the dispatch table = containers (stock, invoices and postings count whole containers).
+
+| Phase | Scope |
+| --- | --- |
+| J1 Quick | Hide "Design system" from the sidebar. Distributor field "Warranty (days)": information only (for a warranty claim contact the distributor within these days). Deploy the pending web fixes. |
+| J2 Combined order | One order per manufacturer for a multi-product distributor order: the production orders of one DO- number and one manufacturer are listed, accepted, progressed, dispatched and received as one order (one row, one panel with a product table, one timeline). Approval desk accepts the whole order. Single-product orders behave as before. |
+| J3 Ready to Dispatch | Final production step: table per product Ordered / Ready (any number, more or less than ordered) / Damaged in production (empty = none), vehicle registration, driver name, driver contact (required), transporter / bilty (optional), proof of handover (signed gate pass / delivery challan, at least one file). Buttons Create Voucher (print) and Ready to Dispatch (only on the last step): records the loading as the dispatch (distributor's truck), notifies the distributor with the voucher. The distributor's "Confirm pickup" goes away. Ready containers are what is paid for (over-production included); production damage stays at the factory. |
+| J4 Distributor receipt | Same panel: table Ordered / Delivered / Damaged by manufacturer / Damaged on arrival (distributor, bundles) with evidence upload: Open dispute (H6 claims: accept / reject / hold) or Accept delivery. Sectioned layout. |
+| J5 Money and checks | Payable and before/after figures follow ready containers and damage decisions; API checks; browser test end to end; deploy. |
+
+Progress (2026-11-18): J1-J5 built, API checks 939/939 (18 new J checks), not yet checked in the browser or committed.
+- J1: sidebar `hidden` flag (Design system hidden); `Distributor.warrantyDays` (form field, shown on the portal account card).
+- J2: production orders of one DO- number and one manufacturer form one order: `POST production-orders/group/accept|reject|stage` (one notice per order), detail returns `lines`; orders list, incoming list, My orders, desk lists show one row per order; desk `POST portal/requests/group/accept`; direct ordering sends one notice per manufacturer.
+- J3: `ProductionOrder.readyContainers / productionDamaged`, load `driverName / driverPhone / transporter / dispatchRef`; order document kind HANDOVER; `POST production-shipments/dispatch` (last step + loads on the distributor's vehicle, proof of handover required, one DC- number); Report progress turns into "Ready to dispatch" on the last step (quantities table, vehicle / driver / phone required, transporter, bilty, proof upload, Create voucher). Distributor "Confirm pickup" removed. Payable follows ready containers.
+- J4: `POST production-shipments/receive-dispatch` (receives every load, damaged bundles become claims with the photos, note required for a dispute); "Receive delivery" panel (delivery facts, voucher, Ordered / Delivered / Damaged by manufacturer / Damaged on arrival, dispute with photos, Accept delivery or Receive and open dispute).
+- J5: order panel shows Ready and Damaged in production; money and before/after damage on the ready containers.
+

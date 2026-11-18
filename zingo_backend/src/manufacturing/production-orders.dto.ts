@@ -1,6 +1,6 @@
 import { PartialType } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
-import { IsBoolean, IsDateString, IsIn, IsInt, IsNotEmpty, IsNumber, IsOptional, IsString, IsUUID, Max, MaxLength, Min, ValidateNested } from 'class-validator';
+import { ArrayMaxSize, ArrayMinSize, IsArray, IsBoolean, IsDateString, IsIn, IsInt, IsNotEmpty, IsNumber, IsOptional, IsString, IsUUID, Max, MaxLength, Min, ValidateNested } from 'class-validator';
 import { ORDER_DESTINATIONS, OrderDestination } from './production-orders.entities';
 
 /** planned transport: who carries the goods and the driver (all optional) */
@@ -52,6 +52,25 @@ export class ReasonDto {
 
 /** The manufacturer reports the step it has reached. */
 export class StageDto {
+  @IsString() @IsNotEmpty() @MaxLength(80) stage: string;
+  @IsOptional() @IsString() @MaxLength(500) note?: string;
+}
+
+/** the production orders of one combined order (one distributor order, one manufacturer), answered together */
+export class GroupIdsDto {
+  @IsArray() @ArrayMinSize(1) @ArrayMaxSize(30) @IsUUID(undefined, { each: true }) ids: string[];
+}
+
+export class GroupAcceptDto extends GroupIdsDto {
+  @IsOptional() @IsDateString() readyDate?: string;
+  @IsOptional() @IsString() @MaxLength(500) note?: string;
+}
+
+export class GroupReasonDto extends GroupIdsDto {
+  @IsString() @IsNotEmpty() @MaxLength(500) reason: string;
+}
+
+export class GroupStageDto extends GroupIdsDto {
   @IsString() @IsNotEmpty() @MaxLength(80) stage: string;
   @IsOptional() @IsString() @MaxLength(500) note?: string;
 }

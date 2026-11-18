@@ -52,7 +52,7 @@ export class Shell {
 
   /** menu groups, limited to the pages this role may open (empty groups are dropped) */
   protected groups = computed(() => {
-    const items = visibleNav(this.auth.user()?.pages);
+    const items = visibleNav(this.auth.user()?.pages).filter((n) => !n.hidden);
     return NAV_GROUPS.map((name) => ({ name, items: items.filter((n) => n.group === name) })).filter(
       (g) => g.items.length,
     );

@@ -49,6 +49,9 @@ export interface ProductionOrder {
   groupRef?: string | null;
   /** Carton, Bora: from the packaging template, or changed on the order (empty on old orders: the product's) */
   containerUnit?: string | null;
+  /** containers the factory made ready and loaded, and containers damaged in production (set at dispatch) */
+  readyContainers?: number | null;
+  productionDamaged?: number | null;
   /** planned transport given when ordering */
   transport?: { transporter?: string | null; vehicleNo?: string | null; driverName?: string | null; driverPhone?: string | null; driverCnic?: string | null } | null;
   events: ProductionOrderEvent[];
@@ -66,6 +69,12 @@ export interface ProductionOrder {
 export interface OrderLoad {
   id: string;
   refNo: string;
+  orderId?: string;
+  driverName?: string | null;
+  driverPhone?: string | null;
+  transporter?: string | null;
+  /** loads of one dispatch (several products on one vehicle) share it */
+  dispatchRef?: string | null;
   shipDate: string;
   containers: number;
   method: 'Delivery' | 'Pickup';
@@ -107,7 +116,7 @@ export interface OrderDoc {
   name: string;
   mime: string;
   size: number;
-  kind: 'CHALLAN' | 'INVOICE' | 'OTHER';
+  kind: 'CHALLAN' | 'INVOICE' | 'OTHER' | 'HANDOVER';
   uploadedBy: string;
   createdAt: string;
 }
@@ -130,6 +139,8 @@ export interface OrderInvoice {
 /** GET production-orders/:id/detail: one order in full (money fields absent for a distributor login) */
 export interface OrderDetailData {
   order: ProductionOrder;
+  /** every product of the combined order (just the one order when it is a single-product order) */
+  lines: ProductionOrder[];
   /** ready date plus the transit days of Settings */
   expectedDate: string | null;
   transitDays: number;
@@ -195,6 +206,12 @@ export interface Shipment {
   rate: number;
   vehicle: string | null;
   waybill: string | null;
+  /** recorded at Ready to Dispatch */
+  driverName?: string | null;
+  driverPhone?: string | null;
+  transporter?: string | null;
+  /** the loads of one dispatch (several products on one vehicle) share it */
+  dispatchRef?: string | null;
   note: string | null;
   shippedBy: string;
   /** Delivery = the manufacturer sent it; Pickup = the distributor collected it from the factory */
@@ -475,6 +492,12 @@ export class FactoryApi {
   reject = (id: string, reason: string) => this.api.post<ProductionOrder>(`production-orders/${id}/reject`, { reason });
   stage = (id: string, body: { stage: string; note?: string }) => this.api.post<ProductionOrder>(`production-orders/${id}/stage`, body);
   detail = (id: string) => this.api.get<OrderDetailData>(`production-orders/${id}/detail`);
+  /** answer or progress every product of a combined order at once */
+  acceptGroup = (ids: string[], body: { readyDate?: string; note?: string }) => this.api.post<ProductionOrder[]>('production-orders/group/accept', { ids, ...body });
+  rejectGroup = (ids: string[], reason: string) => this.api.post<ProductionOrder[]>('production-orders/group/reject', { ids, reason });
+  stageGroup = (ids: string[], body: { stage: string; note?: string }) => this.api.post<ProductionOrder[]>('production-orders/group/stage', { ids, ...body });
+  /** Ready to Dispatch: quantities, vehicle, driver and the proof of handover for a whole order */
+  dispatchOrder = (body: unknown) => this.api.post<{ dispatchRef: string; loads: number }>('production-shipments/dispatch', body);
   /** attach a file to an order (CHALLAN = signed dispatch voucher, INVOICE = the manufacturer's own invoice copy) */
   addOrderDoc = (id: string, file: File, kind: OrderDoc['kind']) => {
     const body = new FormData();
@@ -499,6 +522,8 @@ export class FactoryApi {
   stock = (distributorId?: string) => this.api.get<DistributorStock>('production-shipments/stock', { distributorId });
   ship = (body: unknown) => this.api.post<Shipment>('production-shipments', body);
   receive = (id: string, body: unknown) => this.api.post<Shipment>(`production-shipments/${id}/receive`, body);
+  /** receive a whole dispatch: accept it, or report damage on arrival (opens a dispute) */
+  receiveDispatch = (body: unknown) => this.api.post<{ dispatchRef: string; claims: number }>('production-shipments/receive-dispatch', body);
   incoming = (distributorId?: string) => this.api.get<IncomingOrder[]>('production-shipments/incoming', { distributorId });
   pickup = (body: unknown) => this.api.post<Shipment>('production-shipments/pickup', body);
 
@@ -530,9 +555,44 @@ export const ORDER_TONE: Record<ProductionOrderStatus, 'neutral' | 'info' | 'suc
   Draft: 'neutral', Sent: 'warning', Accepted: 'info', Rejected: 'danger', Cancelled: 'neutral',
 };
 
+/**
+ * A combined order: the production orders of one distributor order (DO- number) and one manufacturer, shown and
+ * answered as one. The row is the first of them; `group` holds all (one entry for a single-product order).
+ */
+export type OrderRow = ProductionOrder & { group: ProductionOrder[] };
+
+/** the key of the combined order a production order belongs to */
+export const groupKey = (o: { id: string; groupRef?: string | null; manufacturerId?: string; manufacturer?: { id?: string } }) =>
+  (o.groupRef ? `${o.groupRef}|${o.manufacturerId ?? o.manufacturer?.id ?? ''}` : o.id);
+
+/** one row per combined order, newest first as the list came */
+export function groupOrders(list: ProductionOrder[]): OrderRow[] {
+  const map = new Map<string, ProductionOrder[]>();
+  for (const o of list) map.set(groupKey(o), [...(map.get(groupKey(o)) ?? []), o]);
+  return [...map.values()].map((g) => {
+    const sorted = [...g].sort((a, b) => a.refNo.localeCompare(b.refNo));
+    return { ...sorted[0], group: sorted };
+  });
+}
+
+/** totals of a combined order */
+export function groupTotals(row: OrderRow) {
+  const sum = (f: (o: ProductionOrder) => number) => row.group.reduce((n, o) => n + (f(o) || 0), 0);
+  return {
+    containers: sum((o) => o.containers), bundles: sum((o) => o.bundles), packets: sum((o) => o.packets),
+    value: sum((o) => o.value), advance: sum((o) => o.advanceAmount), shipped: sum((o) => o.shippedContainers), received: sum((o) => o.receivedContainers),
+  };
+}
+
+/** "DO-001" for a combined order, else the production order number */
+export const orderRef = (row: Pick<ProductionOrder, 'refNo' | 'groupRef'> & { group?: unknown[] }) =>
+  (row.groupRef && (row.group?.length ?? 1) > 0 ? row.groupRef : row.refNo);
+
 /** "Accepted · In production" */
 export const orderState = (o: ProductionOrder) => {
   if (o.status === 'Accepted' && o.receivedContainers >= o.containers) return 'Delivered';
+  // dispatched at Ready to Dispatch: everything that was ready left the factory
+  if (o.status === 'Accepted' && o.readyContainers != null && o.shippedContainers >= o.readyContainers) return o.receivedContainers > 0 ? `Received ${o.receivedContainers}` : 'Dispatched';
   if (o.status === 'Accepted' && o.shippedContainers > 0) return `Shipped ${o.shippedContainers}/${o.containers}`;
   return o.status === 'Accepted' && o.stage ? o.stage : o.status === 'Sent' ? 'Waiting' : o.status;
 };

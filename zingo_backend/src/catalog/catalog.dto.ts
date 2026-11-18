@@ -232,6 +232,8 @@ export class CreateDistributorDto {
   @IsOptional() @IsNumber() @Min(0) @Max(100) advancePct?: number;
   /** 0 = no limit */
   @IsOptional() @IsInt() @Min(0) @Max(365) selloutDays?: number;
+  /** for a warranty claim, contact the distributor within these days (information only) */
+  @IsOptional() @IsInt() @Min(0) @Max(3650) warrantyDays?: number | null;
   @IsOptional() @IsString() @MaxLength(150) poc?: string;
   @IsOptional() @IsString() @MaxLength(150) contract?: string;
   @IsOptional() @IsString() @MaxLength(5000) terms?: string;

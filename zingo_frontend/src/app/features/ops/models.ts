@@ -101,6 +101,8 @@ export interface Distributor {
   /** no other distributor may be given these areas */
   exclusive?: boolean;
   status?: 'Active' | 'Hold' | 'Temporary suspend' | 'Permanent suspend';
+  /** for a warranty claim, contact the distributor within these days (information only) */
+  warrantyDays?: number | null;
   statusNote?: string | null;
   statusUntil?: string | null;
   // international distributor (the client's spec)

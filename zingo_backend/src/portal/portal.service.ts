@@ -368,6 +368,7 @@ export class PortalService {
       const transport = cleanTransport(dto.transport);
       const made: unknown[] = [];
       const filed: { refNo: string; what: string }[] = [];
+      const sent: { request: PortalRequest; order: ProductionOrder; what: string }[] = [];
       for (const l of lines) {
         const p = products.find((x) => x.id === l.productId)!;
         const tpl = l.packaging ? (p.packagings ?? []).find((t) => t.name === l.packaging) : (p.packagings ?? []).find((t) => t.isDefault);
@@ -389,12 +390,14 @@ export class PortalService {
         filed.push({ refNo, what });
         if (direct) {
           const full = await em.findOneOrFail(PortalRequest, { where: { id: r.id }, relations: ['product', 'distributor'] });
-          const done = await this.requestToProduction(em, full, { send: true } as AcceptRequestDto, user, true);
+          const done = await this.requestToProduction(em, full, { send: true } as AcceptRequestDto, user, true, multi);
           made.push({ ...done.request, productionOrder: done.productionOrder });
+          sent.push({ request: full, order: done.productionOrder, what });
         } else {
           made.push(r);
         }
       }
+      if (direct && multi) await this.orderSentNotes(em, user, groupRef!, sent);
       if (!direct) {
         // one notice for the whole order, not one per line
         const who = await this.distName(em, distributorId);
@@ -408,6 +411,48 @@ export class PortalService {
         );
       }
       return multi ? { groupRef, requests: made } : made[0];
+    });
+  }
+
+  /** a combined order went to its manufacturers: one notice per manufacturer to the distributor and to Zen Foods */
+  private async orderSentNotes(em: EntityManager, user: PortalUser, groupRef: string, sent: { request: PortalRequest; order: ProductionOrder; what: string }[]) {
+    const byMaker = new Map<string, typeof sent>();
+    for (const x of sent) byMaker.set(x.order.manufacturerId, [...(byMaker.get(x.order.manufacturerId) ?? []), x]);
+    for (const list of byMaker.values()) {
+      const maker = list[0].order.manufacturer?.name ?? 'the manufacturer';
+      const dist = list[0].request.distributor;
+      const what = list.map((x) => x.what).join(', ');
+      const refs = list.map((x) => x.order.refNo).join(', ');
+      await this.notes.send(em, user,
+        { to: { distributorId: dist.id }, kind: 'request.sent', tone: 'success', refNo: groupRef, link: LINK.portal('stock'),
+          title: `Order ${groupRef} sent to ${maker}`, body: `${what}. You will be told when it is accepted, ready and dispatched.` },
+        { to: { staff: TEAM.desk }, kind: 'request.sent', refNo: groupRef, link: LINK.manufacturing('orders'),
+          title: `${dist.name} ordered ${what} from ${maker}`, body: `${groupRef} became ${refs}. No approval needed (Settings): it is with the manufacturer.` },
+      );
+    }
+  }
+
+  /**
+   * The approval desk accepts every product of a combined order at once: each becomes its production order with its
+   * own packing, sent to its manufacturer; one notice per manufacturer.
+   */
+  acceptRequestGroup(ids: string[], user: PortalUser) {
+    return this.db.transaction(async (em) => {
+      const rows = await em.find(PortalRequest, { where: { id: In(ids) }, relations: ['product', 'distributor'], order: { refNo: 'ASC' } });
+      if (rows.length !== new Set(ids).size) throw new BadRequestException('A request of this order was not found.');
+      if (new Set(rows.map((r) => r.groupRef ?? r.id)).size > 1) throw new BadRequestException('These requests do not belong to one order.');
+      for (const r of rows) {
+        if (r.status !== 'Requested') throw new BadRequestException(`${r.refNo} is no longer waiting.`);
+        if (!r.product.manufacturerId && !r.manufacturerId) throw new BadRequestException(`${r.product.sku} has no manufacturer. Assign one in Settings & Data first.`);
+      }
+      const sent: { request: PortalRequest; order: ProductionOrder; what: string }[] = [];
+      for (const r of rows) {
+        const done = await this.requestToProduction(em, r, { send: true } as AcceptRequestDto, user, false, true);
+        const what = r.containers ? `${plural(r.containers, 'container')} (${plural(r.cartons, 'bundle')}) of ${r.product.sku}` : `${plural(r.cartons, 'bundle')} of ${r.product.sku}`;
+        sent.push({ request: r, order: done.productionOrder, what });
+      }
+      await this.orderSentNotes(em, user, rows[0].groupRef ?? rows[0].refNo, sent);
+      return sent.map((x) => ({ request: x.request.refNo, productionOrder: x.order.refNo }));
     });
   }
 
@@ -446,7 +491,7 @@ export class PortalService {
    * The request becomes a production order with the product's manufacturer, delivered to this distributor, and is
    * sent to the manufacturer straight away (unless kept as a draft). Bundles are rounded up to whole containers.
    */
-  private async requestToProduction(em: EntityManager, r: PortalRequest, dto: AcceptRequestDto, user: PortalUser, direct = false) {
+  private async requestToProduction(em: EntityManager, r: PortalRequest, dto: AcceptRequestDto, user: PortalUser, direct = false, quiet = false) {
     const templates = r.product.packagings ?? [];
     const packaging = dto.packaging ?? r.packaging ?? null;
     const tpl = packaging ? templates.find((t) => t.name === packaging) : templates.find((t) => t.isDefault);
@@ -474,7 +519,7 @@ export class PortalService {
     const what = `${plural(containers, 'container')} (${plural(containers * o.bundlesPerContainer, 'bundle')}) of ${r.product.name} (${r.product.sku})`;
     if (direct) {
       await this.audit(em, user, 'Order sent to manufacturer', r.refNo, `${o.refNo} sent to ${full.manufacturer.name}`);
-      await this.notes.send(em, user,
+      if (!quiet) await this.notes.send(em, user,
         { to: { distributorId: r.distributorId }, kind: 'request.sent', tone: 'success', refNo: r.refNo, link: LINK.portal('stock'),
           title: `Order ${r.refNo} sent to ${full.manufacturer.name} as ${o.refNo}`,
           body: `${what}. You will be told when the manufacturer accepts it, gives a date, and when it is ready and dispatched.` },
@@ -485,7 +530,7 @@ export class PortalService {
       return { request: r, productionOrder: full };
     }
     await this.audit(em, user, 'Request accepted', r.refNo, `Created ${o.refNo}${send ? ` and sent it to ${full.manufacturer.name}` : ' (draft)'}`);
-    await this.notes.send(em, user,
+    if (!quiet) await this.notes.send(em, user,
       { to: { distributorId: r.distributorId }, kind: 'request.accepted', tone: 'success', refNo: r.refNo, link: LINK.portal('stock'),
         title: `Request ${r.refNo} accepted: production order ${o.refNo}`,
         body: `${what}${send ? ` ordered from ${full.manufacturer.name}. You will be told when it is accepted, ready and dispatched.` : '. Zen Foods sends it to the manufacturer next.'}` },

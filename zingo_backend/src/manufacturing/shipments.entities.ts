@@ -79,6 +79,20 @@ export class ProductionShipment extends AppEntity {
   @Column({ type: 'varchar', length: 60, nullable: true })
   waybill: string | null;
 
+  /** the driver and the transport company of the vehicle */
+  @Column({ type: 'varchar', length: 80, nullable: true })
+  driverName: string | null;
+
+  @Column({ type: 'varchar', length: 30, nullable: true })
+  driverPhone: string | null;
+
+  @Column({ type: 'varchar', length: 80, nullable: true })
+  transporter: string | null;
+
+  /** one dispatch of a combined order (several products on one vehicle) shares this number (DC-001) */
+  @Column({ type: 'varchar', length: 30, nullable: true })
+  dispatchRef: string | null;
+
   @Column({ type: 'varchar', length: 500, nullable: true })
   note: string | null;
 

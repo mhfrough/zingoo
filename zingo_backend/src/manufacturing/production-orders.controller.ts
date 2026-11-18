@@ -5,7 +5,7 @@ import type { Response } from 'express';
 import { MAX_ATTACHMENT_BYTES } from '../attachments/attachments.service';
 import { Read, Roles, Write } from '../auth/roles.decorator';
 import {
-  AcceptProductionOrderDto, CreateProductionOrderDto, ReasonDto, StageDto, UpdateProductionOrderDto,
+  AcceptProductionOrderDto, CreateProductionOrderDto, GroupAcceptDto, GroupReasonDto, GroupStageDto, ReasonDto, StageDto, UpdateProductionOrderDto,
 } from './production-orders.dto';
 import { ORDER_DOC_KINDS, OrderDocKind, ProductionOrdersService } from './production-orders.service';
 
@@ -116,6 +116,27 @@ export class ProductionOrdersController {
   @ApiOperation({ summary: 'Cancel a sent or accepted order, with a reason' })
   cancel(@Request() req: any, @Param('id', ParseUUIDPipe) id: string, @Body() dto: ReasonDto) {
     return this.service.cancel(req.user, id, dto);
+  }
+
+  @Post('group/accept')
+  @Roles(...FACTORY)
+  @ApiOperation({ summary: 'Accept every product of a combined order at once (one ready date)' })
+  acceptGroup(@Request() req: any, @Body() dto: GroupAcceptDto) {
+    return this.service.acceptGroup(req.user, dto);
+  }
+
+  @Post('group/reject')
+  @Roles(...FACTORY)
+  @ApiOperation({ summary: 'Reject every product of a combined order, with a reason' })
+  rejectGroup(@Request() req: any, @Body() dto: GroupReasonDto) {
+    return this.service.rejectGroup(req.user, dto);
+  }
+
+  @Post('group/stage')
+  @Roles(...FACTORY)
+  @ApiOperation({ summary: 'Report the production step every product of a combined order has reached' })
+  stageGroup(@Request() req: any, @Body() dto: GroupStageDto) {
+    return this.service.stageGroup(req.user, dto);
   }
 
   @Post(':id/accept')

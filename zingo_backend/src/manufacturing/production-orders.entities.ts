@@ -115,6 +115,14 @@ export class ProductionOrder extends AppEntity {
   @Column({ type: 'jsonb', nullable: true })
   transport: OrderTransport | null;
 
+  /** containers the factory made ready and loaded (may be more or less than ordered); empty until dispatch */
+  @Column({ type: 'int', nullable: true })
+  readyContainers: number | null;
+
+  /** containers the factory found damaged in production (stay at the factory, not paid for); empty = none */
+  @Column({ type: 'int', nullable: true })
+  productionDamaged: number | null;
+
   /** what a container of this order is called (Carton, Bora): from its packaging template, or changed on the order */
   @Column({ type: 'varchar', length: 40, nullable: true })
   containerUnit: string | null;

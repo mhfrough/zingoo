@@ -4,7 +4,8 @@ import { docDate, subLine, fmtDate, fmtMoney, fmtNumber, productLabel, qtyLabel 
 import { Btn, ConfirmService, DataTable, RowAction, RowActionEvent, TableColumn, ToastService } from '../../ui';
 import { Distributor, Manufacturer, Product } from '../ops/models';
 import { AcceptOrderForm, OrderReasonForm, OrderStageForm, OrderTimeline } from './answer-forms';
-import { FactoryApi, ORDER_TONE, ProductionOrder, orderState } from './factory.api';
+import { FactoryApi, ORDER_TONE, OrderRow, ProductionOrder, groupOrders, groupTotals, orderRef, orderState } from './factory.api';
+import { Observable, concat, toArray } from 'rxjs';
 import { ProductionOrderForm } from './order-form';
 import { printVoucher } from '../../shared/print';
 import { orderVoucher } from './vouchers';
@@ -33,7 +34,7 @@ import { orderVoucher } from './vouchers';
         }
       </div>
       <div class="card__body">
-        <app-data-table [columns]="columns()" [rows]="orders()" [actions]="actions" [loading]="loading()" [error]="error()"
+        <app-data-table [columns]="columns()" [rows]="rows()" [actions]="actions" [loading]="loading()" [error]="error()"
           searchPlaceholder="Search orders" [emptyTitle]="mode() === 'company' ? 'No production orders yet' : 'No orders yet'"
           [emptyText]="mode() === 'company' ? 'Place the first order with a manufacturer.' : 'Orders from Zen Foods appear here.'"
           (retry)="changed.emit()" (action)="onAction($event)" />
@@ -42,8 +43,8 @@ import { orderVoucher } from './vouchers';
 
     <app-production-order-form [(open)]="formOpen" [order]="editing()" [products]="products()" [manufacturers]="manufacturers()"
       [distributors]="distributors()" (saved)="changed.emit()" />
-    <app-accept-order-form [(open)]="acceptOpen" [order]="current()" (saved)="changed.emit()" />
-    <app-order-stage-form [(open)]="stageOpen" [order]="current()" [stages]="stages()" (saved)="changed.emit()" />
+    <app-accept-order-form [(open)]="acceptOpen" [order]="current()" [group]="current()?.group ?? []" (saved)="changed.emit()" />
+    <app-order-stage-form [(open)]="stageOpen" [order]="current()" [group]="current()?.group ?? []" [stages]="stages()" (saved)="changed.emit()" />
     <app-order-reason-form [(open)]="reasonOpen" [order]="current()" [heading]="reason().heading" [actionLabel]="reason().action"
       [hint]="reason().hint" [run]="reason().run" [done]="reason().done" (saved)="changed.emit()" />
     <app-order-timeline [(open)]="timelineOpen" [order]="current()" />
@@ -76,37 +77,52 @@ export class OrdersPanel {
   protected reasonOpen = signal(false);
   protected timelineOpen = signal(false);
   protected editing = signal<ProductionOrder | null>(null);
-  protected current = signal<ProductionOrder | null>(null);
-  protected reason = signal<{ heading: string; action: string; hint: string; done: string; run: ((r: string) => ReturnType<FactoryApi['reject']>) | undefined }>({
+  protected current = signal<OrderRow | null>(null);
+  /** one row per combined order (a distributor order of several products is one order here) */
+  protected rows = computed(() => groupOrders(this.orders()));
+  protected reason = signal<{ heading: string; action: string; hint: string; done: string; run: ((r: string) => Observable<unknown>) | undefined }>({
     heading: '', action: '', hint: '', done: '', run: undefined,
   });
 
-  protected columns = computed<TableColumn<ProductionOrder>[]>(() => [
-    { id: 'order', label: 'Order / Deliver to', kind: 'title', value: (o) => productLabel(o.product), sub: (o) => destination(o) },
+  protected columns = computed<TableColumn<OrderRow>[]>(() => [
     {
-      id: 'ref', label: 'Order no. / quantity', kind: 'mono', value: (o) => o.refNo, sortValue: (o) => o.date,
-      sub: (o) => subLine(docDate(o), qtyLabel(o.containers, o.bundles, o.containerUnit ?? o.product.containerUnit), `${fmtNumber(o.packets)} packets`, o.groupRef ? `order ${o.groupRef}` : null),
+      id: 'order', label: 'Order / Deliver to', kind: 'title',
+      value: (o) => (o.group.length > 1 ? `${o.group.length} products` : productLabel(o.product)),
+      sub: (o) => subLine(o.group.length > 1 ? o.group.map((x) => x.product.name).join(', ') : null, destination(o)),
+    },
+    {
+      id: 'ref', label: 'Order no. / quantity', kind: 'mono', value: (o) => orderRef(o), sortValue: (o) => o.date,
+      sub: (o) => {
+        const t = groupTotals(o);
+        return subLine(docDate(o), o.group.length > 1 ? o.group.map((x) => x.refNo).join(', ') : null,
+          o.group.length > 1 ? `${fmtNumber(t.containers)} containers · ${fmtNumber(t.bundles)} bundles`
+            : qtyLabel(o.containers, o.bundles, o.containerUnit ?? o.product.containerUnit), `${fmtNumber(t.packets)} packets`);
+      },
     },
     this.mode() === 'company'
       ? { id: 'who', label: 'Manufacturer', priority: 2, value: (o) => o.manufacturer.name, sub: (o) => (o.dueDate ? `due ${fmtDate(o.dueDate)}` : null) }
       : { id: 'who', label: 'Due date', priority: 2, value: (o) => (o.dueDate ? fmtDate(o.dueDate) : 'No date'), sortValue: (o) => o.dueDate ?? '' },
-    { id: 'value', label: 'Order value', kind: 'money', value: (o) => o.value, sub: (o) => `Advance ${o.advancePct}% · ${fmtMoney(o.advanceAmount)}`, priority: 2 },
+    { id: 'value', label: 'Order value', kind: 'money', value: (o) => groupTotals(o).value, sub: (o) => `Advance ${o.advancePct}% · ${fmtMoney(groupTotals(o).advance)}`, priority: 2 },
     {
       id: 'status', label: 'Status', kind: 'tag', value: (o) => orderState(o), tone: (o) => (o.overdue ? 'danger' : ORDER_TONE[o.status]),
       sub: (o) => (o.overdue ? `Late · due ${fmtDate(o.dueDate!)}` : o.readyDate ? `Ready by ${fmtDate(o.readyDate)}` : null),
     },
   ]);
 
-  protected actions = (o: ProductionOrder): RowAction[] => {
+  protected actions = (o: OrderRow): RowAction[] => {
     const list: RowAction[] = [];
     const company = this.mode() === 'company';
     if (company && this.canPlace() && o.status === 'Draft') {
       list.push({ id: 'send', label: 'Send to manufacturer', tone: 'success' }, { id: 'edit', label: 'Edit' }, { id: 'delete', label: 'Delete', tone: 'danger' });
     }
-    if (this.canAnswer() && o.status === 'Sent') {
+    if (this.canAnswer() && o.group.every((x) => x.status === 'Sent')) {
       list.push({ id: 'accept', label: company ? 'Accept for manufacturer' : 'Accept order', tone: 'success' }, { id: 'reject', label: company ? 'Reject for manufacturer' : 'Reject order', tone: 'danger' });
     }
-    if (this.canAnswer() && o.status === 'Accepted' && o.receivedContainers < o.containers) list.push({ id: 'stage', label: 'Report progress' });
+    // until it is dispatched: the last step opens the Ready to Dispatch form
+    if (this.canAnswer() && o.group.every((x) => x.status === 'Accepted') && o.group.some((x) => x.readyContainers == null)) {
+      const last = this.stages()[this.stages().length - 1];
+      list.push({ id: 'stage', label: o.stage === last ? 'Ready to dispatch' : 'Report progress', tone: o.stage === last ? 'success' : undefined });
+    }
     if (company && this.canPlace() && (o.status === 'Sent' || (o.status === 'Accepted' && !o.shippedContainers))) list.push({ id: 'cancel', label: 'Cancel order', tone: 'danger' });
     list.push({ id: 'view', label: 'View order and timeline' }, { id: 'print', label: 'Print order' });
     return list;
@@ -118,7 +134,7 @@ export class OrdersPanel {
     this.formOpen.set(true);
   }
 
-  protected async onAction(e: RowActionEvent<ProductionOrder>) {
+  protected async onAction(e: RowActionEvent<OrderRow>) {
     const o = e.row;
     this.current.set(o);
     switch (e.id) {
@@ -140,15 +156,15 @@ export class OrdersPanel {
         return;
       case 'reject':
         this.reason.set({
-          heading: `Reject ${o.refNo}`, action: 'Reject order', hint: this.mode() === 'company' ? 'Recorded as the manufacturer\'s answer' : 'Zen Foods sees this',
-          done: 'Order rejected.', run: (r) => this.api.reject(o.id, r),
+          heading: `Reject ${orderRef(o)}`, action: 'Reject order', hint: this.mode() === 'company' ? 'Recorded as the manufacturer\'s answer' : 'Zen Foods sees this',
+          done: 'Order rejected.', run: (r) => this.api.rejectGroup(o.group.map((x) => x.id), r),
         });
         this.reasonOpen.set(true);
         return;
       case 'cancel':
         this.reason.set({
-          heading: `Cancel ${o.refNo}`, action: 'Cancel order', hint: 'The manufacturer sees this',
-          done: 'Order cancelled.', run: (r) => this.api.cancel(o.id, r),
+          heading: `Cancel ${orderRef(o)}`, action: 'Cancel order', hint: 'The manufacturer sees this',
+          done: 'Order cancelled.', run: (r) => concat(...o.group.map((x) => this.api.cancel(x.id, r))).pipe(toArray()),
         });
         this.reasonOpen.set(true);
         return;

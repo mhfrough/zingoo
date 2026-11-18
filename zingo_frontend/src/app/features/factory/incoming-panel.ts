@@ -5,7 +5,10 @@ import { ReactiveFormsModule, Validators } from '@angular/forms';
 import { docDate, subLine, Tone, fmtDate, fmtNumber, productLabel, qtyLabel } from '../../shared/format';
 import { Btn, DataTable, Field, Offcanvas, RichText, RowAction, RowActionEvent, TableColumn } from '../../ui';
 import { FormModal } from '../ops/form-modal';
-import { FactoryApi, IncomingOrder } from './factory.api';
+import { FactoryApi, IncomingOrder, groupKey } from './factory.api';
+
+/** an order on its way: the first product order of it, with all of them in `group` */
+type IncomingRow = IncomingOrder & { group: IncomingOrder[] };
 import { OrderTimeline } from './answer-forms';
 import { OrderDetail } from './order-detail';
 
@@ -109,7 +112,7 @@ export class PickupForm extends FormModal {
           <p>Production orders for {{ showDistributor() ? 'distributors' : 'you' }}: accepted, in production, or ready to collect at the factory</p></div>
       </div>
       <div class="card__body">
-        <app-data-table [columns]="columns()" [rows]="orders()" [actions]="actions" [loading]="loading()" [error]="error()" [searchable]="false"
+        <app-data-table [columns]="columns()" [rows]="rows()" [actions]="actions" [loading]="loading()" [error]="error()" [searchable]="false"
           emptyTitle="Nothing on order" emptyText="Orders placed with the manufacturer for you appear here." (retry)="changed.emit()" (action)="onAction($event)" />
       </div>
     </div>
@@ -127,6 +130,15 @@ export class IncomingPanel {
   readonly changed = output<void>();
 
   protected pickupOpen = signal(false);
+  /** one row per order: the products of one distributor order and manufacturer together */
+  protected rows = computed(() => {
+    const map = new Map<string, IncomingOrder[]>();
+    for (const o of this.orders()) map.set(groupKey(o), [...(map.get(groupKey(o)) ?? []), o]);
+    return [...map.values()].map((g) => {
+      const sorted = [...g].sort((a, b) => a.refNo.localeCompare(b.refNo));
+      return { ...sorted[0], group: sorted } as IncomingRow;
+    });
+  });
   protected viewOpen = signal(false);
   protected current = signal<IncomingOrder | null>(null);
 
@@ -136,14 +148,18 @@ export class IncomingPanel {
     return [o.stage ?? 'Accepted', 'info'];
   };
 
-  protected columns = computed<TableColumn<IncomingOrder>[]>(() => [
+  protected columns = computed<TableColumn<IncomingRow>[]>(() => [
     {
-      id: 'product', label: this.showDistributor() ? 'Order / Distributor' : 'Order / Manufacturer', kind: 'title', value: (o) => productLabel(o.product),
-      sub: (o) => (this.showDistributor() ? o.distributor?.name ?? '' : o.manufacturer.name),
+      id: 'product', label: this.showDistributor() ? 'Order / Distributor' : 'Order / Manufacturer', kind: 'title',
+      value: (o) => (o.group.length > 1 ? `${o.group.length} products` : productLabel(o.product)),
+      sub: (o) => subLine(o.group.length > 1 ? o.group.map((x) => x.product.name).join(', ') : null, this.showDistributor() ? o.distributor?.name ?? '' : o.manufacturer.name),
     },
     {
-      id: 'ref', label: 'Order no. / quantity', kind: 'mono', value: (o) => o.refNo, sortValue: (o) => o.date,
-      sub: (o) => subLine(docDate(o), qtyLabel(o.containers, o.containers * o.bundlesPerContainer, o.containerUnit ?? o.product.containerUnit), o.groupRef ? `order ${o.groupRef}` : null, o.shippedContainers ? `${fmtNumber(o.shippedContainers)} sent` : null),
+      id: 'ref', label: 'Order no. / quantity', kind: 'mono', value: (o) => (o.group.length > 1 ? o.groupRef ?? o.refNo : o.refNo), sortValue: (o) => o.date,
+      sub: (o) => subLine(docDate(o),
+        o.group.length > 1 ? `${fmtNumber(o.group.reduce((n, x) => n + x.containers, 0))} containers` : qtyLabel(o.containers, o.containers * o.bundlesPerContainer, o.containerUnit ?? o.product.containerUnit),
+        o.group.length > 1 ? o.group.map((x) => x.refNo).join(', ') : o.groupRef ? `order ${o.groupRef}` : null,
+        o.group.some((x) => x.shippedContainers) ? `${fmtNumber(o.group.reduce((n, x) => n + x.shippedContainers, 0))} sent` : null),
     },
     {
       id: 'from', label: this.showDistributor() ? 'Route' : 'Manufacturer', priority: 2,
@@ -158,12 +174,10 @@ export class IncomingPanel {
     { id: 'status', label: 'Status', kind: 'tag', value: (o) => this.state(o)[0], tone: (o) => this.state(o)[1] },
   ]);
 
-  protected actions = (o: IncomingOrder): RowAction[] => [
-    ...(this.canPickup() && o.ready ? [{ id: 'pickup', label: 'Confirm pickup', tone: 'success' as const }] : []),
-    { id: 'view', label: 'View order' },
-  ];
+  /** the factory records the loading (Ready to Dispatch), so the distributor only follows the order here */
+  protected actions = (): RowAction[] => [{ id: 'view', label: 'View order' }];
 
-  protected onAction(e: RowActionEvent<IncomingOrder>) {
+  protected onAction(e: RowActionEvent<IncomingRow>) {
     this.current.set(e.row);
     if (e.id === 'pickup') this.pickupOpen.set(true);
     if (e.id === 'view') this.viewOpen.set(true);

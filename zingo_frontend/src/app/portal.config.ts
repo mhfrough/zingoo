@@ -15,6 +15,8 @@ export interface NavItem {
   tables: string[];
   /** page key in the server's role table, when it differs from `path` */
   page?: string;
+  /** reachable by its address but not listed in the sidebar */
+  hidden?: boolean;
 }
 
 export const NAV_GROUPS: NavItem['group'][] = ['Operations', 'Money', 'Trade', 'Partners', 'Admin'];
@@ -93,7 +95,7 @@ export const NAV: NavItem[] = [
     tables: ['Currencies', 'Container types', 'Manufacturers', 'Categories'],
   },
   {
-    path: 'ui', page: 'users', label: 'Design system', icon: 'palette', group: 'Admin', phase: 1,
+    path: 'ui', page: 'users', label: 'Design system', icon: 'palette', group: 'Admin', phase: 1, hidden: true,
     description: 'Every building block of the portal in one place. Removed before launch.',
     forms: [],
     tables: [],

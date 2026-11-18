@@ -2,7 +2,7 @@ import { expectedDate } from './order-movement';
 import { DeliveryClaimsService } from './delivery-claims.service';
 import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectDataSource } from '@nestjs/typeorm';
-import { DataSource, EntityManager, FindOptionsWhere } from 'typeorm';
+import { DataSource, EntityManager, FindOptionsWhere, In } from 'typeorm';
 import { Distributor, Product } from '../catalog/catalog.entities';
 import { Role } from '../common/enums';
 import { round2 } from '../common/numeric.transformer';
@@ -12,7 +12,7 @@ import { Lookup } from '../setup/setup.entities';
 import { SettingsService } from '../setup/setup.service';
 import { LINK, NotificationsService, TEAM } from '../notifications/notifications.service';
 import { ProductionOrder, ProductionOrderEvent } from './production-orders.entities';
-import { PickupDto, ReceiveDto, ShipDto } from './shipments.dto';
+import { DispatchDto, PickupDto, ReceiveDispatchDto, ReceiveDto, ShipDto } from './shipments.dto';
 import { ProductionShipment } from './shipments.entities';
 
 const today = () => new Date().toISOString().slice(0, 10);
@@ -227,6 +227,80 @@ export class ShipmentsService {
       .filter((o) => o.left > 0);
   }
 
+  /**
+   * Ready to Dispatch for a whole order (every product of one distributor order and manufacturer): reports the last
+   * production step, records what each product made ready and what was damaged in production, and loads it on the
+   * distributor's vehicle: one load per product sharing one dispatch number, the vehicle, the driver and the proof
+   * of handover. More or fewer containers than ordered may be ready; the ready ones are what is loaded and paid for.
+   */
+  async dispatchGroup(user: ShipmentUser, dto: DispatchDto) {
+    return this.db.transaction(async (em) => {
+      const ids = [...new Set(dto.lines.map((l) => l.orderId))];
+      const orders = await em.find(ProductionOrder, { where: { id: In(ids) }, relations: ['manufacturer', 'distributor', 'product'] });
+      if (orders.length !== ids.length) throw new NotFoundException('A production order of this dispatch was not found.');
+      const key = (o: ProductionOrder) => (o.groupRef ? `${o.groupRef}|${o.manufacturerId}` : o.id);
+      if (new Set(orders.map(key)).size > 1) throw new BadRequestException('These production orders do not belong to one order.');
+      for (const o of orders) {
+        if (user.role === 'Manufacturer' && o.manufacturerId !== this.own(user.manufacturerId, 'manufacturer')) throw new ForbiddenException('This order belongs to another manufacturer.');
+        if (o.status !== 'Accepted') throw new BadRequestException(`${o.refNo} is ${o.status.toLowerCase()}: only an accepted order can be dispatched.`);
+        if (o.readyContainers !== null) throw new BadRequestException(`${o.refNo} was already dispatched.`);
+        if (dto.date < o.date) throw new BadRequestException('A dispatch cannot be dated before its order.');
+      }
+      if (dto.date > today()) throw new BadRequestException('A dispatch cannot be dated in the future.');
+      if (!dto.lines.some((l) => l.ready > 0)) throw new BadRequestException('Nothing is ready: enter the containers loaded for at least one product.');
+      // the proof of handover must be on one of these orders
+      const proofs: { id: string; ownerId: string; ownerType: string }[] = await em.query(
+        `SELECT id, "ownerId", "ownerType" FROM attachments WHERE id = ANY($1)`, [dto.proofIds]);
+      if (proofs.length !== new Set(dto.proofIds).size || proofs.some((p) => p.ownerType !== 'ORDER_HANDOVER' || !ids.includes(p.ownerId))) {
+        throw new BadRequestException('Attach the proof of handover (signed gate pass or delivery challan) to this order first.');
+      }
+      const stages = await this.stages(em);
+      const last = stages[stages.length - 1] ?? null;
+      const s = await this.settings.get(em);
+      const [{ n }] = await em.query(
+        `SELECT MAX(CAST(SUBSTRING("dispatchRef" FROM '([0-9]+)$') AS BIGINT)) AS n FROM production_shipments WHERE "dispatchRef" ~ '^DC-[0-9]+$'`);
+      const dispatchRef = `DC-${String(n ? Number(n) + 1 : 1).padStart(3, '0')}`;
+      const via = [`vehicle ${dto.vehicleNo.trim()}`, `driver ${dto.driverName.trim()} (${dto.driverPhone.trim()})`, dto.transporter?.trim(), dto.biltyNo?.trim() && `bilty ${dto.biltyNo.trim()}`].filter(Boolean).join(' · ');
+      const loaded: string[] = [];
+      for (const l of dto.lines) {
+        const o = orders.find((x) => x.id === l.orderId)!;
+        // the last production step, if it was not reported yet
+        if (last && o.stage !== last) {
+          o.stage = last;
+          await this.event(em, o.id, user, last, null);
+        }
+        o.readyContainers = l.ready;
+        o.productionDamaged = l.damaged ?? null;
+        await em.save(o);
+        await this.event(em, o.id, user, `Ready to dispatch: ${l.ready} of ${o.containers} ready${l.damaged ? `, ${l.damaged} damaged in production` : ''}`, dto.note?.trim() || null);
+        if (l.ready <= 0) continue;
+        const refNo = await nextRef(em, ProductionShipment, s.docPrefixes['shipment'] ?? 'SH', 3);
+        await em.save(em.create(ProductionShipment, {
+          refNo, orderId: o.id, productId: o.productId, manufacturerId: o.manufacturerId, destination: o.destination,
+          distributorId: o.distributorId, shipDate: dto.date, containers: l.ready, bundlesPerContainer: o.bundlesPerContainer,
+          packetsPerBundle: o.packetsPerBundle, rate: o.rate, vehicle: dto.vehicleNo.trim(), waybill: dto.biltyNo?.trim() || null,
+          note: dto.note?.trim() || null, shippedBy: user.name, status: 'In transit', method: 'Pickup',
+          driverName: dto.driverName.trim(), driverPhone: dto.driverPhone.trim(), transporter: dto.transporter?.trim() || null, dispatchRef,
+        }));
+        await this.event(em, o.id, user, `Dispatched ${l.ready} container${l.ready === 1 ? '' : 's'} (${refNo}, ${dispatchRef})`, via);
+        loaded.push(`${l.ready} × ${o.product.sku}`);
+      }
+      const lead = [...orders].sort((a, b) => a.refNo.localeCompare(b.refNo))[0];
+      const name = lead.groupRef ?? lead.refNo;
+      const what = loaded.join(', ');
+      await this.notes.send(em, user,
+        ...(lead.distributorId ? [{ to: { distributorId: lead.distributorId }, kind: 'order.dispatched', tone: 'success' as const, refNo: name, link: LINK.portal('stock'),
+          title: `Order ${name} dispatched from ${lead.manufacturer.name} (${dispatchRef})`,
+          body: `${what} · ${via}. The dispatch voucher is on the order; confirm what arrives, or open a dispute for damage.` }] : []),
+        { to: { staff: [...TEAM.manufacturing, 'Distribution'] }, kind: 'order.dispatched', refNo: name, link: LINK.manufacturing('orders'),
+          title: `${lead.manufacturer.name} dispatched order ${name} (${dispatchRef})`, body: `${what} · ${via}` },
+        { to: { manufacturerId: lead.manufacturerId }, kind: 'order.dispatched', refNo: name, link: LINK.factory,
+          title: `Order ${name} dispatched (${dispatchRef})`, body: what },
+      );
+      return { dispatchRef, loads: loaded.length };
+    });
+  }
+
   /** records containers leaving the factory on an accepted order: delivered by the manufacturer, or collected */
   private async move(em: EntityManager, user: ShipmentUser, o: ProductionOrder, dto: ShipDto, method: 'Delivery' | 'Pickup') {
     const what = method === 'Pickup' ? 'pickup' : 'shipment';
@@ -258,56 +332,107 @@ export class ShipmentsService {
   // ───────────── receiving side ─────────────
 
   async receive(user: ShipmentUser, id: string, dto: ReceiveDto) {
-    return this.db.transaction(async (em) => {
-      const s = await em.findOne(ProductionShipment, { where: { id } });
-      if (!s) throw new NotFoundException('Shipment not found');
-      if (user.role === 'Distributor' && s.distributorId !== this.own(user.distributorId, 'distributor')) {
-        throw new ForbiddenException('This shipment is for another distributor.');
-      }
-      if (s.destination === 'Warehouse' && !['Admin', 'Manufacturing'].includes(user.role)) {
-        throw new ForbiddenException('Warehouse deliveries are received by Admin or Manufacturing.');
-      }
-      if (s.status !== 'In transit') throw new BadRequestException(`${s.refNo} was already received.`);
-      if (dto.date > today()) throw new BadRequestException('A receipt cannot be dated in the future.');
-      if (dto.date < s.shipDate) throw new BadRequestException('A receipt cannot be dated before the shipment.');
-      if (dto.receivedContainers > s.containers) throw new BadRequestException(`${s.refNo} carried ${s.containers} container${s.containers > 1 ? 's' : ''}.`);
-      if (dto.receivedContainers < s.containers && !dto.note?.trim()) throw new BadRequestException('Say what was short or damaged.');
+    return this.db.transaction((em) => this.receiveIn(em, user, id, dto));
+  }
 
-      let days: number | null = null;
-      if (s.destination === 'Distributor') {
-        const [p, d] = await Promise.all([
-          em.findOne(Product, { where: { id: s.productId } }),
-          s.distributorId ? em.findOne(Distributor, { where: { id: s.distributorId } }) : null,
-        ]);
-        days = p?.selloutDays ?? d?.selloutDays ?? (await this.settings.get(em)).defaultSelloutDays ?? 30;
+  /**
+   * The distributor receives a whole dispatch (every product loaded on one vehicle, one DC- number): everything that
+   * left the factory arrived; bundles damaged on arrival become claims (a dispute the manufacturer answers), with the
+   * photos as proof on each claim. No damage: the delivery is simply accepted. One notice for the whole dispatch.
+   */
+  async receiveDispatch(user: ShipmentUser, dto: ReceiveDispatchDto) {
+    return this.db.transaction(async (em) => {
+      const loads = await em.find(ProductionShipment, { where: { id: In(dto.lines.map((l) => l.shipmentId)) }, relations: ['product', 'distributor', 'manufacturer', 'order'] });
+      if (loads.length !== new Set(dto.lines.map((l) => l.shipmentId)).size) throw new NotFoundException('A load of this delivery was not found.');
+      if (new Set(loads.map((l) => l.dispatchRef ?? l.id)).size > 1) throw new BadRequestException('These loads do not belong to one dispatch.');
+      const damaged = dto.lines.filter((l) => (l.damaged ?? 0) > 0);
+      if (damaged.length && !dto.note?.trim()) throw new BadRequestException('Say what was damaged: the manufacturer sees it with the dispute.');
+      for (const l of loads) await this.receiveIn(em, user, l.id, { date: dto.date, receivedContainers: l.containers, note: dto.note?.trim() || undefined }, true);
+      const claims: string[] = [];
+      for (const d of damaged) {
+        const load = await em.findOneOrFail(ProductionShipment, { where: { id: d.shipmentId }, relations: ['product', 'distributor', 'manufacturer'] });
+        // the same photos back every claim of the dispute: the first claim takes them, the others get copies
+        const proofIds = claims.length ? await this.copyFiles(em, dto.proofIds ?? []) : dto.proofIds ?? [];
+        const c = await this.claims.createIn(em, user, load, { date: dto.date, kind: 'Damaged', bundles: d.damaged!, note: dto.note!.trim(), proofIds });
+        claims.push(`${c.refNo}: ${d.damaged} bundle${d.damaged === 1 ? '' : 's'} of ${load.product.sku}`);
       }
-      Object.assign(s, {
-        status: 'Received', receivedDate: dto.date, receivedContainers: dto.receivedContainers, receivedBy: user.name,
-        receiptNote: dto.note?.trim() || null, selloutDays: days, sellBy: days ? addDays(dto.date, days) : null,
-      });
-      await em.save(s);
-      await this.posting.syncProductionShipment(em, s.id);
-      await this.posting.syncOrderAdvance(em, s.orderId);
-      await this.event(em, s.orderId, user, `Received ${dto.receivedContainers} of ${s.containers} (${s.refNo})`, s.receiptNote);
-      // damage found on arrival: a claim per line on this load
-      if (dto.damages?.length) {
-        const load = await em.findOneOrFail(ProductionShipment, { where: { id }, relations: ['product', 'distributor', 'manufacturer'] });
-        for (const d of dto.damages) await this.claims.createIn(em, user, load, { date: dto.date, ...d });
-      }
-      const full = await this.one(em, id);
-      const short = dto.receivedContainers < s.containers;
-      const who = s.destination === 'Warehouse' ? 'The warehouse' : full.distributor?.name ?? 'The distributor';
-      const title = `${who} received ${dto.receivedContainers} of ${s.containers} container${s.containers > 1 ? 's' : ''} on ${s.refNo}`;
-      const body = [`${full.product.sku} · order ${full.order.refNo}`, s.receiptNote].filter(Boolean).join(' · ');
-      const tone = short ? 'danger' as const : 'success' as const;
+      const lead = loads[0];
+      const ref = lead.dispatchRef ?? lead.refNo;
+      const what = loads.map((l) => `${l.containers} × ${l.product.sku}`).join(', ');
+      const title = claims.length ? `${lead.distributor?.name ?? 'The distributor'} received ${ref} with damage: dispute opened` : `${lead.distributor?.name ?? 'The distributor'} received ${ref} in good order`;
+      const body = [what, claims.join(' · ')].filter(Boolean).join(' · ');
+      const tone = claims.length ? 'danger' as const : 'success' as const;
       await this.notes.send(em, user,
-        { to: { manufacturerId: s.manufacturerId }, kind: 'shipment.received', tone, refNo: s.refNo, link: LINK.factory, title, body },
-        { to: { staff: [...TEAM.manufacturing, 'Distribution'] }, kind: 'shipment.received', tone, refNo: s.refNo, link: LINK.manufacturing('orders'), title, body },
-        { to: { distributorId: s.destination === 'Distributor' ? s.distributorId : null }, kind: 'shipment.received', tone, refNo: s.refNo, link: LINK.portal('stock'),
-          title: `Receipt of ${s.refNo} recorded`, body: short ? `${body} · Report faulty bundles as a delivery claim.` : body },
+        { to: { manufacturerId: lead.manufacturerId }, kind: 'shipment.received', tone, refNo: ref, link: LINK.factory, title, body },
+        { to: { staff: [...TEAM.manufacturing, 'Distribution'] }, kind: 'shipment.received', tone, refNo: ref, link: LINK.manufacturing('orders'), title, body },
+        { to: { distributorId: lead.distributorId }, kind: 'shipment.received', refNo: ref, link: LINK.portal('stock'),
+          title: claims.length ? `Delivery ${ref} received; dispute sent to ${lead.manufacturer.name}` : `Delivery ${ref} received`, body },
       );
-      return full;
+      return { dispatchRef: ref, claims: claims.length };
     });
+  }
+
+  /** copies of uploaded files (for a second claim of the same dispute) */
+  private async copyFiles(em: EntityManager, ids: string[]) {
+    const out: string[] = [];
+    for (const id of ids) {
+      const rows: { id: string }[] = await em.query(
+        `INSERT INTO attachments (name, mime, size, data, "uploadedBy") SELECT name, mime, size, data, "uploadedBy" FROM attachments WHERE id = $1 RETURNING id`, [id]);
+      if (rows[0]) out.push(rows[0].id);
+    }
+    return out;
+  }
+
+  /** confirms what arrived on one load, inside the caller's transaction (`quiet`: the caller sends one notice for all) */
+  private async receiveIn(em: EntityManager, user: ShipmentUser, id: string, dto: ReceiveDto, quiet = false) {
+    const s = await em.findOne(ProductionShipment, { where: { id } });
+    if (!s) throw new NotFoundException('Shipment not found');
+    if (user.role === 'Distributor' && s.distributorId !== this.own(user.distributorId, 'distributor')) {
+      throw new ForbiddenException('This shipment is for another distributor.');
+    }
+    if (s.destination === 'Warehouse' && !['Admin', 'Manufacturing'].includes(user.role)) {
+      throw new ForbiddenException('Warehouse deliveries are received by Admin or Manufacturing.');
+    }
+    if (s.status !== 'In transit') throw new BadRequestException(`${s.refNo} was already received.`);
+    if (dto.date > today()) throw new BadRequestException('A receipt cannot be dated in the future.');
+    if (dto.date < s.shipDate) throw new BadRequestException('A receipt cannot be dated before the shipment.');
+    if (dto.receivedContainers > s.containers) throw new BadRequestException(`${s.refNo} carried ${s.containers} container${s.containers > 1 ? 's' : ''}.`);
+    if (dto.receivedContainers < s.containers && !dto.note?.trim()) throw new BadRequestException('Say what was short or damaged.');
+
+    let days: number | null = null;
+    if (s.destination === 'Distributor') {
+      const [p, d] = await Promise.all([
+        em.findOne(Product, { where: { id: s.productId } }),
+        s.distributorId ? em.findOne(Distributor, { where: { id: s.distributorId } }) : null,
+      ]);
+      days = p?.selloutDays ?? d?.selloutDays ?? (await this.settings.get(em)).defaultSelloutDays ?? 30;
+    }
+    Object.assign(s, {
+      status: 'Received', receivedDate: dto.date, receivedContainers: dto.receivedContainers, receivedBy: user.name,
+      receiptNote: dto.note?.trim() || null, selloutDays: days, sellBy: days ? addDays(dto.date, days) : null,
+    });
+    await em.save(s);
+    await this.posting.syncProductionShipment(em, s.id);
+    await this.posting.syncOrderAdvance(em, s.orderId);
+    await this.event(em, s.orderId, user, `Received ${dto.receivedContainers} of ${s.containers} (${s.refNo})`, s.receiptNote);
+    // damage found on arrival: a claim per line on this load
+    if (dto.damages?.length) {
+      const load = await em.findOneOrFail(ProductionShipment, { where: { id }, relations: ['product', 'distributor', 'manufacturer'] });
+      for (const d of dto.damages) await this.claims.createIn(em, user, load, { date: dto.date, ...d });
+    }
+    const full = await this.one(em, id);
+    const short = dto.receivedContainers < s.containers;
+    const who = s.destination === 'Warehouse' ? 'The warehouse' : full.distributor?.name ?? 'The distributor';
+    const title = `${who} received ${dto.receivedContainers} of ${s.containers} container${s.containers > 1 ? 's' : ''} on ${s.refNo}`;
+    const body = [`${full.product.sku} · order ${full.order.refNo}`, s.receiptNote].filter(Boolean).join(' · ');
+    const tone = short ? 'danger' as const : 'success' as const;
+    if (!quiet) await this.notes.send(em, user,
+      { to: { manufacturerId: s.manufacturerId }, kind: 'shipment.received', tone, refNo: s.refNo, link: LINK.factory, title, body },
+      { to: { staff: [...TEAM.manufacturing, 'Distribution'] }, kind: 'shipment.received', tone, refNo: s.refNo, link: LINK.manufacturing('orders'), title, body },
+      { to: { distributorId: s.destination === 'Distributor' ? s.distributorId : null }, kind: 'shipment.received', tone, refNo: s.refNo, link: LINK.portal('stock'),
+        title: `Receipt of ${s.refNo} recorded`, body: short ? `${body} · Report faulty bundles as a delivery claim.` : body },
+    );
+    return full;
   }
 
   // ───────────── helpers ─────────────

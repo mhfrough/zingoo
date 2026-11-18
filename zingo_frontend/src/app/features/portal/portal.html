@@ -19,6 +19,9 @@
         <ul class="hero__facts">
           <li><span>Credit terms <app-help title="Credit terms" text="Days you have to pay an invoice after the goods are dispatched. The due date on each invoice is the dispatch date plus these days." /></span><strong>{{ p.distributor.paymentDays }} days</strong></li>
           <li><span>Advance guide <app-help title="Advance guide" text="Share of the order value Zen Foods asks you to pay before dispatch. Money paid before dispatch is held as an advance and set against the invoice when the goods leave." /></span><strong>{{ pct(p.distributor.advancePct) }}</strong></li>
+          @if (p.distributor.warrantyDays) {
+            <li><span>Warranty <app-help title="Warranty" text="For a warranty claim on goods you sold, contact the distributor within these days." /></span><strong>{{ p.distributor.warrantyDays }} days</strong></li>
+          }
           <li><span>Credit limit <app-help title="Credit limit" text="Most you may owe Zen Foods at one time. A new dispatch that takes the balance above it waits for Finance to approve." /></span><strong>{{ money(p.creditLimit) }}</strong></li>
         </ul>
       </div>
@@ -67,7 +70,7 @@
           <div class="card" data-flush>
             <div class="card__head"><div><h2>Recent orders</h2><p>{{ direct() ? 'Each order goes straight to the manufacturer; you see its answer and progress here' : 'Zingo reviews each one and orders it from the manufacturer' }}</p></div></div>
             <div class="card__body">
-              <app-data-table [columns]="requestColumns" [rows]="requests.value() ?? []" [searchable]="false" [loading]="requests.isLoading()"
+              <app-data-table [columns]="requestColumns" [rows]="requestRows()" [searchable]="false" [loading]="requests.isLoading()"
                 emptyTitle="No requests yet" emptyText="Use Request stock to ask for more." />
             </div>
           </div>
@@ -91,7 +94,7 @@
         <div class="card" data-flush>
           <div class="card__head"><div><h2>Stock orders to the manufacturer</h2><p>{{ direct() ? 'The manufacturer accepts with a date, reports each step and tells you when it is ready' : 'Zingo orders them from the manufacturer or says why not' }}</p></div></div>
           <div class="card__body">
-            <app-data-table [columns]="requestColumns" [rows]="requests.value() ?? []" [loading]="requests.isLoading()" searchPlaceholder="Search requests"
+            <app-data-table [columns]="requestColumns" [rows]="requestRows()" [loading]="requests.isLoading()" searchPlaceholder="Search requests"
               emptyTitle="No requests yet" emptyText="Use Request stock to ask for more." />
           </div>
         </div>
@@ -212,7 +215,7 @@
               <div><h2>Distributor orders with the manufacturers</h2><p>{{ desk.value()?.needsApproval ? 'Orders Zingo accepted, and how far each one is' : 'Orders go straight to the manufacturer (Settings: no Zingo approval). Watch the answer and progress here' }}</p></div>
             </div>
             <div class="card__body">
-              <app-data-table [columns]="deskOrderColumns" [rows]="desk.value()?.recent ?? []" [loading]="desk.isLoading()" searchPlaceholder="Search orders"
+              <app-data-table [columns]="deskOrderColumns" [rows]="deskOrderRows()" [loading]="desk.isLoading()" searchPlaceholder="Search orders"
                 [actions]="deskOrderActions" (action)="onDeskOrderAction($event)"
                 emptyTitle="No distributor orders yet" emptyText="Orders from distributors appear here." />
             </div>
@@ -223,7 +226,7 @@
               <div><h2>Requests to accept <app-tag [tone]="(desk.value()?.requests?.length ?? 0) ? 'warning' : 'success'">{{ desk.value()?.requests?.length ?? 0 }}</app-tag></h2><p>Accepting orders the goods from the product's manufacturer, delivered to the distributor</p></div>
             </div>
             <div class="card__body">
-              <app-data-table [columns]="deskRequestColumns" [rows]="desk.value()?.requests ?? []" [actions]="deskRequestActions" [searchable]="false"
+              <app-data-table [columns]="deskRequestColumns" [rows]="deskRequestRows()" [actions]="deskRequestActions" [searchable]="false"
                 [loading]="desk.isLoading()" emptyTitle="No requests waiting" emptyText="New distributor requests appear here." (action)="onRequestAction($event)" />
             </div>
           </div>

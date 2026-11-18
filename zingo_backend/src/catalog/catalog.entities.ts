@@ -600,6 +600,10 @@ export class Distributor extends AppEntity {
   @Column({ type: 'int', default: 30 })
   selloutDays: number;
 
+  /** warranty: for a warranty claim, contact the distributor within these days (information only); empty = not set */
+  @Column({ type: 'int', nullable: true })
+  warrantyDays: number | null;
+
   /** advance the distributor is asked to pay, % of the order */
   @Column({ type: 'decimal', precision: 5, scale: 2, default: 0, transformer: numeric })
   advancePct: number;

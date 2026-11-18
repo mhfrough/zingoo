@@ -233,6 +233,54 @@ type StepState = 'done' | 'now' | 'next';
       font-size: var(--text-sm);
     }
 
+    .grid-wrap {
+      overflow-x: auto;
+      border: 1px solid var(--border);
+      border-radius: var(--radius-md);
+      background: var(--surface-card);
+    }
+
+    /* a small read-only table inside the panel */
+    .mini {
+      inline-size: 100%;
+      border-collapse: collapse;
+      font-size: var(--text-sm);
+      font-variant-numeric: tabular-nums;
+
+      & th {
+        padding: var(--space-2);
+        border-block-end: 1px solid var(--border);
+        font-size: var(--text-xs);
+        font-weight: var(--weight-semibold);
+        text-align: start;
+        color: var(--text-3);
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+      }
+
+      & td {
+        padding: var(--space-2);
+        border-block-end: 1px solid var(--border);
+        vertical-align: top;
+      }
+
+      & td small {
+        display: block;
+        color: var(--text-3);
+        font-size: var(--text-xs);
+      }
+
+      & tfoot td {
+        font-weight: var(--weight-semibold);
+        border-block-end: 0;
+      }
+
+      & th:not(:first-child),
+      & td:not(:first-child) {
+        text-align: end;
+      }
+    }
+
     .row__end {
       display: inline-flex;
       align-items: center;
@@ -269,7 +317,7 @@ type StepState = 'done' | 'now' | 'next';
       @let o = d.order;
       <div class="head">
         <div class="head__id">
-          <h3>{{ o.refNo }}</h3>
+          <h3>{{ multi(d) ? (o.groupRef ?? o.refNo) : o.refNo }}</h3>
           <app-tag [tone]="tone(o)">{{ state(o) }}</app-tag>
         </div>
         @if (hasMoney(o)) {
@@ -292,9 +340,38 @@ type StepState = 'done' | 'now' | 'next';
         </ol>
       </section>
 
+      @if (multi(d)) {
+        <section>
+          <h4>Products
+            <app-help title="Products" text="This order holds several products from one manufacturer. Each product line is answered, made and dispatched together; its production order number is shown under it." />
+          </h4>
+          <div class="grid-wrap">
+            <table class="mini">
+              <thead><tr><th>Product</th><th>Containers</th>@if (dispatched(d)) { <th>Ready</th><th>Damaged in production</th> }<th>Bundles</th><th>Packets</th>@if (hasMoney(o)) { <th>Value</th> }</tr></thead>
+              <tbody>
+                @for (l of d.lines; track l.id) {
+                  <tr>
+                    <td><strong>{{ l.product.name }}</strong><small>{{ l.product.sku }} · {{ l.refNo }}{{ l.packaging ? ' · ' + l.packaging : '' }}</small></td>
+                    <td>{{ unitLabel(l.containers, l.containerUnit ?? l.product.containerUnit) }}</td>
+                    @if (dispatched(d)) {
+                      <td>{{ l.readyContainers ?? '-' }}</td>
+                      <td>{{ l.productionDamaged || '-' }}</td>
+                    }
+                    <td>{{ num(l.bundles) }}<small>{{ l.bundlesPerContainer }} / container</small></td>
+                    <td>{{ num(l.packets) }}<small>{{ l.packetsPerBundle }} / bundle</small></td>
+                    @if (hasMoney(o)) { <td>{{ money(lineValue(l)) }}</td> }
+                  </tr>
+                }
+              </tbody>
+              <tfoot><tr><td>Total</td><td>{{ num(sumOf(d, 'containers')) }}</td>@if (dispatched(d)) { <td>{{ num(readySum(d)) }}</td><td>{{ num(damagedSum(d)) || '-' }}</td> }<td>{{ num(sumOf(d, 'bundles')) }}</td><td>{{ num(sumOf(d, 'packets')) }}</td>@if (hasMoney(o)) { <td>{{ money(sumOf(d, 'value')) }}</td> }</tr></tfoot>
+            </table>
+          </div>
+        </section>
+      }
       <section>
         <h4>Order</h4>
         <dl class="facts">
+          @if (!multi(d)) {
           <div><dt>Product</dt><dd>{{ o.product.name }}<small>{{ o.product.sku }}</small></dd></div>
           <div>
             <dt>Quantity</dt>
@@ -307,6 +384,16 @@ type StepState = 'done' | 'now' | 'next';
             </dt>
             <dd>{{ o.packaging || 'Default' }}<small>{{ o.packetsPerBundle }} packets / bundle · {{ o.bundlesPerContainer }} bundles / container</small></dd>
           </div>
+          @if (o.readyContainers != null) {
+            <div>
+              <dt>Ready and loaded
+                <app-help title="Ready and loaded" text="What the factory made ready and loaded at dispatch: it may be more or less than ordered, and it is what is paid for. Damaged in production stayed at the factory." />
+              </dt>
+              <dd>{{ unitLabel(o.readyContainers, o.containerUnit ?? o.product.containerUnit) }}
+                <small>{{ o.readyContainers - o.containers > 0 ? '+' : '' }}{{ o.readyContainers - o.containers }} vs ordered{{ o.productionDamaged ? ' · ' + o.productionDamaged + ' damaged in production' : '' }}</small></dd>
+            </div>
+          }
+          }
           <div><dt>Manufacturer</dt><dd>{{ o.manufacturer.name }}</dd></div>
           <div><dt>Deliver to</dt><dd>{{ o.destination === 'Warehouse' ? 'Zen Foods warehouse' : (o.distributor?.name ?? '-') }}</dd></div>
           @if (o.groupRef) {
@@ -366,9 +453,9 @@ type StepState = 'done' | 'now' | 'next';
             <app-help title="Money" text="Rate is the manufacturer's price per packet. The advance is the share of the order value paid before production; the rest follows its payment terms." />
           </h4>
           <dl class="facts">
-            <div><dt>Rate / packet</dt><dd>{{ money(o.rate) }}</dd></div>
-            <div><dt>Order value</dt><dd>{{ money(o.value) }}</dd></div>
-            <div><dt>Advance {{ o.advancePct }}%</dt><dd>{{ money(o.advanceAmount) }}</dd></div>
+            @if (!multi(d)) { <div><dt>Rate / packet</dt><dd>{{ money(o.rate) }}</dd></div> }
+            <div><dt>Order value</dt><dd>{{ money(sumOf(d, 'value')) }}@if (dispatched(d)) { <small>{{ money(payableValue(d)) }} on the ready containers</small> }</dd></div>
+            <div><dt>Advance {{ o.advancePct }}%</dt><dd>{{ money(sumOf(d, 'advanceAmount')) }}</dd></div>
           </dl>
         </section>
       }
@@ -490,12 +577,12 @@ type StepState = 'done' | 'now' | 'next';
             <div><dt>Accepted damage</dt><dd>{{ num(dm.acceptedBundles) }}<small>credit or replacement</small></dd></div>
             <div><dt>Good bundles</dt><dd>{{ num(dm.bundles - dm.openBundles - dm.creditBundles) }}<small>after damage</small></dd></div>
             @if (hasMoney(o)) {
-              <div><dt>Order value</dt><dd>{{ money(o.value) }}<small>before damage</small></dd></div>
+              <div><dt>Order value</dt><dd>{{ money(payableValue(d)) }}<small>{{ dispatched(d) ? 'ready containers, before damage' : 'before damage' }}</small></dd></div>
               <div><dt>Credit accepted</dt><dd>{{ money(dm.credit) }}</dd></div>
               <div><dt>Held by open claims</dt><dd>{{ money(dm.held) }}</dd></div>
-              <div><dt>Payable after damage</dt><dd><strong>{{ money(o.value - dm.credit - dm.held) }}</strong></dd></div>
+              <div><dt>Payable after damage</dt><dd><strong>{{ money(payableValue(d) - dm.credit - dm.held) }}</strong></dd></div>
               <div><dt>Paid to the manufacturer</dt><dd>{{ money(dm.paid) }}</dd></div>
-              <div><dt>Balance</dt><dd><strong>{{ money(o.value - dm.credit - dm.held - dm.paid) }}</strong></dd></div>
+              <div><dt>Balance</dt><dd><strong>{{ money(payableValue(d) - dm.credit - dm.held - dm.paid) }}</strong></dd></div>
             }
           </dl>
         </section>
@@ -596,6 +683,20 @@ export class OrderDetail {
   protected tone = (o: ProductionOrder) => ORDER_TONE[o.status];
   protected state = orderState;
   protected hasMoney = (o: ProductionOrder) => typeof o.value === 'number';
+  private linesOf = (d: OrderDetailData) => (d.lines?.length ? d.lines : [d.order]);
+  /** the factory recorded the ready quantities (Ready to Dispatch) */
+  protected dispatched = (d: OrderDetailData) => this.linesOf(d).some((l) => l.readyContainers != null);
+  protected readySum = (d: OrderDetailData) => this.linesOf(d).reduce((n, l) => n + (l.readyContainers ?? 0), 0);
+  protected damagedSum = (d: OrderDetailData) => this.linesOf(d).reduce((n, l) => n + (l.productionDamaged ?? 0), 0);
+  /** a line's value on what is paid for: the ready containers once dispatched, else the ordered ones */
+  protected lineValue = (l: ProductionOrder) =>
+    l.readyContainers != null && l.containers ? (l.value * l.readyContainers) / l.containers : l.value;
+  protected payableValue = (d: OrderDetailData) => this.linesOf(d).reduce((n, l) => n + (this.lineValue(l) || 0), 0);
+  /** the order holds several products (one combined order) */
+  protected multi = (d: OrderDetailData) => (d.lines?.length ?? 1) > 1;
+  /** a total over every product of the order */
+  protected sumOf = (d: OrderDetailData, k: 'containers' | 'bundles' | 'packets' | 'value' | 'advanceAmount') =>
+    (d.lines?.length ? d.lines : [d.order]).reduce((n, l) => n + (Number(l[k]) || 0), 0);
   protected loadTone = (s: OrderLoad): Tone => (s.receivedDate ? 'success' : 'info');
   protected claimTone = (c: OrderClaim): Tone => (c.status === 'Accepted' ? 'success' : c.status === 'Rejected' ? 'danger' : c.status === 'Hold' ? 'info' : 'warning');
 
@@ -606,7 +707,7 @@ export class OrderDetail {
     const credits = accepted.filter((c) => c.resolution === 'Credit');
     const sum = (l: OrderClaim[], f: (c: OrderClaim) => number) => l.reduce((n, c) => n + f(c), 0);
     return {
-      bundles: d.order.bundles,
+      bundles: this.sumOf(d, 'bundles'),
       openBundles: sum(open, (c) => c.bundles),
       acceptedBundles: sum(accepted, (c) => c.bundles),
       creditBundles: sum(credits, (c) => c.bundles),

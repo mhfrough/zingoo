@@ -148,6 +148,10 @@ const STATUSES: { value: Distributor['status']; hint: string }[] = [
                    [error]="invalid('selloutDays') ? '0 to 365 days' : null">
           <input type="number" formControlName="selloutDays" min="0" max="365" step="1" />
         </app-field>
+        <app-field label="Warranty (days)" hint="Empty = not set" [error]="invalid('warrantyDays') ? '0 to 3650 days' : null"
+          help="For a warranty claim, contact this distributor within these days. Shown to the distributor; it does not block anything.">
+          <input type="number" formControlName="warrantyDays" min="0" max="3650" step="1" placeholder="e.g. 30" />
+        </app-field>
 
         @if (distributor()) {
           <h4 class="form-section">Status</h4>
@@ -226,6 +230,7 @@ export class DistributorForm extends FormModal {
     creditLimit: [0, Validators.min(0)],
     advancePct: [0, [Validators.min(0), Validators.max(100)]],
     selloutDays: [30, [Validators.min(0), Validators.max(365)]],
+    warrantyDays: [null as number | null, [Validators.min(0), Validators.max(3650)]],
     status: ['Active' as Distributor['status']],
     statusNote: [''],
     statusUntil: [''],
@@ -300,13 +305,13 @@ export class DistributorForm extends FormModal {
         countries: d.countries ?? [], exclusive: String(!!d.exclusive),
         contact: d.contact ?? '', address: d.address ?? '', taxNo: d.taxNo ?? '',
         paymentChoice: choice, paymentCustom: days, creditLimit: Number(d.creditLimit), advancePct: Number(d.advancePct),
-        selloutDays: d.selloutDays ?? 30, status: d.status ?? 'Active', statusNote: d.statusNote ?? '', statusUntil: d.statusUntil ?? '',
+        selloutDays: d.selloutDays ?? 30, warrantyDays: d.warrantyDays ?? null, status: d.status ?? 'Active', statusNote: d.statusNote ?? '', statusUntil: d.statusUntil ?? '',
         poc: d.poc ?? '', contract: d.contract ?? '', terms: d.terms ?? '', files: d.files ?? [],
       }
       : {
         market: 'Local', name: '', provinces: [], districts: [], cities: [], countries: [], exclusive: 'false',
         contact: '', address: '', taxNo: '', paymentChoice: cycles.includes(30) ? '30' : String(cycles[0] ?? 30), paymentCustom: 30,
-        creditLimit: 0, advancePct: 0, selloutDays: this.defaultSelloutDays(), status: 'Active', statusNote: '', statusUntil: '',
+        creditLimit: 0, advancePct: 0, selloutDays: this.defaultSelloutDays(), warrantyDays: null, status: 'Active', statusNote: '', statusUntil: '',
         poc: '', contract: '', terms: '', files: [],
       });
     intlReset(this.fb, this.form.controls.intl, d);
@@ -327,6 +332,7 @@ export class DistributorForm extends FormModal {
       exclusive: v.exclusive === 'true',
       contact: v.contact, address: v.address, taxNo: v.taxNo,
       paymentDays, creditLimit: Number(v.creditLimit), advancePct: Number(v.advancePct), selloutDays: Number(v.selloutDays),
+      warrantyDays: v.warrantyDays === null || (v.warrantyDays as unknown) === '' ? null : Number(v.warrantyDays),
       ...(this.distributor() ? {
         status: v.status, statusNote: v.status === 'Active' ? null : v.statusNote.trim() || null,
         statusUntil: v.status === 'Temporary suspend' && v.statusUntil ? v.statusUntil : null,

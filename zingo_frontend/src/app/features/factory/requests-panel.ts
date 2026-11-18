@@ -1,7 +1,7 @@
 import { ChangeDetectionStrategy, Component, computed, inject, input, output, signal } from '@angular/core';
 import { AuthService } from '../../core/auth.service';
 import { errorText } from '../../shared/errors';
-import { docDate, subLine, Tone, fmtAmount, fmtDate, fmtMoney, productLabel } from '../../shared/format';
+import { docDate, subLine, Tone, fmtAmount, fmtDate, fmtMoney, productLabel, dueCountdown, dueTone } from '../../shared/format';
 import { Btn, ConfirmService, DataTable, RowAction, RowActionEvent, TableColumn, ToastService } from '../../ui';
 import { Manufacturer } from '../ops/models';
 import { OrderReasonForm } from './answer-forms';
@@ -98,7 +98,15 @@ export class RequestsPanel {
     },
     { id: 'ref', label: 'Request no.', kind: 'mono', value: (r) => r.refNo, sortValue: (r) => r.date, sub: (r) => subLine(docDate(r), r.invoiceNo ? `inv. ${r.invoiceNo}` : null) },
     { id: 'amount', label: 'Amount', kind: 'money', value: (r) => r.amount, sub: (r) => (r.paid > 0 ? `Paid ${fmtAmount(r.paid)}` : null) },
-    { id: 'bank', label: 'Pay into', priority: 2, value: (r) => r.bank.bank, sub: (r) => r.bank.account },
+    {
+      id: 'due', label: 'Due', kind: 'date', priority: 2, value: (r) => r.dueDate ?? null, sortValue: (r) => r.dueDate ?? '',
+      valueTone: (r) => (r.status === 'Submitted' && r.paid < r.amount - 0.01 ? dueTone(r.dueDate) : null),
+      sub: (r) => (r.status === 'Submitted' && r.paid < r.amount - 0.01 ? dueCountdown(r.date, r.dueDate) : null),
+    },
+    {
+      id: 'bank', label: 'Pay into', priority: 3, value: (r) => r.bank.bank,
+      sub: (r) => `${r.bank.account}${(r.banks?.length ?? 1) > 1 ? ` (+${r.banks!.length - 1} more)` : ''}`,
+    },
     { id: 'state', label: 'Status', kind: 'tag', value: (r) => r.state, tone: stateTone, sub: (r) => r.reason ?? (r.signatures.length ? `Signed ${r.signatures.join(' + ')}` : null) },
   ]);
 

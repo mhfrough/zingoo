@@ -1,10 +1,9 @@
 import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
 import { rxResource } from '@angular/core/rxjs-interop';
-import { FormsModule } from '@angular/forms';
 import { of } from 'rxjs';
 import { AuthService } from '../../core/auth.service';
 import { fmtMoney, fmtNumber } from '../../shared/format';
-import { Field, Kpi, PageHeader, Select, SelectOption } from '../../ui';
+import { Kpi, PageHeader, SelectOption, ViewAs } from '../../ui';
 import { OpsApi } from '../ops/ops.api';
 import { FactoryApi } from './factory.api';
 import { OrdersPanel } from './orders-panel';
@@ -21,7 +20,7 @@ import { MfrStatement } from './trail-panel';
 @Component({
   selector: 'app-factory',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [FormsModule, Field, Kpi, PageHeader, Select, OrdersPanel, RequestsPanel, ShipmentsPanel, DeliveryClaimsPanel, MfrStatement],
+  imports: [Kpi, PageHeader, ViewAs, OrdersPanel, RequestsPanel, ShipmentsPanel, DeliveryClaimsPanel, MfrStatement],
   styles: `
     .terms {
       display: grid;
@@ -39,9 +38,6 @@ import { MfrStatement } from './trail-panel';
       }
     }
 
-    .picker {
-      max-inline-size: 24rem;
-    }
   `,
   template: `
     <app-page-header eyebrow="Zingoo · Manufacturer portal" [title]="profile.value()?.manufacturer?.name ?? 'Manufacturer portal'"
@@ -49,12 +45,8 @@ import { MfrStatement } from './trail-panel';
 
     <div class="stack">
       @if (!isManufacturer()) {
-        <div class="picker">
-          <app-field label="Manufacturer" hint="Staff view: pick whose portal to look at">
-            <app-select [options]="manufacturerOptions()" [ngModel]="picked() ?? profile.value()?.manufacturer?.id"
-              (ngModelChange)="picked.set($event)" [clearable]="false" placeholder="Choose a manufacturer" />
-          </app-field>
-        </div>
+        <app-view-as kind="Manufacturer" icon="factory" [options]="manufacturerOptions()"
+          [value]="picked() ?? profile.value()?.manufacturer?.id" (valueChange)="picked.set($event ?? null)" />
       }
 
       <div class="grid-auto">
@@ -147,7 +139,7 @@ export class Factory {
     stream: () => this.ops.manufacturers(),
   });
   protected manufacturerOptions = computed<SelectOption<string>[]>(() =>
-    (this.manufacturers.value() ?? []).map((m) => ({ value: m.id, label: m.name })));
+    (this.manufacturers.value() ?? []).map((m) => ({ value: m.id, label: m.name, sub: m.poc || m.contact || undefined })));
 
   protected num = fmtNumber;
   protected money = fmtMoney;

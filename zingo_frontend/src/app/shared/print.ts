@@ -18,6 +18,8 @@ export interface Voucher {
   table?: { head: string[]; rows: string[][]; foot?: string[] };
   /** a closing line in small type */
   note?: string;
+  /** signature boxes at the foot: who signs (e.g. "Dispatched by", "Driver", "Received by") */
+  signatures?: string[];
 }
 
 const esc = (s: unknown) =>
@@ -46,11 +48,15 @@ ${v.table.foot ? `<tfoot><tr>${v.table.foot.map((c) => `<td>${esc(c)}</td>`).joi
   .items td:not(:first-child), .items th:not(:first-child) { text-align: right; }
   .items tfoot td { font-weight: 600; border-top: 1px solid #0c1727; border-bottom: 0; }
   .note { color: #556070; font-size: 11px; margin-top: 24px; }
+  .signs { display: flex; gap: 24px; margin-top: 48px; }
+  .signs div { flex: 1; border-top: 1px solid #0c1727; padding-top: 6px; font-size: 11px; color: #556070; }
+  .signs b { display: block; color: #0c1727; font-size: 12px; }
 </style></head><body>
 <header><strong>${esc(v.company ?? 'Zen Foods')}</strong><h1>${esc(v.title)} · ${esc(v.ref)}</h1></header>
 <table class="facts">${v.facts.map(([k, val]) => `<tr><td>${esc(k)}</td><td>${esc(val)}</td></tr>`).join('')}</table>
 ${table}
 ${v.note ? `<p class="note">${esc(v.note)}</p>` : ''}
+${v.signatures?.length ? `<div class="signs">${v.signatures.map((s) => `<div><b>${esc(s)}</b>Name, signature and date</div>`).join('')}</div>` : ''}
 </body></html>`;
 }
 

@@ -3,7 +3,7 @@ import { FormArray, FormGroup, ReactiveFormsModule, Validators } from '@angular/
 import { toSignal } from '@angular/core/rxjs-interop';
 import { SettingsStore } from '../../core/settings.store';
 import { errorText } from '../../shared/errors';
-import { docDate, subLine, Tone, fmtAmount, fmtAmount2, fmtDate, fmtMoney, fmtNumber, productLabel } from '../../shared/format';
+import { docDate, subLine, Tone, fmtAmount, fmtAmount2, fmtDate, fmtMoney, fmtNumber, productLabel, dueCountdown, dueTone } from '../../shared/format';
 import { Btn, ConfirmService, DataTable, Field, MoneyInput, Offcanvas, RichText, RowAction, RowActionEvent, TableColumn, ToastService } from '../../ui';
 import { FormModal } from '../ops/form-modal';
 import { OrderReasonForm } from './answer-forms';
@@ -285,7 +285,11 @@ export class InvoicesPanel {
       sub: (i) => subLine(docDate(i), i.invoiceNo, this.mode() === 'company' ? `${fmtNumber(i.containers)} container${i.containers === 1 ? '' : 's'}` : null),
     },
     { id: 'amount', label: 'Amount', kind: 'money', value: (i) => i.amount, sub: (i) => (i.paid > 0 ? `Paid ${fmtAmount(i.paid)}` : null) },
-    { id: 'due', label: 'Still due', kind: 'money', priority: 2, value: (i) => i.due, sub: (i) => (i.status === 'Verified' ? `Due ${fmtDate(i.dueDate)}` : null) },
+    {
+      id: 'due', label: 'Still due', kind: 'money', priority: 2, value: (i) => i.due,
+      valueTone: (i) => (i.status === 'Verified' && i.due > 0.01 ? dueTone(i.dueDate) : null),
+      sub: (i) => (i.status === 'Verified' && i.dueDate ? subLine(`Due ${fmtDate(i.dueDate)}`, i.due > 0.01 ? dueCountdown(i.date, i.dueDate) : 'paid') : null),
+    },
     { id: 'state', label: 'Status', kind: 'tag', value: (i) => i.state, tone, sub: (i) => i.reason },
   ]);
   protected totals = computed(() => {

@@ -7,6 +7,15 @@ export interface PackagingTemplate {
   name: string;
   packetsPerBundle: number;
   bundlesPerContainer: number;
+  /** what one container of this packing is called (Settings list CONTAINER_UNIT): Carton, Bora */
+  containerUnit?: string | null;
+  isDefault: boolean;
+}
+
+/** one manufacturer that can make a SKU, at its own price per packet; one is the default for new orders */
+export interface ProductMaker {
+  manufacturerId: string;
+  rate: number;
   isDefault: boolean;
 }
 
@@ -87,11 +96,22 @@ export class Product extends AppEntity {
   @Column({ type: 'varchar', length: 40, nullable: true })
   packetSize: string | null;
 
+  /** the default packaging template's container unit (Carton, Bora); each template carries its own, an order keeps the one it used */
+  @Column({ type: 'varchar', length: 40, nullable: true })
+  containerUnit: string | null;
+
   /** what the product is, in words */
   @Column({ type: 'text', nullable: true })
   description: string | null;
 
-  /** the manufacturer that makes this SKU */
+  /**
+   * Every manufacturer that can make this SKU, each at its own rate per packet. The default one is also
+   * `manufacturerId` / `manufacturerRate` (what the margins and old screens read). An order picks one.
+   */
+  @Column({ type: 'jsonb', default: () => "'[]'" })
+  makers: ProductMaker[];
+
+  /** the default manufacturer of this SKU (the default of `makers`) */
   @ManyToOne(() => Manufacturer, { nullable: true })
   @JoinColumn({ name: 'manufacturerId' })
   manufacturer: Manufacturer | null;

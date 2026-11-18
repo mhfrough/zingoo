@@ -1,10 +1,16 @@
-import { Body, Controller, Delete, Get, Param, ParseUUIDPipe, Patch, Post, Query, Request } from '@nestjs/common';
-import { ApiOperation, ApiQuery, ApiTags } from '@nestjs/swagger';
+import { BadRequestException, Body, Controller, Delete, Get, Param, ParseUUIDPipe, Patch, Post, Query, Request, Res, UploadedFile, UseInterceptors } from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
+import { ApiBody, ApiConsumes, ApiOperation, ApiQuery, ApiTags } from '@nestjs/swagger';
+import type { Response } from 'express';
+import { MAX_ATTACHMENT_BYTES } from '../attachments/attachments.service';
 import { Read, Roles, Write } from '../auth/roles.decorator';
 import {
   AcceptProductionOrderDto, CreateProductionOrderDto, ReasonDto, StageDto, UpdateProductionOrderDto,
 } from './production-orders.dto';
-import { ProductionOrdersService } from './production-orders.service';
+import { ORDER_DOC_KINDS, OrderDocKind, ProductionOrdersService } from './production-orders.service';
+
+/** who may attach files to an order: both partners (on their own orders) and the staff who run orders */
+const DOC_WRITERS = ['Admin', 'Manufacturing', 'Distribution', 'Manufacturer', 'Distributor'] as const;
 
 /** who may answer an order and report progress: the manufacturer itself, or staff acting for it */
 const FACTORY = ['Admin', 'Manufacturing', 'Manufacturer'] as const;
@@ -32,6 +38,45 @@ export class ProductionOrdersController {
   @ApiOperation({ summary: 'The manufacturer a factory portal shows, with its order counts and the production stages' })
   profile(@Request() req: any, @Query('manufacturerId') manufacturerId?: string) {
     return this.service.profile(req.user, manufacturerId || undefined);
+  }
+
+  @Post(':id/documents')
+  @Roles(...DOC_WRITERS)
+  @ApiOperation({ summary: 'Attach a file to an order: kind CHALLAN (signed dispatch voucher), INVOICE (manufacturer invoice copy) or OTHER' })
+  @ApiConsumes('multipart/form-data')
+  @ApiBody({ schema: { type: 'object', properties: { file: { type: 'string', format: 'binary' }, kind: { type: 'string', enum: [...ORDER_DOC_KINDS] } } } })
+  @UseInterceptors(FileInterceptor('file', { limits: { fileSize: MAX_ATTACHMENT_BYTES, files: 1 } }))
+  addDocument(@Request() req: any, @Param('id', ParseUUIDPipe) id: string, @UploadedFile() file: Express.Multer.File, @Body('kind') kind: string) {
+    if (!ORDER_DOC_KINDS.includes(kind as OrderDocKind)) throw new BadRequestException('Say what the file is: CHALLAN, INVOICE or OTHER.');
+    return this.service.addDocument(req.user, id, kind as OrderDocKind, file);
+  }
+
+  @Get(':id/documents/:docId')
+  @Read('manufacturing', 'factory', 'portal', 'distribution')
+  @ApiOperation({ summary: 'Download one file of an order' })
+  async document(@Request() req: any, @Param('id', ParseUUIDPipe) id: string, @Param('docId', ParseUUIDPipe) docId: string, @Res() res: Response) {
+    const a = await this.service.documentContent(req.user, id, docId);
+    res.set({
+      'Content-Type': a.mime,
+      'Content-Length': String(a.size),
+      'Content-Disposition': `attachment; filename="${encodeURIComponent(a.name)}"; filename*=UTF-8''${encodeURIComponent(a.name)}`,
+      'X-Content-Type-Options': 'nosniff',
+      'Cache-Control': 'private, max-age=0, no-store',
+    });
+    res.end(a.data);
+  }
+
+  @Delete(':id/documents/:docId')
+  @Roles(...DOC_WRITERS)
+  removeDocument(@Request() req: any, @Param('id', ParseUUIDPipe) id: string, @Param('docId', ParseUUIDPipe) docId: string) {
+    return this.service.removeDocument(req.user, id, docId);
+  }
+
+  @Get(':id/detail')
+  @Read('manufacturing', 'factory', 'portal', 'distribution')
+  @ApiOperation({ summary: 'One order in full: timeline, loads with transport, claims and the production steps' })
+  detail(@Request() req: any, @Param('id', ParseUUIDPipe) id: string) {
+    return this.service.detail(req.user, id);
   }
 
   @Get(':id')

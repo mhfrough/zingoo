@@ -1,0 +1,15 @@
+/* TEAM */
+Developer: Mohammad Hamza
+Role: Design, build and development
+GitHub: https://github.com/mhfrough
+Site: https://mhfrough.dev/?utm_source=zingoo&utm_medium=referral&utm_campaign=built_by&utm_content=humans_txt
+
+/* OWNER */
+Owner: Mudassir Jokhio
+Role: CEO
+Company: Arittek
+
+/* SITE */
+Name: Zingoo OS, ERP & Distributor Partner Portal for Zen Foods
+Standards: HTML5, CSS3
+Components: Angular 21, NestJS, TypeORM, PostgreSQL

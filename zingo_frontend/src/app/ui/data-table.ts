@@ -47,6 +47,12 @@ export interface TableColumn<T> {
   sortable?: boolean;
   /** value to sort by when it differs from the shown value (a date shown as text, a status rank) */
   sortValue?: (row: T) => string | number | null | undefined;
+  /** colour of the main value (green paid, red overdue); for kind = 'tag' use `tone` */
+  valueTone?: (row: T) => Tone | null | undefined;
+  /** a thin bar under the main value, 0..1 (share paid, share delivered); coloured by `valueTone` */
+  meter?: (row: T) => number | null | undefined;
+  /** text shown on hover over the cell (a list of payments, say); one line per entry */
+  tip?: (row: T) => string | null | undefined;
 }
 
 /** A row action button (the first two show as buttons, the rest go into a "more" menu). */
@@ -260,11 +266,20 @@ export function pageList(current: number, total: number): (number | '…')[] {
                 @for (c of cols(); track c.id; let first = $first) {
                   <td [attr.data-label]="c.label" [attr.data-priority]="c.priority ?? 1"
                       [attr.data-end]="isEnd(c) ? '' : null" [attr.data-primary]="first ? '' : null">
-                    <div class="cell">
+                    <div class="cell" [attr.title]="c.tip ? c.tip(row) || null : null">
                       @if (c.kind === 'tag') {
                         <app-tag [tone]="c.tone ? c.tone(row) : 'neutral'">{{ text(c, row) }}</app-tag>
                       } @else {
-                        <div class="cell__main" [class.mono]="c.kind === 'mono'" [class.cell__title]="c.kind === 'title'">{{ text(c, row) }}</div>
+                        <div class="cell__main" [class.mono]="c.kind === 'mono'" [class.cell__title]="c.kind === 'title'"
+                             [attr.data-tone]="c.valueTone ? c.valueTone(row) || null : null">{{ text(c, row) }}</div>
+                      }
+                      @if (c.meter) {
+                        @let m = c.meter(row);
+                        @if (m !== null && m !== undefined) {
+                          <div class="cell__meter" [attr.data-tone]="c.valueTone ? c.valueTone(row) || null : null" aria-hidden="true">
+                            <span [style.inline-size.%]="clampPct(m)"></span>
+                          </div>
+                        }
                       }
                       @if (c.sub && c.sub(row); as sub) {
                         <div class="cell__sub">{{ flat(sub) }}</div>
@@ -581,6 +596,10 @@ export class DataTable<T> {
     if (c.kind === 'tag') return '4.5rem';
     const w = [78, 62, 86, 54, 70][(row * 2 + col * 3) % 5];
     return c.kind === 'money' || c.kind === 'number' ? `${Math.min(w, 60)}%` : `${w}%`;
+  }
+
+  protected clampPct(v: number) {
+    return Math.round(Math.min(1, Math.max(0, v)) * 100);
   }
 
   protected isEnd(c: TableColumn<T>) {

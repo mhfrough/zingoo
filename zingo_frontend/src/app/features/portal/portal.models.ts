@@ -29,6 +29,8 @@ export interface PortalOrder extends Order {
   receipt: { id: string; refNo: string; status: string } | null;
   /** money reported by the distributor and not yet verified */
   pendingAdvice: number;
+  /** every payment against the order (advances and collections), oldest first */
+  payments?: { date: string; refNo: string; amount: number; method: string; advance: boolean }[];
 }
 
 export interface PortalRequest {
@@ -43,11 +45,22 @@ export interface PortalRequest {
   notes: string | null;
   status: 'Requested' | 'Accepted' | 'Rejected';
   reviewNote: string | null;
-  product: { sku: string; name: string };
+  product: { sku: string; name: string; containerUnit?: string | null };
+  /** the order this line belongs to (DO-001) when several products were ordered together */
+  groupRef?: string | null;
+  containers?: number | null;
+  packaging?: string | null;
+  packetsPerBundle?: number | null;
+  bundlesPerContainer?: number | null;
+  transport?: OrderTransport | null;
+  /** Carton, Bora: from the template picked, or changed on the order */
+  containerUnit?: string | null;
   order: { refNo: string } | null;
   /** the production order the request became */
   productionOrder: {
     refNo: string; status: string; stage: string | null; readyDate: string | null; reason?: string | null;
+    /** ready date plus the transit days of Settings */
+    expectedDate?: string | null;
     containers?: number; shipped?: number; received?: number;
     manufacturer?: { name: string };
   } | null;
@@ -102,8 +115,19 @@ export interface PortalAdvice {
 }
 
 /** A SKU with the distributor's price. */
+/** planned transport given when ordering */
+export interface OrderTransport {
+  transporter?: string | null;
+  vehicleNo?: string | null;
+  driverName?: string | null;
+  driverPhone?: string | null;
+  driverCnic?: string | null;
+}
+
 export interface PortalRate {
   manufacturerName?: string | null;
+  /** every manufacturer that can make it (names only); an order line may pick one, else the default */
+  madeBy?: { id: string; name: string; isDefault: boolean }[];
   productId: string;
   sku: string;
   name: string;
@@ -112,6 +136,12 @@ export interface PortalRate {
   rate: number;
   agreed: boolean;
   packsPerCarton: number;
+  /** saved packaging templates: the order form picks one (figures can be changed per order) */
+  packagings?: { name: string; packetsPerBundle: number; bundlesPerContainer: number; containerUnit?: string | null; isDefault: boolean }[];
+  bundlesPerContainer?: number;
+  /** what a container is called (Carton, Bora) */
+  containerUnit?: string | null;
+  packetSize?: string | null;
   perCarton: number;
   spread: number;
   spreadPct: number;

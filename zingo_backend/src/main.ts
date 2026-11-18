@@ -1,3 +1,10 @@
+/**
+ * Zingoo OS · ERP & Distributor Partner Portal for Zen Foods
+ * Owner: Mudassir Jokhio, CEO, Arittek
+ * Designed, built and developed by Mohammad Hamza
+ *   GitHub:  https://github.com/mhfrough
+ *   Website: https://mhfrough.dev/?utm_source=zingoo&utm_medium=referral&utm_campaign=built_by&utm_content=backend_source
+ */
 import { ValidationPipe } from '@nestjs/common';
 import { PartnerViewInterceptor } from './common/partner-view.interceptor';
 import { ConfigService } from '@nestjs/config';

@@ -36,8 +36,38 @@ export const fmtDate = (v: string | null | undefined) => (v ? formatDate(v, 'dd 
 export const productLabel = (p: { name?: string | null; sku: string } | null | undefined) =>
   (!p ? '-' : p.name && p.name !== p.sku ? `${p.name} · ${p.sku}` : p.sku);
 /** "3 containers (30 bundles)" */
-export const qtyLabel = (containers: number, bundles?: number | null) =>
-  `${containers.toLocaleString('en-US')} container${containers === 1 ? '' : 's'}${bundles ? ` (${bundles.toLocaleString('en-US')} bundles)` : ''}`;
+const dayMs = 86_400_000;
+const dayOf = (iso: string) => Date.parse(`${iso.slice(0, 10)}T00:00:00Z`);
+const todayIso = () => new Date().toISOString().slice(0, 10);
+
+/**
+ * The payment-terms countdown of an unpaid invoice: "16 of 30 days left", "Due today", "5 days late".
+ * `from` is the invoice (or dispatch) date the terms run from; nothing when there is no due date.
+ */
+export const dueCountdown = (from: string | null | undefined, due: string | null | undefined): string | null => {
+  if (!due) return null;
+  const left = Math.round((dayOf(due) - dayOf(todayIso())) / dayMs);
+  const total = from ? Math.max(0, Math.round((dayOf(due) - dayOf(from)) / dayMs)) : 0;
+  if (left < 0) return `${-left} day${left === -1 ? '' : 's'} late`;
+  if (left === 0) return 'Due today';
+  return total >= left ? `${left} of ${total} days left` : `${left} day${left === 1 ? '' : 's'} left`;
+};
+
+/** red once past due, amber in the last 3 days, none otherwise */
+export const dueTone = (due: string | null | undefined): Tone | null => {
+  if (!due) return null;
+  const left = Math.round((dayOf(due) - dayOf(todayIso())) / dayMs);
+  return left < 0 ? 'danger' : left <= 3 ? 'warning' : null;
+};
+
+/** "2 containers (Bora)": the product's container unit in brackets (Settings list CONTAINER_UNIT), none when not set */
+export const containersLabel = (containers: number, unit?: string | null) =>
+  `${containers.toLocaleString('en-US')} container${containers === 1 ? '' : 's'}${unit ? ` (${unit})` : ''}`;
+/** "2 containers (Bora) · 20 bundles", or "2 containers (20 bundles)" when the product has no container unit */
+export const qtyLabel = (containers: number, bundles?: number | null, unit?: string | null) =>
+  unit
+    ? `${containersLabel(containers, unit)}${bundles ? ` · ${bundles.toLocaleString('en-US')} bundles` : ''}`
+    : `${containersLabel(containers)}${bundles ? ` (${bundles.toLocaleString('en-US')} bundles)` : ''}`;
 /** 16 Nov 2026, 14:05 (a stored time, in the viewer's clock) */
 export const fmtDateTime = (v: string | null | undefined) => (v ? formatDate(v, 'dd MMM yyyy, HH:mm', 'en-US') : '');
 

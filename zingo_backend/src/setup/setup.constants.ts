@@ -9,6 +9,7 @@ export const DEFAULT_SETTINGS = {
   packsPerCarton: 432,
   bundlesPerContainer: 10,
   defaultSelloutDays: 30,
+  transitDays: 2,
   defaultAdvancePct: 30,
   salesOrdersEnabled: false,
   requestsNeedApproval: false,
@@ -92,7 +93,7 @@ export const CAPITAL_SOURCE_DEFAULTS: { code: string; description: string; liabi
  * Starting entries of the simple pick-lists behind the loan and advance forms (the client prototype's choices),
  * plus the company's bank and cash accounts. Every one is editable on Settings & Data.
  */
-export const SIMPLE_LIST_DEFAULTS: Record<'LOAN_TENURE' | 'REPAY_PLAN' | 'REPAY_FREQUENCY' | 'ADVANCE_PURPOSE' | 'SETTLEMENT_METHOD' | 'BANK_ACCOUNT' | 'DELIVERY_STATUS' | 'BILL_TYPE' | 'BILL_TREATMENT' | 'APPROVER' | 'FLAVOUR' | 'PACKET_SIZE' | 'BANK' | 'ORDER_STAGE' | 'DIST_CLASSIFICATION' | 'KYC_DOC_TYPE' | 'REMITTANCE_METHOD' | 'CERT_TYPE' | 'EXPORT_DOC_TYPE', string[]> = {
+export const SIMPLE_LIST_DEFAULTS: Record<'LOAN_TENURE' | 'REPAY_PLAN' | 'REPAY_FREQUENCY' | 'ADVANCE_PURPOSE' | 'SETTLEMENT_METHOD' | 'BANK_ACCOUNT' | 'DELIVERY_STATUS' | 'BILL_TYPE' | 'BILL_TREATMENT' | 'APPROVER' | 'FLAVOUR' | 'PACKET_SIZE' | 'BANK' | 'ORDER_STAGE' | 'DIST_CLASSIFICATION' | 'KYC_DOC_TYPE' | 'REMITTANCE_METHOD' | 'CERT_TYPE' | 'EXPORT_DOC_TYPE' | 'CONTAINER_UNIT', string[]> = {
   LOAN_TENURE: ['Short-term (up to 12 months)', 'Long-term (over 12 months)', 'On demand'],
   REPAY_PLAN: ['Lump sum', 'Installments', 'On demand'],
   REPAY_FREQUENCY: ['Monthly', 'Quarterly', 'Half-yearly', 'Custom'],
@@ -118,6 +119,7 @@ export const SIMPLE_LIST_DEFAULTS: Record<'LOAN_TENURE' | 'REPAY_PLAN' | 'REPAY_
   CERT_TYPE: ['Halal', 'Health certificate', 'Laboratory analysis', 'Certificate of free sale'],
   // documents kept on an export shipment
   EXPORT_DOC_TYPE: ['Commercial invoice', 'Packing list', 'Certificate of origin', 'Bill of lading / AWB', 'Health certificate', 'Insurance certificate'],
+  CONTAINER_UNIT: ['Carton', 'Bora'],
   // banks a partner can be paid at; editable
   BANK: ['HBL', 'Meezan Bank', 'UBL', 'MCB Bank', 'Allied Bank', 'Bank Alfalah', 'Bank Al Habib', 'Faysal Bank', 'Standard Chartered', 'National Bank of Pakistan'],
 };

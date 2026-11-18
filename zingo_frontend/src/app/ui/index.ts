@@ -8,6 +8,8 @@ export { DataTable } from './data-table';
 export type { RowAction, RowActionEvent, TableColumn, TableFilter, TableFilterValue, TableQuery } from './data-table';
 export { EmptyState, Kpi, PageHeader } from './blocks';
 export { Field, TEXT_LIMITS } from './field';
+export { Help } from './help';
+export { ViewAs } from './view-as';
 export { IconComponent } from './icon';
 export type { IconName } from './icon';
 export { Modal } from './modal';

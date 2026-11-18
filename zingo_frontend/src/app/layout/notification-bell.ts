@@ -155,7 +155,7 @@ function ago(iso: string): string {
         }
 
         &[data-mine] {
-          border-inline-start: 3px solid var(--tone-warning-line);
+          border-color: var(--tone-warning-line);
         }
       }
 

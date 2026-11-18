@@ -54,6 +54,10 @@ export class Setting {
   @Column({ type: 'int', default: 30 })
   defaultSelloutDays: number;
 
+  /** days on the road from the factory to a distributor: the expected date is the ready date plus these */
+  @Column({ type: 'int', default: 2 })
+  transitDays: number;
+
   /** spend at or above this needs two signatures */
   @Column({ type: 'decimal', precision: 16, scale: 2, transformer: numeric })
   approvalThreshold: number;

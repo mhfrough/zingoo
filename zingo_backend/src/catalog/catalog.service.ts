@@ -3,7 +3,7 @@ import { AttachmentsService } from '../attachments/attachments.service';
 import { InjectRepository } from '@nestjs/typeorm';
 import { DeepPartial, Repository } from 'typeorm';
 import { CrudService } from '../common/crud.service';
-import { AreaCity, AreaDistrict, Distributor, DistributorAddress, DistributorBank, DistributorContact, KycDocument, PaymentMilestone, Manufacturer, PackagingTemplate, PartnerBankAccount, PartnerFile, Product } from './catalog.entities';
+import { AreaCity, AreaDistrict, Distributor, DistributorAddress, DistributorBank, DistributorContact, KycDocument, PaymentMilestone, Manufacturer, PackagingTemplate, PartnerBankAccount, PartnerFile, Product, ProductMaker } from './catalog.entities';
 import { Currency, Lookup } from '../setup/setup.entities';
 import { LookupsService } from '../setup/lookups.service';
 import { StockService } from './stock.service';
@@ -29,8 +29,11 @@ export class ProductsService extends CrudService<Product> {
 
   /** older products: their one packaging becomes the default template, their distributor the first of the list */
   async onApplicationBootstrap() {
-    const rows = (await this.repo.find()).filter((p) => !(p.packagings ?? []).length || (p.distributorId && !(p.distributorIds ?? []).length));
+    const rows = (await this.repo.find()).filter((p) => !(p.packagings ?? []).length || (p.distributorId && !(p.distributorIds ?? []).length)
+      || (p.manufacturerId && !(p.makers ?? []).length));
     for (const p of rows) {
+      // the one manufacturer it had becomes the default of its list
+      if (p.manufacturerId && !(p.makers ?? []).length) p.makers = [{ manufacturerId: p.manufacturerId, rate: Number(p.manufacturerRate), isDefault: true }];
       if (!(p.packagings ?? []).length) p.packagings = [{ name: 'Standard', packetsPerBundle: p.packsPerCarton, bundlesPerContainer: p.bundlesPerContainer, isDefault: true }];
       if (p.distributorId && !(p.distributorIds ?? []).length) p.distributorIds = [p.distributorId];
     }
@@ -58,7 +61,7 @@ export class ProductsService extends CrudService<Product> {
   private settle(dto: DeepPartial<Product>, before: Product | null) {
     if (dto.sku) dto.sku = String(dto.sku).trim();
     if (dto.packagings) {
-      const list = (dto.packagings as PackagingTemplate[]).map((t) => ({ ...t, name: t.name.trim() }));
+      const list = (dto.packagings as PackagingTemplate[]).map((t) => ({ ...t, name: t.name.trim(), containerUnit: t.containerUnit?.trim() || null }));
       const names = new Set(list.map((t) => t.name.toLowerCase()));
       if (names.size !== list.length) throw new BadRequestException('Give each packaging template its own name.');
       const defaults = list.filter((t) => t.isDefault).length;
@@ -68,6 +71,8 @@ export class ProductsService extends CrudService<Product> {
       dto.packagings = list;
       dto.packsPerCarton = d.packetsPerBundle;
       dto.bundlesPerContainer = d.bundlesPerContainer;
+      // the product's unit follows its default template (lists and old screens read it)
+      dto.containerUnit = d.containerUnit ?? null;
     } else if (dto.packsPerCarton !== undefined || dto.bundlesPerContainer !== undefined) {
       const ppb = Number(dto.packsPerCarton ?? before?.packsPerCarton ?? 1);
       const bpc = Number(dto.bundlesPerContainer ?? before?.bundlesPerContainer ?? 10);
@@ -76,6 +81,23 @@ export class ProductsService extends CrudService<Product> {
       if (i >= 0) list[i] = { ...list[i], packetsPerBundle: ppb, bundlesPerContainer: bpc };
       else list.unshift({ name: 'Standard', packetsPerBundle: ppb, bundlesPerContainer: bpc, isDefault: true });
       dto.packagings = list;
+    }
+    if (dto.makers) {
+      const list = (dto.makers as ProductMaker[]).map((m) => ({ manufacturerId: m.manufacturerId, rate: Number(m.rate), isDefault: !!m.isDefault }));
+      if (new Set(list.map((m) => m.manufacturerId)).size !== list.length) throw new BadRequestException('A manufacturer is on the list twice.');
+      const defaults = list.filter((m) => m.isDefault).length;
+      if (defaults > 1) throw new BadRequestException('Only one manufacturer can be the default.');
+      if (list.length && !defaults) list[0].isDefault = true;
+      const d = list.find((m) => m.isDefault);
+      dto.makers = list;
+      dto.manufacturerId = d?.manufacturerId ?? null;
+      if (d) dto.manufacturerRate = d.rate;
+    } else if (dto.manufacturerId !== undefined || dto.manufacturerRate !== undefined) {
+      // the single fields still work: they change the default of the list
+      const id = dto.manufacturerId !== undefined ? dto.manufacturerId : before?.manufacturerId ?? null;
+      const rate = Number(dto.manufacturerRate ?? before?.manufacturerRate ?? 0);
+      const rest = (before?.makers ?? []).filter((m) => m.manufacturerId !== id).map((m) => ({ ...m, isDefault: false }));
+      dto.makers = id ? [{ manufacturerId: id, rate, isDefault: true }, ...rest] : rest;
     }
     if (dto.distributorIds) {
       const ids = [...new Set(dto.distributorIds as string[])];
@@ -111,7 +133,15 @@ export class ProductsService extends CrudService<Product> {
     }
     if (dto.flavour && dto.flavour !== before?.flavour) await this.lookups.assertActive('FLAVOUR', dto.flavour as string);
     if (dto.packetSize && dto.packetSize !== before?.packetSize) await this.lookups.assertActive('PACKET_SIZE', dto.packetSize as string);
+    if (dto.containerUnit && dto.containerUnit !== before?.containerUnit) await this.lookups.assertActive('CONTAINER_UNIT', dto.containerUnit as string);
+    for (const t of (dto.packagings ?? []) as PackagingTemplate[]) {
+      const old = before?.packagings?.find((x) => x.name === t.name)?.containerUnit;
+      if (t.containerUnit && t.containerUnit !== old) await this.lookups.assertActive('CONTAINER_UNIT', t.containerUnit);
+    }
     const em = this.repo.manager;
+    for (const m of (dto.makers ?? []) as { manufacturerId: string }[]) {
+      if (!(await em.getRepository(Manufacturer).exist({ where: { id: m.manufacturerId } }))) throw new BadRequestException('Choose each manufacturer from Settings & Data.');
+    }
     if (dto.manufacturerId && !(await em.getRepository(Manufacturer).exist({ where: { id: dto.manufacturerId as string } }))) {
       throw new BadRequestException('Choose a manufacturer from Settings & Data.');
     }

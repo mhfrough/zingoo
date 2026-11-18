@@ -1,9 +1,13 @@
+import { toSignal } from '@angular/core/rxjs-interop';
+import { DamageLine, DamageLines, damagesBody, damagesValid } from './damage-lines';
 import { ChangeDetectionStrategy, Component, computed, inject, input, output, signal } from '@angular/core';
 import { ReactiveFormsModule, Validators } from '@angular/forms';
 import { docDate, subLine, Tone, fmtDate, fmtNumber, productLabel, qtyLabel } from '../../shared/format';
 import { Btn, DataTable, Field, Offcanvas, RichText, RowAction, RowActionEvent, TableColumn } from '../../ui';
 import { FormModal } from '../ops/form-modal';
 import { FactoryApi, IncomingOrder } from './factory.api';
+import { OrderTimeline } from './answer-forms';
+import { OrderDetail } from './order-detail';
 
 const today = () => new Date().toISOString().slice(0, 10);
 
@@ -11,9 +15,11 @@ const today = () => new Date().toISOString().slice(0, 10);
 @Component({
   selector: 'app-pickup-form',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [ReactiveFormsModule, Offcanvas, Field, Btn, RichText],
+  imports: [ReactiveFormsModule, Offcanvas, Field, Btn, RichText, OrderDetail, DamageLines],
   template: `
-    <app-offcanvas #oc [(open)]="open" [title]="o() ? 'Collect ' + o()!.refNo : 'Collect from factory'" [subtitle]="subject()" size="md" [dirty]="form.dirty">
+    <app-offcanvas #oc [(open)]="open" [title]="o() ? 'Collect ' + o()!.refNo : 'Collect from factory'" [subtitle]="subject()" split asideLabel="Order details" [dirty]="form.dirty"
+      help="Record the containers your vehicle takes from the factory. They are on the road until you confirm receipt at your warehouse.">
+      <app-order-detail offcanvasAside [orderId]="open() ? o()?.id : null" />
       @if (error()) {
         <div class="notice" data-tone="danger" role="alert">{{ error() }}</div>
       }
@@ -27,6 +33,7 @@ const today = () => new Date().toISOString().slice(0, 10);
         <app-field label="Vehicle no."><input type="text" formControlName="vehicle" maxlength="60" /></app-field>
         <app-field label="Collected by" hint="Driver or person"><input type="text" formControlName="collectedBy" maxlength="60" /></app-field>
         <app-field label="Note" [wide]="true"><app-rich-text formControlName="note" [max]="500" [storeMax]="500" /></app-field>
+        <app-damage-lines [(lines)]="damages" [maxBundles]="pickedBundles()" title="Damage seen at the factory" />
       </form>
       <ng-container offcanvasFooter>
         <button appBtn type="button" (click)="oc.requestClose()">Cancel</button>
@@ -51,11 +58,16 @@ export class PickupForm extends FormModal {
     const o = this.o();
     return o ? `${o.product.sku} at ${o.manufacturer.name}` : '';
   });
+  /** damage lines: each becomes a claim on this pickup */
+  protected damages = signal<DamageLine[]>([]);
+  private picked = toSignal(this.form.controls.containers.valueChanges, { initialValue: 1 });
+  protected pickedBundles = computed(() => Number(this.picked() ?? 0) * (this.o()?.bundlesPerContainer ?? 0));
 
   protected reset() {
     const left = this.o()?.left ?? 1;
     this.form.controls.containers.setValidators([Validators.required, Validators.min(1), Validators.max(left)]);
     this.form.reset({ containers: left, date: today(), vehicle: '', collectedBy: '', note: '' });
+    this.damages.set([]);
   }
 
   protected request() {
@@ -64,7 +76,17 @@ export class PickupForm extends FormModal {
       orderId: this.o()!.id, containers: Number(v.containers), date: v.date,
       ...(v.vehicle.trim() ? { vehicle: v.vehicle.trim() } : {}), ...(v.collectedBy.trim() ? { collectedBy: v.collectedBy.trim() } : {}),
       ...(v.note.trim() ? { note: v.note.trim() } : {}),
+      ...(this.damages().length ? { damages: damagesBody(this.damages()) } : {}),
     });
+  }
+
+  /** a damage line needs bundles and what happened */
+  protected override submit() {
+    if (!damagesValid(this.damages())) {
+      this.error.set('Each damage line needs the bundles and what happened.');
+      return;
+    }
+    super.submit();
   }
 
   protected successMessage() {
@@ -79,7 +101,7 @@ export class PickupForm extends FormModal {
 @Component({
   selector: 'app-incoming-panel',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [DataTable, PickupForm],
+  imports: [DataTable, PickupForm, OrderTimeline],
   template: `
     <div class="card" data-flush>
       <div class="card__head">
@@ -92,6 +114,7 @@ export class PickupForm extends FormModal {
       </div>
     </div>
     <app-pickup-form [(open)]="pickupOpen" [o]="current()" (saved)="changed.emit()" />
+    <app-order-timeline [(open)]="viewOpen" [orderId]="current()?.id ?? null" [refNo]="current()?.refNo ?? null" />
   `,
 })
 export class IncomingPanel {
@@ -104,6 +127,7 @@ export class IncomingPanel {
   readonly changed = output<void>();
 
   protected pickupOpen = signal(false);
+  protected viewOpen = signal(false);
   protected current = signal<IncomingOrder | null>(null);
 
   private state = (o: IncomingOrder): [string, Tone] => {
@@ -119,7 +143,7 @@ export class IncomingPanel {
     },
     {
       id: 'ref', label: 'Order no. / quantity', kind: 'mono', value: (o) => o.refNo, sortValue: (o) => o.date,
-      sub: (o) => subLine(docDate(o), qtyLabel(o.containers, o.containers * o.bundlesPerContainer), o.shippedContainers ? `${fmtNumber(o.shippedContainers)} sent` : null),
+      sub: (o) => subLine(docDate(o), qtyLabel(o.containers, o.containers * o.bundlesPerContainer, o.containerUnit ?? o.product.containerUnit), o.groupRef ? `order ${o.groupRef}` : null, o.shippedContainers ? `${fmtNumber(o.shippedContainers)} sent` : null),
     },
     {
       id: 'from', label: this.showDistributor() ? 'Route' : 'Manufacturer', priority: 2,
@@ -128,15 +152,20 @@ export class IncomingPanel {
     },
     {
       id: 'ready', label: 'Ready by', kind: 'date', priority: 2, value: (o) => o.readyDate,
-      sub: (o) => (o.dueDate ? `Due ${fmtDate(o.dueDate)}` : null),
+      sub: (o) => subLine(o.ready ? 'Ready now' : o.readyDate ? 'Tentative' : null, o.expectedDate ? `Expected ${fmtDate(o.expectedDate)}` : null,
+        o.dueDate ? `Wanted ${fmtDate(o.dueDate)}` : null),
     },
     { id: 'status', label: 'Status', kind: 'tag', value: (o) => this.state(o)[0], tone: (o) => this.state(o)[1] },
   ]);
 
-  protected actions = (o: IncomingOrder): RowAction[] => (this.canPickup() && o.ready ? [{ id: 'pickup', label: 'Confirm pickup', tone: 'success' }] : []);
+  protected actions = (o: IncomingOrder): RowAction[] => [
+    ...(this.canPickup() && o.ready ? [{ id: 'pickup', label: 'Confirm pickup', tone: 'success' as const }] : []),
+    { id: 'view', label: 'View order' },
+  ];
 
   protected onAction(e: RowActionEvent<IncomingOrder>) {
     this.current.set(e.row);
     if (e.id === 'pickup') this.pickupOpen.set(true);
+    if (e.id === 'view') this.viewOpen.set(true);
   }
 }

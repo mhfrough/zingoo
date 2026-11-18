@@ -33,6 +33,7 @@ const LIST_TEXT: Record<LookupList, { word: string; use: string; code: string; m
   DELIVERY_STATUS: { word: 'delivery status', use: 'Offered on every income invoice: where the goods are (dispatched, delivered, accepted ...).', code: 'Name', meaning: 'Meaning' },
   FLAVOUR: { word: 'flavour', use: 'Offered on every product / SKU.', code: 'Name', meaning: 'Meaning' },
   PACKET_SIZE: { word: 'packet size', use: 'Offered on every product / SKU (weight or price tier).', code: 'Name', meaning: 'Meaning' },
+  CONTAINER_UNIT: { word: 'container unit', use: 'What a container of a product is called (Carton, Bora). Shown in brackets wherever containers are counted.', code: 'Name', meaning: 'Meaning' },
   DIST_CLASSIFICATION: { word: 'distributor classification', use: 'Offered on every international distributor: importer, master distributor, wholesaler ...', code: 'Name', meaning: 'Meaning' },
   CERT_TYPE: { word: 'certificate type', use: 'Certificates a market can ask for on a product: halal, health, laboratory ...', code: 'Name', meaning: 'Meaning' },
   EXPORT_DOC_TYPE: { word: 'export document type', use: 'Documents kept on an export shipment: commercial invoice, packing list, bill of lading ...', code: 'Name', meaning: 'Meaning' },

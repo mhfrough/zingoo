@@ -2,7 +2,7 @@
   description="From the factory rate to the distributor price, per pack, with the margin at each step.">
   <ng-container pageActions>
     @if (canRates()) {
-      <button appBtn variant="primary" icon="plus" (click)="productOpen.set(true)">Add SKU</button>
+      <button appBtn variant="primary" icon="plus" (click)="openProduct(null)">Add SKU</button>
     }
     @if (canOverhead()) {
       <button appBtn icon="edit" (click)="overheadOpen.set(true)">Set overhead per pack</button>
@@ -114,7 +114,8 @@
   </div>
 </div>
 
-<app-product-form [(open)]="productOpen" [product]="null" (saved)="reload()" />
+<app-product-form [(open)]="productOpen" [product]="editingProduct()" [manufacturers]="manufacturers.value() ?? []"
+  [distributors]="distributors.value() ?? []" (saved)="reload()" />
 <app-price-form [(open)]="ratesOpen" [product]="editing()" [overhead]="overhead()" (saved)="reload()" />
 <app-overhead-form [(open)]="overheadOpen" [current]="overhead()" (saved)="reload()" />
 <app-agreed-rate-form [(open)]="agreedOpen" [rate]="editingRate()" [distributors]="distributors.value() ?? []"

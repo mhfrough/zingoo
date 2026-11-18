@@ -48,6 +48,7 @@ export class Pricing {
   protected settings = rxResource({ params: () => this.tick(), stream: () => this.ops.settings() });
   protected orders = rxResource({ params: () => this.tick(), stream: () => this.ops.orders() });
   protected distributors = rxResource({ params: () => this.tick(), stream: () => this.ops.distributors() });
+  protected manufacturers = rxResource({ params: () => this.tick(), stream: () => this.ops.manufacturers() });
   protected rates = rxResource({ params: () => this.tick(), stream: () => this.pricing.agreedRates() });
 
   protected canRates = computed(() => this.auth.can('manufacturing'));
@@ -96,10 +97,11 @@ export class Pricing {
   ];
 
   protected bridgeActions = (r: PriceRow): RowAction[] =>
-    this.canRates() ? [{ id: 'rates', label: 'Edit rates' }] : [];
+    this.canRates() ? [{ id: 'product', label: 'Edit product' }, { id: 'rates', label: 'Edit rates' }] : [];
 
   protected onBridgeAction(e: RowActionEvent<PriceRow>) {
     if (e.id === 'rates') this.openRates(e.row.product);
+    if (e.id === 'product') this.openProduct(e.row.product);
   }
 
   /** margins earned by dispatched orders, at today's cost assumptions */
@@ -161,6 +163,14 @@ export class Pricing {
 
   // ───────────── forms ─────────────
   protected productOpen = signal(false);
+  /** the SKU open in the full product panel (null = a new SKU) */
+  protected editingProduct = signal<Product | null>(null);
+
+  /** the same add / edit panel as Settings & Data: every field, packaging, manufacturers and rates */
+  protected openProduct(p: Product | null) {
+    this.editingProduct.set(p);
+    this.productOpen.set(true);
+  }
   protected ratesOpen = signal(false);
   protected editing = signal<Product | null>(null);
   protected overheadOpen = signal(false);

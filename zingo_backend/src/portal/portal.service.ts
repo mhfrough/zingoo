@@ -1,8 +1,8 @@
 import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
-import { movementOf } from '../manufacturing/order-movement';
+import { expectedDate, movementOf } from '../manufacturing/order-movement';
 import { InjectDataSource } from '@nestjs/typeorm';
-import { DataSource, EntityManager, Not } from 'typeorm';
-import { Distributor, DistributorRate, Product } from '../catalog/catalog.entities';
+import { DataSource, EntityManager, In, Not } from 'typeorm';
+import { Distributor, DistributorRate, Manufacturer, Product } from '../catalog/catalog.entities';
 import { round2 } from '../common/numeric.transformer';
 import { nextRef } from '../common/ref';
 import { CollectionsService, OrdersService } from '../distribution/distribution.service';
@@ -10,7 +10,7 @@ import { Collection, SalesOrder } from '../distribution/distribution.entities';
 import { PostingService } from '../ledger/posting.service';
 import { Role } from '../common/enums';
 import { ProductionOrder } from '../manufacturing/production-orders.entities';
-import { ProductionOrdersService } from '../manufacturing/production-orders.service';
+import { ProductionOrdersService, cleanTransport } from '../manufacturing/production-orders.service';
 import { LookupsService } from '../setup/lookups.service';
 import { SettingsService } from '../setup/setup.service';
 import { LINK, NotificationsService, TEAM, plural } from '../notifications/notifications.service';
@@ -39,6 +39,15 @@ const MANAGERS = ['Admin', 'Finance', 'Distribution'];
  *   claim    -> staff approve it (a credit note: reduces the invoice, any excess is credit owed back) or reject it
  *   payment  -> the distributor reports "I paid"; only when staff confirm does it become a collection and enter cash
  */
+/** next distributor order number (DO-001): one number for all the product lines of one order */
+async function nextGroupRef(em: EntityManager, prefix: string): Promise<string> {
+  const rows: { n: string | null }[] = await em.query(
+    `SELECT MAX(CAST(SUBSTRING("groupRef" FROM '([0-9]+)$') AS BIGINT)) AS n FROM portal_requests WHERE "groupRef" LIKE $1 AND "groupRef" ~ '^[A-Za-z]+-[0-9]+$'`,
+    [`${prefix}-%`],
+  );
+  return `${prefix}-${String(rows[0]?.n ? Number(rows[0].n) + 1 : 1).padStart(3, '0')}`;
+}
+
 @Injectable()
 export class PortalService {
   constructor(
@@ -141,6 +150,8 @@ export class PortalService {
       ? await em.query(`SELECT "orderId", SUM(amount)::float8 AS v FROM payment_advices WHERE status = 'Submitted' AND "orderId" = ANY($1) GROUP BY "orderId"`, [ids])
       : [];
     const pend = Object.fromEntries(pending.map((p) => [p.orderId, round2(p.v)]));
+    // every payment against each order (advances and collections), oldest first, for the "Paid" column
+    const paid = ids.length ? await em.find(Collection, { where: ids.map((id) => ({ orderId: id })), order: { date: 'ASC' } }) : [];
     const todayIso = today();
     return list.map((o) => {
       const r = receipts.find((x) => x.orderId === o.id);
@@ -154,6 +165,8 @@ export class PortalService {
         voucher: o.status === 'Dispatched' ? 'Invoice' : 'Pro-forma',
         receipt: r ? { id: r.id, refNo: r.refNo, status: r.status } : null,
         pendingAdvice: pend[o.id] ?? 0,
+        payments: paid.filter((c) => c.orderId === o.id)
+          .map((c) => ({ date: c.date, refNo: c.refNo, amount: Number(c.amount), method: c.method, advance: c.isAdvance })),
       };
     });
   }
@@ -168,12 +181,14 @@ export class PortalService {
       order: { date: 'DESC', createdAt: 'DESC' },
     });
     const moved = await movementOf(this.db.manager, rows.map((r) => r.productionOrderId ?? ''));
+    const transit = (await this.settings.get()).transitDays;
     return rows.map(({ product, productionOrder: o, order, ...r }) => ({
       ...r,
-      product: { id: product.id, sku: product.sku, name: product.name },
+      product: { id: product.id, sku: product.sku, name: product.name, containerUnit: product.containerUnit ?? null },
       order: order ? { id: order.id, refNo: order.refNo, status: order.status } : null,
       productionOrder: o ? {
         id: o.id, refNo: o.refNo, status: o.status, stage: o.stage, readyDate: o.readyDate, dueDate: o.dueDate, containers: o.containers,
+        expectedDate: expectedDate(o.readyDate, transit),
         reason: o.status === 'Rejected' || o.status === 'Cancelled' ? o.reason : null, updatedAt: o.updatedAt,
         shipped: moved[o.id]?.shipped ?? 0, received: moved[o.id]?.received ?? 0,
         manufacturer: { id: o.manufacturer.id, name: o.manufacturer.name },
@@ -206,10 +221,12 @@ export class PortalService {
   async rates(distributorId: string) {
     const em = this.db.manager;
     const s = await this.settings.get();
-    const [products, agreed] = await Promise.all([
+    const [products, agreed, mfrs] = await Promise.all([
       em.find(Product, { where: { active: true }, relations: ['manufacturer'], order: { sku: 'ASC' } }),
       em.find(DistributorRate, { where: { distributorId } }),
+      em.find(Manufacturer, { select: { id: true, name: true } }),
     ]);
+    const mfrName = new Map(mfrs.map((m) => [m.id, m.name]));
     return products.map((p) => {
       const a = agreed.find((x) => x.productId === p.id);
       const rate = a ? Number(a.rate) : Number(p.rate);
@@ -218,6 +235,13 @@ export class PortalService {
         productId: p.id, sku: p.sku, name: p.name, mrp: Number(p.mrp), standardRate: Number(p.rate), rate, agreed: !!a,
         /** who makes it: an order goes to this manufacturer (none = it cannot be ordered yet) */
         manufacturerName: p.manufacturer?.name ?? null,
+        /** every manufacturer that can make it (names only, never their rates); the order line may pick one */
+        madeBy: (p.makers ?? []).map((m) => ({ id: m.manufacturerId, name: mfrName.get(m.manufacturerId) ?? '', isDefault: !!m.isDefault })).filter((m) => m.name),
+        /** the saved ways of packing it (the order form picks one; its figures can be changed per order) */
+        packagings: (p.packagings ?? []).map((t) => ({
+          name: t.name, packetsPerBundle: t.packetsPerBundle, bundlesPerContainer: t.bundlesPerContainer, containerUnit: t.containerUnit ?? p.containerUnit ?? null, isDefault: !!t.isDefault,
+        })),
+        bundlesPerContainer: p.bundlesPerContainer, containerUnit: p.containerUnit ?? null, packetSize: p.packetSize ?? null,
         packsPerCarton: packs, perCarton: round2(rate * packs), spread: round2(Number(p.mrp) - rate),
         spreadPct: Number(p.mrp) ? round2((100 * (Number(p.mrp) - rate)) / Number(p.mrp)) : 0,
       };
@@ -287,7 +311,8 @@ export class PortalService {
     return {
       requests: await Promise.all(requests.map(async (r) => {
         const rate = await rateOf(r);
-        return { ...r, rate, value: round2(r.cartons * (r.product.packsPerCarton || s.packsPerCarton) * rate) };
+        // the packing asked for on the order (packets per bundle) when given, else the product's
+        return { ...r, rate, value: round2(r.cartons * (r.packetsPerBundle || r.product.packsPerCarton || s.packsPerCarton) * rate) };
       })),
       advices: advices.map(({ proofData, ...rest }) => ({ ...rest, hasProof: !!proofData, distributorName: rest.order.distributor.name })),
       claims: receipts.map((r) => ({ ...this.slimReceipt(r), distributorName: r.order.distributor.name })),
@@ -296,9 +321,9 @@ export class PortalService {
       /** distributor orders already past the desk: Zen Foods watches them with the manufacturer */
       recent: recent.map((r) => ({ r, m: r.productionOrderId ? moved[r.productionOrderId] : undefined })).map(({ r, m }) => ({
         id: r.id, refNo: r.refNo, date: r.date, createdAt: r.createdAt, updatedAt: r.updatedAt, status: r.status, cartons: r.cartons,
-        requestedDate: r.requestedDate, reviewNote: r.reviewNote,
+        requestedDate: r.requestedDate, reviewNote: r.reviewNote, groupRef: r.groupRef, containers: r.containers,
         distributor: { id: r.distributor.id, name: r.distributor.name },
-        product: { id: r.product.id, sku: r.product.sku, name: r.product.name },
+        product: { id: r.product.id, sku: r.product.sku, name: r.product.name, containerUnit: r.product.containerUnit ?? null },
         productionOrder: r.productionOrder ? {
           id: r.productionOrder.id, refNo: r.productionOrder.refNo, status: r.productionOrder.status, stage: r.productionOrder.stage,
           readyDate: r.productionOrder.readyDate, containers: r.productionOrder.containers, updatedAt: r.productionOrder.updatedAt,
@@ -311,33 +336,78 @@ export class PortalService {
 
   // ───────────── requests ─────────────
 
+  /**
+   * A distributor orders stock: one or more products in one order. Each product line is its own request (REQ-) and,
+   * with no approval step (Settings), its own production order with that product's manufacturer, all under one order
+   * number (DO-001). A line orders whole containers packed by a template of the product; the packing figures can be
+   * changed for this order only. Planned transport (transporter, vehicle, driver) goes on every line.
+   */
   createRequest(dto: CreateRequestDto, user: PortalUser) {
     return this.db.transaction(async (em) => {
       const distributorId = await this.scope(user, dto.distributorId);
-      const product = await em.findOne(Product, { where: { id: dto.productId } });
-      if (!product || !product.active) throw new BadRequestException('Choose an active product.');
       if (dto.requestedDate && dto.requestedDate < dto.date) throw new BadRequestException('The requested delivery cannot be before the request date.');
-      const refNo = await nextRef(em, PortalRequest, 'REQ', 3);
-      const r = await em.save(em.create(PortalRequest, { ...dto, distributorId, refNo, status: 'Requested' }));
-      await this.audit(em, user, 'Request submitted', refNo, `${product.sku} / ${dto.cartons} bundles`);
-      // Settings: with no approval step the order goes straight to the product's manufacturer; Zen Foods watches it
+      const multi = !!dto.lines?.length;
+      const lines: { productId: string; containers?: number; bundles?: number; packaging?: string | null; packetsPerBundle?: number; bundlesPerContainer?: number; containerUnit?: string | null; manufacturerId?: string | null }[] =
+        multi ? dto.lines! : dto.productId && dto.cartons ? [{ productId: dto.productId, bundles: dto.cartons }] : [];
+      if (!lines.length) throw new BadRequestException('Add at least one product.');
+      const products = await em.find(Product, { where: { id: In([...new Set(lines.map((l) => l.productId))]) } });
       const s = await this.settings.get(em);
-      if (!s.requestsNeedApproval) {
-        if (!product.manufacturerId) {
-          throw new BadRequestException(`No manufacturer is set up for ${product.name} (${product.sku}) yet, so the order cannot be sent. Ask Zen Foods to assign one.`);
+      const direct = !s.requestsNeedApproval;
+      for (const l of lines) {
+        const p = products.find((x) => x.id === l.productId);
+        if (!p || !p.active) throw new BadRequestException('Choose an active product on every line.');
+        if (l.manufacturerId && l.manufacturerId !== p.manufacturerId && !(p.makers ?? []).some((m) => m.manufacturerId === l.manufacturerId)) {
+          throw new BadRequestException(`That manufacturer does not make ${p.sku}. Pick one of its manufacturers.`);
         }
-        const full = await em.findOneOrFail(PortalRequest, { where: { id: r.id }, relations: ['product', 'distributor'] });
-        const done = await this.requestToProduction(em, full, { send: true } as AcceptRequestDto, user, true);
-        return { ...done.request, productionOrder: done.productionOrder };
+        if (direct && !p.manufacturerId && !l.manufacturerId) {
+          throw new BadRequestException(`No manufacturer is set up for ${p.name} (${p.sku}) yet, so the order cannot be sent. Ask Zen Foods to assign one.`);
+        }
+        if (l.packaging && !(p.packagings ?? []).some((t) => t.name === l.packaging)) throw new BadRequestException(`${p.sku} has no packaging template "${l.packaging}".`);
       }
-      const who = await this.distName(em, distributorId);
-      await this.notes.send(em, user,
-        { to: { staff: TEAM.desk }, kind: 'request.filed', tone: 'warning', refNo, link: LINK.desk,
-          title: `${who} asks for ${plural(dto.cartons, 'bundle')} of ${product.sku}`, body: `Stock request ${refNo}${dto.poRef ? ` · PO ${dto.poRef}` : ''}. Accept it into an order or reject it.` },
-        { to: { distributorId }, kind: 'request.filed', refNo, link: LINK.portal('orders'),
-          title: `Request ${refNo} sent to Zen Foods`, body: `${plural(dto.cartons, 'bundle')} of ${product.sku}. You will be told when it is accepted or rejected.` },
-      );
-      return r;
+      const groupRef = multi ? await nextGroupRef(em, s.docPrefixes['distOrder'] ?? 'DO') : null;
+      const transport = cleanTransport(dto.transport);
+      const made: unknown[] = [];
+      const filed: { refNo: string; what: string }[] = [];
+      for (const l of lines) {
+        const p = products.find((x) => x.id === l.productId)!;
+        const tpl = l.packaging ? (p.packagings ?? []).find((t) => t.name === l.packaging) : (p.packagings ?? []).find((t) => t.isDefault);
+        const bundlesPerContainer = l.bundlesPerContainer ?? tpl?.bundlesPerContainer ?? p.bundlesPerContainer ?? 1;
+        const packetsPerBundle = l.packetsPerBundle ?? tpl?.packetsPerBundle ?? p.packsPerCarton;
+        const containers = l.containers ?? null;
+        const cartons = containers ? containers * bundlesPerContainer : l.bundles!;
+        const refNo = await nextRef(em, PortalRequest, 'REQ', 3);
+        const r = await em.save(em.create(PortalRequest, {
+          date: dto.date, distributorId, productId: p.id, cartons, requestedDate: dto.requestedDate ?? null, poRef: dto.poRef ?? null,
+          notes: dto.notes ?? null, refNo, status: 'Requested', groupRef, transport,
+          containers, packaging: containers ? tpl?.name ?? null : null,
+          packetsPerBundle: containers ? packetsPerBundle : null, bundlesPerContainer: containers ? bundlesPerContainer : null,
+          containerUnit: l.containerUnit?.trim() || tpl?.containerUnit || p.containerUnit || null,
+          manufacturerId: l.manufacturerId && l.manufacturerId !== p.manufacturerId ? l.manufacturerId : null,
+        }));
+        const what = containers ? `${plural(containers, 'container')} (${plural(cartons, 'bundle')}) of ${p.sku}` : `${plural(cartons, 'bundle')} of ${p.sku}`;
+        await this.audit(em, user, 'Request submitted', refNo, `${groupRef ? `${groupRef} · ` : ''}${what}`);
+        filed.push({ refNo, what });
+        if (direct) {
+          const full = await em.findOneOrFail(PortalRequest, { where: { id: r.id }, relations: ['product', 'distributor'] });
+          const done = await this.requestToProduction(em, full, { send: true } as AcceptRequestDto, user, true);
+          made.push({ ...done.request, productionOrder: done.productionOrder });
+        } else {
+          made.push(r);
+        }
+      }
+      if (!direct) {
+        // one notice for the whole order, not one per line
+        const who = await this.distName(em, distributorId);
+        const ref = groupRef ?? filed[0].refNo;
+        const list = filed.map((f) => f.what).join(', ');
+        await this.notes.send(em, user,
+          { to: { staff: TEAM.desk }, kind: 'request.filed', tone: 'warning', refNo: ref, link: LINK.desk,
+            title: `${who} asks for ${list}`, body: `Stock request ${filed.map((f) => f.refNo).join(', ')}${dto.poRef ? ` · PO ${dto.poRef}` : ''}. Accept each into an order or reject it.` },
+          { to: { distributorId }, kind: 'request.filed', refNo: ref, link: LINK.portal('orders'),
+            title: `Request ${ref} sent to Zen Foods`, body: `${list}. You will be told when it is accepted or rejected.` },
+        );
+      }
+      return multi ? { groupRef, requests: made } : made[0];
     });
   }
 
@@ -378,18 +448,25 @@ export class PortalService {
    */
   private async requestToProduction(em: EntityManager, r: PortalRequest, dto: AcceptRequestDto, user: PortalUser, direct = false) {
     const templates = r.product.packagings ?? [];
-    const tpl = dto.packaging ? templates.find((t) => t.name === dto.packaging) : templates.find((t) => t.isDefault);
-    const perContainer = tpl?.bundlesPerContainer || r.product.bundlesPerContainer || 1;
-    const containers = dto.containers ?? Math.max(1, Math.ceil(r.cartons / perContainer));
+    const packaging = dto.packaging ?? r.packaging ?? null;
+    const tpl = packaging ? templates.find((t) => t.name === packaging) : templates.find((t) => t.isDefault);
+    // the packing asked for on the order wins over the template (unless staff pick another template when accepting)
+    const own = !dto.packaging && !!r.containers;
+    const perContainer = (own && r.bundlesPerContainer) || tpl?.bundlesPerContainer || r.product.bundlesPerContainer || 1;
+    const containers = dto.containers ?? (own ? r.containers! : Math.max(1, Math.ceil(r.cartons / perContainer)));
     const date = today();
     const dueDate = dto.dueDate !== undefined ? dto.dueDate : r.requestedDate && r.requestedDate >= date ? r.requestedDate : null;
     const send = dto.send ?? true;
     // the distributor's own notes (route, delivery instruction) reach the manufacturer with the order
-    const note = [`From stock request ${r.refNo}`, r.poRef && `PO ${r.poRef}`, dto.note?.trim(), r.notes?.trim()].filter(Boolean).join(' · ');
+    const note = [r.groupRef && `Order ${r.groupRef}`, `From stock request ${r.refNo}`, r.poRef && `PO ${r.poRef}`, dto.note?.trim(), r.notes?.trim()].filter(Boolean).join(' · ');
     const o = await this.production.createIn(em, { id: user.id, name: user.name, role: user.role as Role }, {
       date, productId: r.productId, destination: 'Distributor', distributorId: r.distributorId, containers,
-      packaging: dto.packaging ?? null, dueDate, notes: note, send,
-    }, direct ? `Ordered by ${r.distributor.name} (${r.refNo})` : `From stock request ${r.refNo}`);
+      packaging: tpl?.name ?? null, dueDate, notes: note, send,
+      ...(own ? { packetsPerBundle: r.packetsPerBundle ?? undefined, bundlesPerContainer: r.bundlesPerContainer ?? undefined } : {}),
+      transport: r.transport ?? null,
+      containerUnit: (own && r.containerUnit) || undefined,
+      ...(r.manufacturerId ? { manufacturerId: r.manufacturerId } : {}),
+    }, direct ? `Ordered by ${r.distributor.name} (${r.groupRef ?? r.refNo})` : `From stock request ${r.refNo}`, r.groupRef ?? null);
     const full = await em.findOneOrFail(ProductionOrder, { where: { id: o.id }, relations: ['manufacturer'] });
     r.status = 'Accepted';
     r.productionOrderId = o.id;

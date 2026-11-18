@@ -1,27 +1,31 @@
 import { ChangeDetectionStrategy, Component, computed, inject, input, model } from '@angular/core';
 import { ReactiveFormsModule, Validators } from '@angular/forms';
 import { Observable } from 'rxjs';
-import { fmtDate, fmtMoney, fmtNumber } from '../../shared/format';
-import { Btn, Field, Offcanvas, PlainPipe, RichPipe, RichText, Tag } from '../../ui';
+import { containersLabel, fmtMoney } from '../../shared/format';
+import { Btn, Field, Offcanvas, RichText } from '../../ui';
 import { FormModal } from '../ops/form-modal';
-import { FactoryApi, ORDER_TONE, ProductionOrder, orderState } from './factory.api';
+import { FactoryApi, ProductionOrder } from './factory.api';
+import { OrderDetail } from './order-detail';
 
 /** "MO-001 · 2 containers of Z10-MAS · PKR 36,720" */
 const subjectOf = (o: ProductionOrder | null) =>
-  o ? `${o.refNo} · ${fmtNumber(o.containers)} container${o.containers > 1 ? 's' : ''} of ${o.product.sku} · ${fmtMoney(o.value)}` : '';
+  o ? `${o.refNo} · ${containersLabel(o.containers, o.containerUnit ?? o.product.containerUnit)} of ${o.product.sku} · ${fmtMoney(o.value)}` : '';
 
 /** The manufacturer accepts an order, optionally with the date it expects the containers ready. */
 @Component({
   selector: 'app-accept-order-form',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [ReactiveFormsModule, Offcanvas, Field, Btn, RichText],
+  imports: [ReactiveFormsModule, Offcanvas, Field, Btn, RichText, OrderDetail],
   template: `
-    <app-offcanvas #oc [(open)]="open" title="Accept order" [subtitle]="subject()" size="md" [dirty]="form.dirty">
+    <app-offcanvas #oc [(open)]="open" title="Accept order" [subtitle]="subject()" split asideLabel="Order details" [dirty]="form.dirty"
+      help="Accepting promises the goods by your ready date. Zen Foods and the distributor are told at once.">
+      <app-order-detail offcanvasAside [orderId]="open() ? order()?.id : null" />
       @if (error()) {
         <div class="notice" data-tone="danger" role="alert">{{ error() }}</div>
       }
       <form [id]="formId" [formGroup]="form" (ngSubmit)="submit()" class="form-grid" novalidate>
-        <app-field label="Ready by" hint="When the containers will be ready" [wide]="true">
+        <app-field label="Ready by" hint="When the containers will be ready" [wide]="true"
+          help="Your best estimate. It shows as tentative until you report the last production step.">
           <input type="date" formControlName="readyDate" [min]="order()?.date ?? ''" />
         </app-field>
         <app-field label="Note" [wide]="true"><app-rich-text formControlName="note" [max]="500" [storeMax]="500" /></app-field>
@@ -104,15 +108,18 @@ export class OrderReasonForm extends FormModal {
 @Component({
   selector: 'app-order-stage-form',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [ReactiveFormsModule, Offcanvas, Field, Btn, RichText],
+  imports: [ReactiveFormsModule, Offcanvas, Field, Btn, RichText, OrderDetail],
   template: `
-    <app-offcanvas #oc [(open)]="open" title="Report progress" [subtitle]="subject()" size="md" [dirty]="form.dirty">
+    <app-offcanvas #oc [(open)]="open" title="Report progress" [subtitle]="subject()" split asideLabel="Order details" [dirty]="form.dirty"
+      help="Tell Zen Foods and the distributor which production step the order has reached. The last step marks it ready to collect or ship.">
+      <app-order-detail offcanvasAside [orderId]="open() ? order()?.id : null" />
       @if (error()) {
         <div class="notice" data-tone="danger" role="alert">{{ error() }}</div>
       }
       <form [id]="formId" [formGroup]="form" (ngSubmit)="submit()" class="form-grid" novalidate>
         @if (next().length) {
-          <app-field label="Step reached" [wide]="true" [required]="true" [hint]="order()?.stage ? 'Now: ' + order()!.stage : 'No step reported yet'">
+          <app-field label="Step reached" [wide]="true" [required]="true" [hint]="order()?.stage ? 'Now: ' + order()!.stage : 'No step reported yet'"
+            help="Only the steps after the current one are offered. The steps are set in Settings (production steps).">
             <select formControlName="stage">
               @for (s of next(); track s) {
                 <option [value]="s">{{ s }}</option>
@@ -160,102 +167,21 @@ export class OrderStageForm extends FormModal {
   }
 }
 
-/** One order in full: what was ordered, where it goes, the money, and its timeline. Read-only. */
+/** One order in full, read-only: the same details as the left pane of the order panels. */
 @Component({
   selector: 'app-order-timeline',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [Offcanvas, Tag, PlainPipe, RichPipe],
-  styles: `
-    .facts {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(min(11rem, 100%), 1fr));
-      gap: var(--space-3) var(--space-4);
-      margin: 0 0 var(--space-5);
-
-      & dt {
-        font-size: var(--text-xs);
-        color: var(--text-3);
-      }
-
-      & dd {
-        margin: var(--space-1) 0 0;
-        font-variant-numeric: tabular-nums;
-      }
-    }
-
-    .events {
-      list-style: none;
-      margin: 0;
-      padding: 0;
-      display: flex;
-      flex-direction: column;
-      gap: var(--space-3);
-      border-inline-start: 2px solid var(--border);
-      padding-inline-start: var(--space-4);
-
-      & li strong {
-        display: block;
-      }
-
-      & small {
-        color: var(--text-3);
-      }
-
-      & p {
-        margin: var(--space-1) 0 0;
-      }
-    }
-
-    h3 {
-      margin: 0 0 var(--space-3);
-      font-size: var(--text-md);
-    }
-  `,
+  imports: [Offcanvas, OrderDetail],
   template: `
-    <app-offcanvas [(open)]="open" [title]="order() ? 'Order ' + order()!.refNo : 'Order'" [subtitle]="order()?.product?.name ?? ''" size="md">
-      @if (order(); as o) {
-        <dl class="facts">
-          <div><dt>Status</dt><dd><app-tag [tone]="tone(o)">{{ state(o) }}</app-tag></dd></div>
-          <div><dt>Product</dt><dd>{{ o.product.sku }} · {{ o.product.name }}</dd></div>
-          <div><dt>Containers</dt><dd>{{ num(o.containers) }} · {{ num(o.bundles) }} bundles · {{ num(o.packets) }} packets</dd></div>
-          <div><dt>Manufacturer</dt><dd>{{ o.manufacturer.name }}</dd></div>
-          <div><dt>Deliver to</dt><dd>{{ o.destination === 'Warehouse' ? 'Zen Foods warehouse' : o.distributor?.name }}</dd></div>
-          <div><dt>Rate per packet</dt><dd>{{ money(o.rate) }}</dd></div>
-          <div><dt>Order value</dt><dd>{{ money(o.value) }}</dd></div>
-          <div><dt>Advance {{ o.advancePct }}%</dt><dd>{{ money(o.advanceAmount) }}</dd></div>
-          <div><dt>Ordered</dt><dd>{{ date(o.date) }}</dd></div>
-          <div><dt>Deliver by</dt><dd>{{ o.dueDate ? date(o.dueDate) : '-' }}{{ o.overdue ? ' · late' : '' }}</dd></div>
-          <div><dt>Ready by</dt><dd>{{ o.readyDate ? date(o.readyDate) : '-' }}</dd></div>
-          @if (o.reason) {
-            <div><dt>Reason</dt><dd>{{ o.reason | plain }}</dd></div>
-          }
-          @if (o.notes) {
-            <div><dt>Notes</dt><dd class="rich" [innerHTML]="o.notes | rich"></dd></div>
-          }
-        </dl>
-        <h3>Timeline</h3>
-        <ol class="events">
-          @for (e of o.events; track e.id) {
-            <li>
-              <strong>{{ e.event }}</strong>
-              <small>{{ when(e.createdAt) }} · {{ e.by }} ({{ e.side.toLowerCase() }})</small>
-              @if (e.note) {
-                <p>{{ e.note | plain }}</p>
-              }
-            </li>
-          }
-        </ol>
-      }
+    <app-offcanvas [(open)]="open" [title]="'Order ' + (refNo() ?? order()?.refNo ?? '')" [subtitle]="order()?.product?.name ?? ''" size="lg">
+      <app-order-detail [orderId]="open() ? (orderId() ?? order()?.id) : null" />
     </app-offcanvas>
   `,
 })
 export class OrderTimeline {
   readonly open = model(false);
   readonly order = input<ProductionOrder | null>(null);
-  protected tone = (o: ProductionOrder) => ORDER_TONE[o.status];
-  protected state = orderState;
-  protected num = fmtNumber;
-  protected money = fmtMoney;
-  protected date = fmtDate;
-  protected when = (iso: string) => new Date(iso).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' });
+  /** or just the id and number (lists that do not carry the full order) */
+  readonly orderId = input<string | null>(null);
+  readonly refNo = input<string | null>(null);
 }

@@ -7,7 +7,7 @@ import {
   TrendingUp, TriangleAlert, Truck, Upload, Users, Wallet, X, ArrowRight,
   ArrowUp, Bold, ChevronUp, ChevronsUpDown, CircleX, Eraser, EyeOff, Italic, KeyRound, Link, List,
   ListOrdered, LogIn, Mail, Minus, Save, Underline, Unlink, User, ListFilter, ChevronLeft, ChevronsLeft,
-  ChevronsRight, ArrowUpDown, Wifi, WifiOff,
+  ChevronsRight, ArrowUpDown, Wifi, WifiOff, CircleHelp,
 } from 'lucide';
 
 /** Lucide icons used by the portal. Add a name here to use it as <app-icon name="..."/>. */
@@ -27,7 +27,7 @@ const ICONS = {
   package: Package, palette: Palette, 'piggy-bank': PiggyBank, plus: Plus, receipt: Receipt,
   scale: Scale, search: Search, send: Send, settings: Settings, 'shield-check': ShieldCheck,
   sheet: FileSpreadsheet, trash: Trash2, 'trending-up': TrendingUp, truck: Truck, undo: RotateCcw,
-  upload: Upload, users: Users, wallet: Wallet, x: X,
+  upload: Upload, users: Users, wallet: Wallet, x: X, help: CircleHelp,
 } as const;
 
 export type IconName = keyof typeof ICONS;

@@ -1,3 +1,5 @@
+import { expectedDate } from './order-movement';
+import { DeliveryClaimsService } from './delivery-claims.service';
 import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectDataSource } from '@nestjs/typeorm';
 import { DataSource, EntityManager, FindOptionsWhere } from 'typeorm';
@@ -22,6 +24,8 @@ export interface ShipmentUser {
   role: Role;
   manufacturerId?: string | null;
   distributorId?: string | null;
+  /** a manufacturer login: Owner, Manager or Read-only */
+  portalRole?: string | null;
 }
 
 /** adds whole days to an ISO date */
@@ -44,6 +48,7 @@ export class ShipmentsService {
     private readonly posting: PostingService,
     private readonly settings: SettingsService,
     private readonly notes: NotificationsService,
+    private readonly claims: DeliveryClaimsService,
   ) {}
 
   // ───────────── reads ─────────────
@@ -165,6 +170,11 @@ export class ShipmentsService {
         orderId: o.id, date: dto.date, containers: dto.containers, vehicle: dto.vehicle,
         note: [collected && `Collected by ${collected}`, dto.note?.trim()].filter(Boolean).join(' · ') || undefined,
       }, 'Pickup');
+      // damage seen at the factory gate: a claim per line on this pickup, before the load leaves
+      if (dto.damages?.length) {
+        const load = await em.findOneOrFail(ProductionShipment, { where: { id: row.id }, relations: ['product', 'distributor', 'manufacturer'] });
+        for (const d of dto.damages) await this.claims.createIn(em, user, load, { date: dto.date, ...d });
+      }
       const full = await this.one(em, row.id);
       const what = `${dto.containers} container${dto.containers > 1 ? 's' : ''} of ${o.product.sku} (${o.refNo})`;
       const via = [dto.vehicle && `vehicle ${dto.vehicle}`, collected && `collected by ${collected}`].filter(Boolean).join(' · ');
@@ -200,12 +210,15 @@ export class ShipmentsService {
     ]);
     const shipped = Object.fromEntries(moved.map((r) => [r.orderId, Number(r.n)]));
     const last = stages[stages.length - 1] ?? null;
+    const transit = (await this.settings.get(em)).transitDays;
     return orders
       .map((o) => ({
         id: o.id, refNo: o.refNo, date: o.date, createdAt: o.createdAt, updatedAt: o.updatedAt, status: o.status, stage: o.stage, readyDate: o.readyDate, dueDate: o.dueDate,
-        product: { id: o.product.id, sku: o.product.sku, name: o.product.name },
+        expectedDate: expectedDate(o.readyDate, transit),
+        product: { id: o.product.id, sku: o.product.sku, name: o.product.name, containerUnit: o.product.containerUnit ?? null },
         manufacturer: { id: o.manufacturer.id, name: o.manufacturer.name },
         distributor: o.distributor ? { id: o.distributor.id, name: o.distributor.name } : null,
+        groupRef: o.groupRef, transport: o.transport, containerUnit: o.containerUnit ?? o.product.containerUnit ?? null,
         containers: o.containers, shippedContainers: shipped[o.id] ?? 0, left: o.containers - (shipped[o.id] ?? 0),
         bundlesPerContainer: o.bundlesPerContainer, packetsPerBundle: o.packetsPerBundle,
         /** the manufacturer reported the last step: the distributor may collect it */
@@ -276,6 +289,11 @@ export class ShipmentsService {
       await this.posting.syncProductionShipment(em, s.id);
       await this.posting.syncOrderAdvance(em, s.orderId);
       await this.event(em, s.orderId, user, `Received ${dto.receivedContainers} of ${s.containers} (${s.refNo})`, s.receiptNote);
+      // damage found on arrival: a claim per line on this load
+      if (dto.damages?.length) {
+        const load = await em.findOneOrFail(ProductionShipment, { where: { id }, relations: ['product', 'distributor', 'manufacturer'] });
+        for (const d of dto.damages) await this.claims.createIn(em, user, load, { date: dto.date, ...d });
+      }
       const full = await this.one(em, id);
       const short = dto.receivedContainers < s.containers;
       const who = s.destination === 'Warehouse' ? 'The warehouse' : full.distributor?.name ?? 'The distributor';

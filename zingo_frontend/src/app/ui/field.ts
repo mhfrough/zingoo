@@ -2,6 +2,8 @@ import {
   ChangeDetectionStrategy, Component, ElementRef, ViewEncapsulation, afterEveryRender, booleanAttribute, computed,
   inject, input, signal,
 } from '@angular/core';
+import { NgTemplateOutlet } from '@angular/common';
+import { Help } from './help';
 import { IconComponent, IconName } from './icon';
 
 let nextFieldId = 0;
@@ -33,12 +35,13 @@ const CONTROL_SELECTOR = [
  *              Left unset, a <textarea maxlength> still gets a counter. The count sits bottom-right inside the field,
  *              stays grey, turns orange from 80% and red from 95%.
  *   loading    skeleton in place of the control while the record loads
+ *   help       "?" next to the label with a short explanation on hover / focus / tap (see <app-help>)
  */
 @Component({
   selector: 'app-field',
   encapsulation: ViewEncapsulation.None,
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [IconComponent],
+  imports: [IconComponent, Help, NgTemplateOutlet],
   host: {
     class: 'field',
     '[class.field--wide]': 'wide()',
@@ -50,12 +53,22 @@ const CONTROL_SELECTOR = [
     '(click)': 'onClick($event)',
   },
   template: `
-    <label class="field__label" [id]="labelId" [attr.for]="controlId()">
-      {{ label() }}
-      @if (required()) {
-        <span class="field__req" aria-hidden="true">*</span>
-      }
-    </label>
+    <ng-template #labelTpl>
+      <label class="field__label" [id]="labelId" [attr.for]="controlId()">
+        {{ label() }}
+        @if (required()) {
+          <span class="field__req" aria-hidden="true">*</span>
+        }
+      </label>
+    </ng-template>
+    @if (help(); as text) {
+      <div class="field__head">
+        <ng-container [ngTemplateOutlet]="labelTpl" />
+        <app-help [title]="label()" [text]="text" />
+      </div>
+    } @else {
+      <ng-container [ngTemplateOutlet]="labelTpl" />
+    }
     <div class="field__control">
       <ng-content />
       @if (loading()) {
@@ -92,6 +105,8 @@ export class Field {
   readonly success = input(false, { transform: booleanAttribute });
   readonly counter = input<boolean | number>();
   readonly loading = input(false, { transform: booleanAttribute });
+  /** a short explanation behind a "?" next to the label (trade terms and non-obvious rules only; not with float) */
+  readonly help = input<string>();
 
   private readonly uid = nextFieldId++;
   protected readonly labelId = `field-${this.uid}-label`;

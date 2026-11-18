@@ -468,3 +468,44 @@
     }
   }
 }
+
+@layer components {
+  /* coloured main value and a thin progress bar under it (TableColumn.valueTone / meter) */
+  .cell__main[data-tone] {
+    font-weight: var(--weight-semibold);
+  }
+
+  .cell__main[data-tone='success'] { color: var(--tone-success-fg); }
+  .cell__main[data-tone='warning'] { color: var(--tone-warning-fg); }
+  .cell__main[data-tone='danger'] { color: var(--tone-danger-fg); }
+  .cell__main[data-tone='info'] { color: var(--tone-info-fg); }
+
+  .cell__meter {
+    --_c: var(--tone-neutral-fg);
+
+    inline-size: 100%;
+    min-inline-size: 4rem;
+    max-inline-size: 7rem;
+    block-size: 4px;
+    margin-block: 3px 1px;
+    border-radius: 2px;
+    background: var(--surface-sunken);
+    overflow: hidden;
+
+    td[data-end] & {
+      margin-inline-start: auto;
+    }
+
+    & > span {
+      display: block;
+      block-size: 100%;
+      border-radius: inherit;
+      background: var(--_c);
+    }
+
+    &[data-tone='success'] { --_c: var(--tone-success-fg); }
+    &[data-tone='warning'] { --_c: var(--tone-warning-fg); }
+    &[data-tone='danger'] { --_c: var(--tone-danger-fg); }
+    &[data-tone='info'] { --_c: var(--tone-info-fg); }
+  }
+}

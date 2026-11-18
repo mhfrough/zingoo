@@ -200,6 +200,7 @@ export class SettingsLists {
     { list: 'APPROVER', title: 'Approvers', sub: 'Who approves a bill. The two signatures still decide', add: 'Add approver' },
     { list: 'FLAVOUR', title: 'Flavours', sub: 'Offered on every product / SKU', add: 'Add flavour' },
     { list: 'PACKET_SIZE', title: 'Packet sizes', sub: 'Weight or price tier of a packet, offered on every product', add: 'Add size' },
+    { list: 'CONTAINER_UNIT', title: 'Container units', sub: 'What a container of a product is called: Carton, Bora. Shown as "2 containers (Bora)"', add: 'Add unit' },
   ];
   protected simpleRows = computed(() => {
     const out: Partial<Record<LookupList, Lookup[]>> = {};

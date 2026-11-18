@@ -11,7 +11,7 @@ import { AuthService } from '../core/auth.service';
 import { SettingsStore } from '../core/settings.store';
 import { NAV, NAV_GROUPS, homePath, visibleNav } from '../portal.config';
 import { errorText } from '../shared/errors';
-import { CONNECTION_STATUS, ConnectionStatus, IconComponent, Tag, ToastService } from '../ui';
+import { CONNECTION_STATUS, ConnectionStatus, IconComponent, ToastService } from '../ui';
 import { ViewAsOption } from '../core/auth.service';
 import { prefersReducedMotion } from '../ui/motion';
 import { NotificationBell } from './notification-bell';
@@ -20,7 +20,7 @@ import { NotificationBell } from './notification-bell';
 @Component({
   selector: 'app-shell',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [RouterOutlet, RouterLink, RouterLinkActive, IconComponent, Tag, ConnectionStatus, NotificationBell],
+  imports: [RouterOutlet, RouterLink, RouterLinkActive, IconComponent, ConnectionStatus, NotificationBell],
   templateUrl: './shell.html',
 })
 export class Shell {

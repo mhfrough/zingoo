@@ -7,28 +7,21 @@
 </app-page-header>
 
 <div class="stack">
+  @if (!isDistributor()) {
+    <app-view-as kind="Distributor" icon="truck" [options]="distributorOptions()" [value]="dist()" (valueChange)="selected.set($event ?? undefined)" />
+  }
   @if (profile.value(); as p) {
     <div class="card hero">
       <div class="hero__main">
-        <span class="hero__eyebrow">{{ isDistributor() ? 'Your account' : 'Viewing distributor' }}</span>
+        <span class="hero__eyebrow">{{ isDistributor() ? 'Your account' : 'Distributor account' }}</span>
         <h2>{{ p.distributor.name }}</h2>
         <p class="muted">{{ p.distributor.address || p.distributor.region }}</p>
         <ul class="hero__facts">
-          <li><span>Credit terms</span><strong>{{ p.distributor.paymentDays }} days</strong></li>
-          <li><span>Advance guide</span><strong>{{ pct(p.distributor.advancePct) }}</strong></li>
-          <li><span>Credit limit</span><strong>{{ money(p.creditLimit) }}</strong></li>
+          <li><span>Credit terms <app-help title="Credit terms" text="Days you have to pay an invoice after the goods are dispatched. The due date on each invoice is the dispatch date plus these days." /></span><strong>{{ p.distributor.paymentDays }} days</strong></li>
+          <li><span>Advance guide <app-help title="Advance guide" text="Share of the order value Zen Foods asks you to pay before dispatch. Money paid before dispatch is held as an advance and set against the invoice when the goods leave." /></span><strong>{{ pct(p.distributor.advancePct) }}</strong></li>
+          <li><span>Credit limit <app-help title="Credit limit" text="Most you may owe Zen Foods at one time. A new dispatch that takes the balance above it waits for Finance to approve." /></span><strong>{{ money(p.creditLimit) }}</strong></li>
         </ul>
       </div>
-      @if (!isDistributor()) {
-        <div class="hero__pick">
-          <label for="portal-dist">Distributor</label>
-          <select id="portal-dist" [value]="dist() ?? ''" (change)="selected.set($any($event.target).value)">
-            @for (d of distributors.value() ?? []; track d.id) {
-              <option [value]="d.id" [selected]="d.id === dist()">{{ d.name }} · {{ d.region }}</option>
-            }
-          </select>
-        </div>
-      }
     </div>
 
     <div class="grid-auto">
@@ -153,7 +146,7 @@
         </div>
         <div class="card" data-flush>
           <div class="card__head">
-            <div><h2>Invoices and balances</h2><p>Billed, paid, credited and still open per order</p></div>
+            <div><h2>Invoices and balances <app-help title="Invoices and balances" text="Billed = invoice value. Paid = money Zen Foods has confirmed (green when settled, amber when part paid, red when overdue); hover it to see each payment. Credit notes = accepted claims. Open = what is still to pay." /></h2><p>Billed, paid, credited and still open per order</p></div>
             <button appBtn size="sm" icon="banknote" (click)="openPay()">Report a payment</button>
           </div>
           <div class="card__body">
@@ -265,7 +258,8 @@
   </app-tabs>
 </div>
 
-<app-request-form [(open)]="requestOpen" [rates]="rates.value() ?? []" [distributorId]="dist()" [direct]="direct()" (saved)="reload()" />
+<app-request-form [(open)]="requestOpen" [rates]="rates.value() ?? []" [distributorId]="dist()" [direct]="direct()" [canAddSku]="isAdmin()"
+  (saved)="reload()" (skuAdded)="rates.reload()" />
 <app-receipt-form [(open)]="receiptOpen" [order]="receiving()" [distributorId]="dist()" (saved)="reload()" />
 <app-advice-form [(open)]="adviceOpen" [orders]="orders.value() ?? []" [methods]="profile.value()?.paymentMethods ?? ['Bank Transfer']" [orderId]="payingOrder()" [distributorId]="dist()" (saved)="reload()" />
 <app-accept-form [(open)]="acceptOpen" [req]="accepting()" [cycles]="profile.value()?.paymentCycles ?? [15, 30, 45, 60]"

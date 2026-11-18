@@ -10,6 +10,7 @@ export class UpdateSettingsDto {
   @IsOptional() @IsInt() @Min(1) packsPerCarton?: number;
   @IsOptional() @IsInt() @Min(1) bundlesPerContainer?: number;
   @IsOptional() @IsInt() @Min(1) @Max(365) defaultSelloutDays?: number;
+  @IsOptional() @IsInt() @Min(0) @Max(60) transitDays?: number;
   @IsOptional() @IsNumber() @Min(0) @Max(100) defaultAdvancePct?: number;
   @IsOptional() @IsBoolean() salesOrdersEnabled?: boolean;
   @IsOptional() @IsBoolean() requestsNeedApproval?: boolean;

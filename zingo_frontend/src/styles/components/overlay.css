@@ -431,3 +431,233 @@
     }
   }
 }
+
+@layer components {
+  /* HELP. <app-help>: a quiet "?" that opens a short dark bubble on hover, focus or tap (popover, top layer). */
+  .help {
+    display: inline-flex;
+    vertical-align: middle;
+    line-height: 0;
+  }
+
+  .help__btn {
+    display: inline-grid;
+    place-items: center;
+    inline-size: 20px;
+    block-size: 20px;
+    padding: 0;
+    border: 0;
+    border-radius: 50%;
+    background: transparent;
+    color: var(--text-3);
+    cursor: help;
+    transition: color var(--dur-fast) var(--ease-out), background var(--dur-fast) var(--ease-out);
+
+    &:hover,
+    &[aria-expanded='true'] {
+      color: var(--accent-text);
+      background: color-mix(in srgb, var(--accent-text) 10%, transparent);
+    }
+
+    &:focus-visible {
+      outline: none;
+      box-shadow: var(--focus-ring);
+    }
+
+    /* a bigger touch target without a bigger icon */
+    @media (pointer: coarse) {
+      inline-size: 32px;
+      block-size: 32px;
+      margin: -6px;
+    }
+  }
+
+  .help__tip {
+    position: fixed;
+    inset: auto;
+    margin: 0;
+    max-inline-size: min(18rem, calc(100dvw - 16px));
+    padding: var(--space-2) var(--space-3);
+    border: 0;
+    border-radius: var(--radius-md);
+    background: var(--text);
+    color: var(--text-inverse);
+    font-size: var(--text-sm);
+    font-weight: 400;
+    line-height: 1.45;
+    text-align: start;
+    white-space: normal;
+    letter-spacing: normal;
+    text-transform: none;
+    box-shadow: var(--elev-2);
+
+    &:popover-open {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+      animation: pop-in var(--dur-fast) var(--ease-out) both;
+    }
+  }
+
+  .help__title {
+    font-weight: 600;
+  }
+
+  /* label + help on one line inside <app-field help="..."> */
+  .field__head {
+    display: flex;
+    align-items: center;
+    gap: var(--space-1);
+    min-inline-size: 0;
+  }
+
+  .field:focus-within > .field__head > .field__label {
+    color: var(--accent-text);
+  }
+
+  .field[data-state='error'] > .field__head > .field__label {
+    color: var(--negative);
+  }
+}
+
+@layer components {
+  .offcanvas__title-row {
+    display: flex;
+    align-items: center;
+    gap: var(--space-1);
+  }
+}
+
+@layer components {
+  /* PARTNER PICK (<app-view-as>). Staff picker on the partner portals: a tinted band that says whose portal is on screen. */
+  .partner-pick {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) minmax(16rem, 24rem);
+    align-items: center;
+    gap: var(--space-3) var(--space-4);
+    padding: var(--space-3) var(--space-4);
+    border: 1px solid color-mix(in srgb, var(--accent-text) 30%, var(--border));
+    border-radius: var(--radius-md);
+    background: color-mix(in srgb, var(--accent-text) 6%, var(--surface-card));
+
+    @media (max-width: 760px) {
+      grid-template-columns: auto minmax(0, 1fr);
+
+      & .partner-pick__pick {
+        grid-column: 1 / -1;
+      }
+    }
+  }
+
+  .partner-pick__badge {
+    display: grid;
+    place-items: center;
+    inline-size: 40px;
+    block-size: 40px;
+    border-radius: 50%;
+    background: color-mix(in srgb, var(--accent-text) 14%, transparent);
+    color: var(--accent-text);
+  }
+
+  .partner-pick__text {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-inline-size: 0;
+  }
+
+  .partner-pick__eyebrow {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-1);
+    font-size: var(--text-xs);
+    font-weight: var(--weight-semibold);
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--accent-text);
+  }
+
+  .partner-pick__title {
+    font-size: var(--text-xl);
+    font-weight: var(--weight-semibold);
+    color: var(--text);
+    overflow-wrap: anywhere;
+  }
+
+  .partner-pick__sub,
+  .partner-pick__count {
+    font-size: var(--text-xs);
+    color: var(--text-3);
+  }
+
+  .partner-pick__pick {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-1);
+    min-inline-size: 0;
+  }
+}
+
+@layer components {
+  /* SPLIT OFF-CANVAS (<app-offcanvas split>): the record on the left, the action on the right, each scrolling alone */
+  .offcanvas__main {
+    display: contents;
+  }
+
+  .offcanvas[data-split] {
+    /* wider than xl; phones and small tablets keep the full-width panel */
+    @media (min-width: 821px) {
+      --oc-w: max(48rem, 82dvw);
+    }
+
+    & .offcanvas__body {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) minmax(22rem, 30rem);
+      padding: 0;
+      overflow: hidden;
+    }
+
+    & .offcanvas__aside,
+    & .offcanvas__main {
+      --scroll-bg: var(--surface-card);
+
+      display: block;
+      min-block-size: 0;
+      padding: var(--space-5);
+      overflow-y: auto;
+      overscroll-behavior: contain;
+      scrollbar-gutter: stable;
+    }
+
+    & .offcanvas__aside {
+      --scroll-bg: var(--surface-sunken);
+
+      background: var(--surface-sunken);
+      border-inline-end: 1px solid var(--border);
+    }
+
+    @media (max-width: 1024px) {
+      & .offcanvas__body {
+        display: flex;
+        flex-direction: column;
+        overflow-y: auto;
+      }
+
+      & .offcanvas__aside,
+      & .offcanvas__main {
+        overflow: visible;
+      }
+
+      /* the action first, the details under it */
+      & .offcanvas__main {
+        order: 1;
+      }
+
+      & .offcanvas__aside {
+        order: 2;
+        border-inline-end: 0;
+        border-block-start: 1px solid var(--border);
+      }
+    }
+  }
+}

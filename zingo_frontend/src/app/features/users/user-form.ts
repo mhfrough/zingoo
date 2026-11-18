@@ -66,6 +66,12 @@ import { ROLE_LIST, UserRow, UsersApi } from './users.api';
               }
             </select>
           </app-field>
+          <app-field label="Portal role" hint="Owner and Manager accept, reject or hold damage claims; Read-only looks"
+            help="On the manufacturer portal the Owner does everything; a Manager also decides damage claims (accept, reject, hold); Read-only can look but not change anything.">
+            <select formControlName="portalRole">
+              @for (r of makerRoles; track r) { <option [value]="r">{{ r }}</option> }
+            </select>
+          </app-field>
         }
         @if (user()) {
           <app-field label="Status" [hint]="locked() ? 'The root account cannot be switched off' : ''">
@@ -98,6 +104,8 @@ export class UserForm extends FormModal {
   private usersApi = inject(UsersApi);
 
   protected portalRoles = ['Owner', 'Sales', 'Finance', 'Warehouse', 'Read-only'];
+  /** a manufacturer login: the Owner and a Manager accept, reject or hold damage claims; Read-only only looks */
+  protected makerRoles = ['Owner', 'Manager', 'Read-only'];
   readonly form = this.fb.nonNullable.group({
     name: ['', Validators.required],
     email: ['', [Validators.required, Validators.email]],
@@ -144,10 +152,10 @@ export class UserForm extends FormModal {
     const distributorId = this.isDistributor() ? v.distributorId : null;
     const manufacturerId = this.isManufacturer() ? v.manufacturerId : null;
     return u
-      ? this.usersApi.update(u.id, { name: v.name, ...(u.isRoot ? {} : { role: v.role, status: v.status }), seat, distributorId, manufacturerId, ...(distributorId ? { portalRole: v.portalRole } : {}) })
+      ? this.usersApi.update(u.id, { name: v.name, ...(u.isRoot ? {} : { role: v.role, status: v.status }), seat, distributorId, manufacturerId, ...(distributorId || manufacturerId ? { portalRole: v.portalRole } : {}) })
       : this.usersApi.create({
         name: v.name, email: v.email, password: v.password, role: v.role, seat,
-        ...(distributorId ? { distributorId, portalRole: v.portalRole } : {}), ...(manufacturerId ? { manufacturerId } : {}),
+        ...(distributorId ? { distributorId, portalRole: v.portalRole } : {}), ...(manufacturerId ? { manufacturerId, portalRole: v.portalRole } : {}),
       });
   }
 

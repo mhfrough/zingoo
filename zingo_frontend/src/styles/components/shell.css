@@ -477,11 +477,7 @@
       display: none;
     }
 
-    /* room for the bell and sign-out: the sample-data tag goes, the account switcher narrows */
-    .topbar > .tag {
-      display: none;
-    }
-
+    /* room for the bell and sign-out: the account switcher narrows */
     .topbar .view-as select {
       max-inline-size: 7.5rem;
     }

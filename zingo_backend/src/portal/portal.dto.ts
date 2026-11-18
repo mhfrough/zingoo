@@ -1,6 +1,9 @@
+import { Type } from 'class-transformer';
 import {
-  IsBoolean, IsDateString, IsIn, IsInt, IsNotEmpty, IsNumber, IsOptional, IsPositive, IsString, IsUUID, Max, MaxLength, Min,
+  ArrayMaxSize, ArrayMinSize, IsArray, IsBoolean, IsDateString, IsIn, IsInt, IsNotEmpty, IsNumber, IsOptional, IsPositive, IsString, IsUUID, Max, MaxLength, Min,
+  ValidateNested,
 } from 'class-validator';
+import { OrderTransportDto } from '../manufacturing/production-orders.dto';
 
 /** a small attachment (image or PDF) sent as base64; the server checks the size and the type */
 export class ProofDto {
@@ -10,11 +13,28 @@ export class ProofDto {
 }
 
 /** A distributor asks for stock. Staff can file one on the distributor's behalf with `distributorId`. */
+/** one product of a distributor order: so many containers, packed by a template (figures may be changed for this order) */
+export class RequestLineDto {
+  @IsUUID() productId: string;
+  @IsInt() @Min(1) @Max(100000) containers: number;
+  @IsOptional() @IsString() @MaxLength(60) packaging?: string | null;
+  @IsOptional() @IsInt() @Min(1) @Max(100000) packetsPerBundle?: number;
+  @IsOptional() @IsInt() @Min(1) @Max(100000) bundlesPerContainer?: number;
+  /** Carton, Bora; empty = the template's */
+  @IsOptional() @IsString() @MaxLength(40) containerUnit?: string | null;
+  /** one of the product's manufacturers; empty = its default */
+  @IsOptional() @IsUUID() manufacturerId?: string | null;
+}
+
 export class CreateRequestDto {
   @IsOptional() @IsUUID() distributorId?: string;
   @IsDateString() date: string;
-  @IsUUID() productId: string;
-  @IsInt() @Min(1) cartons: number;
+  /** several products in one order (each becomes its own production order, grouped under one order number) */
+  @IsOptional() @IsArray() @ArrayMinSize(1) @ArrayMaxSize(30) @ValidateNested({ each: true }) @Type(() => RequestLineDto) lines?: RequestLineDto[];
+  @IsOptional() @ValidateNested() @Type(() => OrderTransportDto) transport?: OrderTransportDto | null;
+  /** older single-product form: one product, so many bundles (ignored when `lines` is given) */
+  @IsOptional() @IsUUID() productId?: string;
+  @IsOptional() @IsInt() @Min(1) cartons?: number;
   @IsOptional() @IsDateString() requestedDate?: string;
   @IsOptional() @IsString() @MaxLength(60) poRef?: string;
   @IsOptional() @IsString() notes?: string;

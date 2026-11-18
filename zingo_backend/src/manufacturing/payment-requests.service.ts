@@ -27,6 +27,13 @@ export type ShapedRequest = Awaited<ReturnType<PaymentRequestsService['shapeAll'
  * A payment posts Advance to Manufacturer / Cash & Bank: until the goods are delivered, money paid to the
  * manufacturer is a prepayment, not a cost.
  */
+/** yyyy-mm-dd plus n days */
+const addDays = (iso: string, n: number) => {
+  const d = new Date(`${iso}T00:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + n);
+  return d.toISOString().slice(0, 10);
+};
+
 @Injectable()
 export class PaymentRequestsService {
   constructor(
@@ -138,8 +145,10 @@ export class PaymentRequestsService {
       const gross = round2(order.containers * order.bundlesPerContainer * order.packetsPerBundle * Number(order.rate));
       const advance = round2((gross * Number(order.advancePct)) / 100);
       const open = await em.find(MfrPaymentRequest, { where: { orderId: order.id, status: 'Submitted' } });
-      // goods taken back by an accepted credit claim are not owed, so they cannot be asked for
-      const value = round2(gross - ((await this.creditsByOrder(em, [order.id]))[order.id] ?? 0));
+      // goods taken back by an accepted credit claim are not owed, and a claim still open (pending or on hold) is held back
+      const [{ held }] = await em.query(
+        `SELECT COALESCE(SUM(value), 0)::float8 AS held FROM delivery_claims WHERE status IN ('Pending', 'Hold') AND "orderId" = $1`, [order.id]);
+      const value = round2(gross - ((await this.creditsByOrder(em, [order.id]))[order.id] ?? 0) - Number(held));
       const asked = (kind?: string) => round2(open.filter((r) => !kind || r.kind === kind).reduce((n, r) => n + Number(r.amount), 0));
       const cap = dto.kind === 'Advance'
         ? round2(Math.min(advance - asked('Advance'), value - asked()))
@@ -147,6 +156,7 @@ export class PaymentRequestsService {
       if (cap <= 0) {
         throw new BadRequestException(dto.kind === 'Advance'
           ? (advance <= 0 ? `${order.refNo} has no advance (0%).` : `The whole advance of ${order.refNo} was already asked for.`)
+          : Number(held) > 0 ? `PKR ${Number(held).toLocaleString('en-US')} of ${order.refNo} is held by open damage claims; the rest was already asked for.`
           : `The whole value of ${order.refNo} was already asked for.`);
       }
       const amount = round2(dto.amount ?? cap);
@@ -155,15 +165,26 @@ export class PaymentRequestsService {
       const m = await em.findOne(Manufacturer, { where: { id: order.manufacturerId } });
       const banks = m?.bankAccounts ?? [];
       if (!banks.length) throw new BadRequestException('No bank account on file. Ask Zen Foods to add one to the manufacturer.');
-      const chosen = dto.bankAccount ? banks.find((b) => b.account === dto.bankAccount!.replace(/\s+/g, '').toUpperCase()) : banks.find((b) => b.isDefault) ?? banks[0];
-      if (!chosen) throw new BadRequestException('Choose one of the bank accounts on file.');
+      const norm = (a: string) => a.replace(/\s+/g, '').toUpperCase();
+      const wanted = dto.bankAccounts?.length ? dto.bankAccounts : dto.bankAccount ? [dto.bankAccount] : [];
+      const picked = wanted.length ? wanted.map((a) => banks.find((b) => b.account === norm(a))) : [banks.find((b) => b.isDefault) ?? banks[0]];
+      if (picked.some((b) => !b)) throw new BadRequestException('Choose bank accounts that are on file.');
+      const chosen = picked[0]!;
+      const slim = (b: NonNullable<typeof chosen>) => ({ bank: b.bank, title: b.title, account: b.account, ...(b.branch ? { branch: b.branch } : {}) });
+      // due: an advance at once; a balance after the manufacturer's credit days (0 = at once)
+      const dueDate = dto.dueDate ?? (dto.kind === 'Balance' && m?.paymentDays ? addDays(date, m.paymentDays) : date);
+      if (dueDate < date) throw new BadRequestException('The due date cannot be before the invoice date.');
+      if (dto.invoiceFileId) {
+        const f: { ownerType: string | null; ownerId: string | null }[] = await em.query(`SELECT "ownerType", "ownerId" FROM attachments WHERE id = $1`, [dto.invoiceFileId]);
+        if (!f.length || f[0].ownerId !== order.id || f[0].ownerType !== 'ORDER_INVOICE') throw new BadRequestException('Attach the invoice copy to this order first.');
+      }
 
       const s = await this.settings.get(em);
       const refNo = await nextRef(em, MfrPaymentRequest, s.docPrefixes['mfrRequest'] ?? 'PR', 3);
       const r = await em.save(em.create(MfrPaymentRequest, {
         refNo, date, orderId: order.id, manufacturerId: order.manufacturerId, kind: dto.kind, amount,
         invoiceNo: dto.invoiceNo?.trim() || null, note: dto.note?.trim() || null, status: 'Submitted',
-        bank: { bank: chosen.bank, title: chosen.title, account: chosen.account, ...(chosen.branch ? { branch: chosen.branch } : {}) },
+        bank: slim(chosen), banks: picked.map((b) => slim(b!)), dueDate, invoiceFileId: dto.invoiceFileId ?? null,
         raisedBy: user.name,
       }));
       const what = `${dto.kind} of PKR ${amount.toLocaleString('en-US')} on ${order.refNo}`;

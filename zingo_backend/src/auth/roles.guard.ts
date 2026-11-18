@@ -27,6 +27,10 @@ export class RolesGuard implements CanActivate {
     const allowed = this.reflector.getAllAndOverride<Role[] | undefined>(ROLES_KEY, targets);
     const ok = allowed ? allowed.includes(user.role) : !PARTNER_ROLES.includes(user.role);
     if (!ok) throw new ForbiddenException('Your role does not allow this.');
+    // a Read-only manufacturer login only looks
+    if (user.role === 'Manufacturer' && req.method !== 'GET' && user.portalRole === 'Read-only') {
+      throw new ForbiddenException('Your portal role (Read-only) cannot change anything; ask your Owner.');
+    }
     // a distributor login changes only what its portal role permits (a route without a permit is for the Owner)
     if (user.role === 'Distributor' && req.method !== 'GET' && !ownState) {
       const permit = this.reflector.getAllAndOverride<PortalPermit | undefined>(PORTAL_PERMIT_KEY, targets);

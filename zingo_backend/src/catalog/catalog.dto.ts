@@ -29,6 +29,14 @@ export class PackagingTemplateDto {
   @IsString() @IsNotEmpty() @MaxLength(60) name: string;
   @IsInt() @Min(1) @Max(100000) packetsPerBundle: number;
   @IsInt() @Min(1) @Max(100000) bundlesPerContainer: number;
+  /** Carton, Bora (Settings list CONTAINER_UNIT) */
+  @IsOptional() @IsString() @MaxLength(40) containerUnit?: string | null;
+  @IsBoolean() isDefault: boolean;
+}
+
+export class ProductMakerDto {
+  @IsUUID() manufacturerId: string;
+  @IsNumber() @Min(0) rate: number;
   @IsBoolean() isDefault: boolean;
 }
 
@@ -43,11 +51,15 @@ export class CreateProductDto {
   @IsOptional() @IsInt() @Min(1) @Max(100000) bundlesPerContainer?: number;
   @IsOptional() @IsString() @MaxLength(80) flavour?: string | null;
   @IsOptional() @IsString() @MaxLength(40) packetSize?: string | null;
+  /** what a container is called for this SKU (Settings list CONTAINER_UNIT: Carton, Bora) */
+  @IsOptional() @IsString() @MaxLength(40) containerUnit?: string | null;
   @IsOptional() @IsString() @MaxLength(2000) description?: string | null;
   @IsOptional() @IsUUID() manufacturerId?: string | null;
   @IsOptional() @IsUUID() distributorId?: string | null;
   /** every distributor that sells it; the first becomes the main one */
   @IsOptional() @IsArray() @ArrayMaxSize(50) @IsUUID(undefined, { each: true }) distributorIds?: string[];
+  /** every manufacturer that can make it with its rate; the default one becomes manufacturerId / manufacturerRate */
+  @IsOptional() @IsArray() @ArrayMaxSize(20) @ValidateNested({ each: true }) @Type(() => ProductMakerDto) makers?: ProductMakerDto[];
   @IsOptional() @IsNumber() @Min(0) gramsPerPacket?: number | null;
   @IsOptional() @IsArray() @ArrayMinSize(1) @ArrayMaxSize(20) @ValidateNested({ each: true }) @Type(() => PackagingTemplateDto) packagings?: PackagingTemplateDto[];
   @IsOptional() @IsNumber() @Min(0) outboundRate?: number;

@@ -1,3 +1,4 @@
+import { AppEntity } from '../common/app.entity';
 import { Column, Entity, JoinColumn, ManyToOne } from 'typeorm';
 import { Distributor, Manufacturer, Product } from '../catalog/catalog.entities';
 import { DocEntity } from '../common/doc.entity';
@@ -6,7 +7,8 @@ import { ProductionShipment } from './shipments.entities';
 
 export const DELIVERY_CLAIM_KINDS = ['Damaged', 'Missing', 'Quality'] as const;
 export type DeliveryClaimKind = (typeof DELIVERY_CLAIM_KINDS)[number];
-export const DELIVERY_CLAIM_STATUS = ['Pending', 'Accepted', 'Rejected'] as const;
+/** Hold: the manufacturer's manager parks it (checking, asking for more proof); it can still be accepted or rejected */
+export const DELIVERY_CLAIM_STATUS = ['Pending', 'Accepted', 'Rejected', 'Hold'] as const;
 export type DeliveryClaimStatus = (typeof DELIVERY_CLAIM_STATUS)[number];
 /** Credit = what Zen Foods owes the manufacturer drops by the claim's value; Replace = the manufacturer sends new goods */
 export const DELIVERY_CLAIM_RESOLUTIONS = ['Credit', 'Replace'] as const;
@@ -94,4 +96,25 @@ export class DeliveryClaim extends DocEntity {
 
   @Column({ type: 'date', nullable: true })
   decidedDate: string | null;
+}
+
+/** one message on a claim: the distributor, the manufacturer and Zen Foods talk it through until it is decided */
+@Entity('delivery_claim_notes')
+export class DeliveryClaimNote extends AppEntity {
+  @ManyToOne(() => DeliveryClaim, { nullable: false, onDelete: 'CASCADE' })
+  @JoinColumn({ name: 'claimId' })
+  claim: DeliveryClaim;
+
+  @Column({ type: 'uuid' })
+  claimId: string;
+
+  @Column({ type: 'varchar', length: 1000 })
+  text: string;
+
+  @Column({ type: 'varchar', length: 120 })
+  by: string;
+
+  /** Distributor, Manufacturer or Company */
+  @Column({ type: 'varchar', length: 20 })
+  side: string;
 }

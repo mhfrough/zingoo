@@ -1,5 +1,9 @@
 import { Injectable, inject } from '@angular/core';
+import { HttpClient } from '@angular/common/http';
+import { tap } from 'rxjs';
 import { ApiService } from '../../core/api.service';
+import { environment } from '../../../environments/environment';
+import { saveBlob } from '../../shared/files';
 import { Distributor, Manufacturer, Product } from '../ops/models';
 
 /** Draft -> Sent -> Accepted or Rejected; the company can cancel a sent or accepted order. */
@@ -41,6 +45,12 @@ export interface ProductionOrder {
   stage: string | null;
   reason: string | null;
   notes: string | null;
+  /** the distributor order it belongs to (DO-001) when several products were ordered together */
+  groupRef?: string | null;
+  /** Carton, Bora: from the packaging template, or changed on the order (empty on old orders: the product's) */
+  containerUnit?: string | null;
+  /** planned transport given when ordering */
+  transport?: { transporter?: string | null; vehicleNo?: string | null; driverName?: string | null; driverPhone?: string | null; driverCnic?: string | null } | null;
   events: ProductionOrderEvent[];
   bundles: number;
   packets: number;
@@ -50,6 +60,85 @@ export interface ProductionOrder {
   shippedContainers: number;
   receivedContainers: number;
   overdue: boolean;
+}
+
+/** one load that left the factory on an order (delivered by the manufacturer or collected), for the order panel */
+export interface OrderLoad {
+  id: string;
+  refNo: string;
+  shipDate: string;
+  containers: number;
+  method: 'Delivery' | 'Pickup';
+  status: string;
+  vehicle: string | null;
+  waybill: string | null;
+  note: string | null;
+  shippedBy: string;
+  receivedDate: string | null;
+  receivedContainers: number | null;
+  receivedBy: string | null;
+  receiptNote: string | null;
+  bundlesPerContainer: number;
+  packetsPerBundle: number;
+}
+
+/** a claim raised on one of the order's loads (value hidden from a distributor login) */
+export interface OrderClaim {
+  id: string;
+  refNo: string;
+  date: string;
+  shipmentId: string;
+  kind: 'Damaged' | 'Missing' | 'Quality';
+  bundles: number;
+  value?: number;
+  note: string;
+  hasEvidence: boolean;
+  raisedBy: string;
+  status: 'Pending' | 'Accepted' | 'Rejected' | 'Hold';
+  resolution: 'Credit' | 'Replace' | null;
+  decisionNote: string | null;
+  decidedBy: string | null;
+  decidedDate: string | null;
+}
+
+/** a file on an order: the signed dispatch voucher, the manufacturer's invoice copy, or another document */
+export interface OrderDoc {
+  id: string;
+  name: string;
+  mime: string;
+  size: number;
+  kind: 'CHALLAN' | 'INVOICE' | 'OTHER';
+  uploadedBy: string;
+  createdAt: string;
+}
+
+/** the manufacturer's payment invoice on an order (not shown to the distributor) */
+export interface OrderInvoice {
+  id: string;
+  refNo: string;
+  kind: 'Advance' | 'Balance';
+  amount: number;
+  paid: number;
+  date: string;
+  dueDate: string | null;
+  status: 'Submitted' | 'Rejected' | 'Withdrawn';
+  invoiceNo: string | null;
+  invoiceFileId: string | null;
+  banks: RequestBank[];
+}
+
+/** GET production-orders/:id/detail: one order in full (money fields absent for a distributor login) */
+export interface OrderDetailData {
+  order: ProductionOrder;
+  /** ready date plus the transit days of Settings */
+  expectedDate: string | null;
+  transitDays: number;
+  documents: OrderDoc[];
+  invoices: OrderInvoice[];
+  stages: string[];
+  ready: boolean;
+  shipments: OrderLoad[];
+  claims: OrderClaim[];
 }
 
 /** Containers sent against an order, and what arrived. */
@@ -73,11 +162,18 @@ export interface DeliveryClaim {
   note: string;
   hasEvidence: boolean;
   raisedBy: string;
-  status: 'Pending' | 'Accepted' | 'Rejected';
+  /** Hold: the manufacturer's manager parked it; it can still be accepted or rejected */
+  status: 'Pending' | 'Accepted' | 'Rejected' | 'Hold';
   resolution: 'Credit' | 'Replace' | null;
   decisionNote: string | null;
   decidedBy: string | null;
   decidedDate: string | null;
+  /** raised at the factory gate on a pickup that has not arrived yet */
+  atGate?: boolean;
+  /** photos / PDFs backing the claim */
+  proofs?: { id: string; name: string; mime: string; size: number }[];
+  /** the messages between the distributor, the manufacturer and Zen Foods */
+  thread?: { id: string; text: string; by: string; side: 'Distributor' | 'Manufacturer' | 'Company'; createdAt: string }[];
 }
 
 export interface Shipment {
@@ -271,6 +367,10 @@ export interface PaymentRequest {
   amount: number;
   invoiceNo: string | null;
   bank: RequestBank;
+  /** every account printed on the invoice; the first is `bank` */
+  banks?: RequestBank[];
+  dueDate?: string | null;
+  invoiceFileId?: string | null;
   status: 'Submitted' | 'Rejected' | 'Withdrawn';
   note: string | null;
   reason: string | null;
@@ -318,9 +418,12 @@ export interface IncomingOrder {
   stage: string | null;
   readyDate: string | null;
   dueDate: string | null;
-  product: { id: string; sku: string; name: string };
+  product: { id: string; sku: string; name: string; containerUnit?: string | null };
   manufacturer: { id: string; name: string };
   distributor: { id: string; name: string } | null;
+  groupRef?: string | null;
+  transport?: ProductionOrder['transport'];
+  containerUnit?: string | null;
   containers: number;
   shippedContainers: number;
   left: number;
@@ -328,6 +431,8 @@ export interface IncomingOrder {
   packetsPerBundle: number;
   /** the manufacturer reported the last production step: the distributor may collect it */
   ready: boolean;
+  /** ready date plus the transit days of Settings */
+  expectedDate?: string | null;
 }
 
 /** bundles a distributor sent to one of its customers */
@@ -357,6 +462,7 @@ export interface DistDispatch {
 @Injectable({ providedIn: 'root' })
 export class FactoryApi {
   private api = inject(ApiService);
+  private http = inject(HttpClient);
 
   orders = (manufacturerId?: string) => this.api.get<ProductionOrder[]>('production-orders', { manufacturerId });
   profile = (manufacturerId?: string) => this.api.get<FactoryProfile>('production-orders/profile', { manufacturerId });
@@ -368,6 +474,18 @@ export class FactoryApi {
   accept = (id: string, body: { readyDate?: string; note?: string }) => this.api.post<ProductionOrder>(`production-orders/${id}/accept`, body);
   reject = (id: string, reason: string) => this.api.post<ProductionOrder>(`production-orders/${id}/reject`, { reason });
   stage = (id: string, body: { stage: string; note?: string }) => this.api.post<ProductionOrder>(`production-orders/${id}/stage`, body);
+  detail = (id: string) => this.api.get<OrderDetailData>(`production-orders/${id}/detail`);
+  /** attach a file to an order (CHALLAN = signed dispatch voucher, INVOICE = the manufacturer's own invoice copy) */
+  addOrderDoc = (id: string, file: File, kind: OrderDoc['kind']) => {
+    const body = new FormData();
+    body.append('kind', kind);
+    body.append('file', file, file.name);
+    return this.api.post<OrderDoc>(`production-orders/${id}/documents`, body);
+  };
+  removeOrderDoc = (id: string, docId: string) => this.api.delete<unknown>(`production-orders/${id}/documents/${docId}`);
+  /** fetches a file of an order with the login token and saves it */
+  downloadOrderDoc = (id: string, doc: Pick<OrderDoc, 'id' | 'name'>) =>
+    this.http.get(`${environment.apiUrl}/production-orders/${id}/documents/${doc.id}`, { responseType: 'blob' }).pipe(tap((b) => saveBlob(doc.name, b)));
 
   requests = (manufacturerId?: string) => this.api.get<PaymentRequest[]>('mfr-payment-requests', { manufacturerId });
   position = (manufacturerId?: string) => this.api.get<Position>('mfr-payment-requests/position', { manufacturerId });
@@ -391,6 +509,9 @@ export class FactoryApi {
   deliveryClaims = (filter: { distributorId?: string; manufacturerId?: string } = {}) => this.api.get<DeliveryClaim[]>('delivery-claims', filter);
   raiseClaim = (body: unknown) => this.api.post<DeliveryClaim>('delivery-claims', body);
   decideClaim = (id: string, body: unknown) => this.api.post<DeliveryClaim>(`delivery-claims/${id}/decide`, body);
+  addClaimNote = (id: string, text: string) => this.api.post<DeliveryClaim>(`delivery-claims/${id}/notes`, { text });
+  downloadClaimProof = (id: string, f: { id: string; name: string }) =>
+    this.http.get(`${environment.apiUrl}/delivery-claims/${id}/proofs/${f.id}`, { responseType: 'blob' }).pipe(tap((b) => saveBlob(f.name, b)));
   claimEvidence = (id: string) => this.api.get<{ name: string; mime: string; data: string }>(`delivery-claims/${id}/evidence`);
 
   trail = (distributorId?: string) => this.api.get<TrailRow[]>('production-shipments/trail', { distributorId });

@@ -7,6 +7,15 @@ import { Distributor, Manufacturer, Product } from '../catalog/catalog.entities'
 export const ORDER_DESTINATIONS = ['Distributor', 'Warehouse'] as const;
 export type OrderDestination = (typeof ORDER_DESTINATIONS)[number];
 
+/** planned transport for an order: who carries it and the driver (all optional, plain text) */
+export interface OrderTransport {
+  transporter?: string | null;
+  vehicleNo?: string | null;
+  driverName?: string | null;
+  driverPhone?: string | null;
+  driverCnic?: string | null;
+}
+
 /**
  * Life of a production order.
  * Draft (company is still writing it) -> Sent (waiting for the manufacturer) -> Accepted or Rejected.
@@ -97,6 +106,18 @@ export class ProductionOrder extends AppEntity {
 
   @Column({ type: 'text', nullable: true })
   notes: string | null;
+
+  /** the distributor order this line belongs to (DO-001): one order of several products = one production order per product */
+  @Column({ type: 'varchar', length: 30, nullable: true })
+  groupRef: string | null;
+
+  /** planned transport given when ordering (transporter, vehicle, driver) */
+  @Column({ type: 'jsonb', nullable: true })
+  transport: OrderTransport | null;
+
+  /** what a container of this order is called (Carton, Bora): from its packaging template, or changed on the order */
+  @Column({ type: 'varchar', length: 40, nullable: true })
+  containerUnit: string | null;
 
   @OneToMany(() => ProductionOrderEvent, (e) => e.order)
   events: ProductionOrderEvent[];

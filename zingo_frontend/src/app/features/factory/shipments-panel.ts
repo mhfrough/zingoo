@@ -1,3 +1,5 @@
+import { OrderDetail } from './order-detail';
+import { DamageLine, DamageLines, damagesBody, damagesValid } from './damage-lines';
 import { ChangeDetectionStrategy, Component, computed, inject, input, output, signal } from '@angular/core';
 import { takeUntilDestroyed, toSignal } from '@angular/core/rxjs-interop';
 import { ReactiveFormsModule, Validators } from '@angular/forms';
@@ -100,9 +102,11 @@ export class ShipForm extends FormModal {
 @Component({
   selector: 'app-receive-form',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [ReactiveFormsModule, Offcanvas, Field, Btn, RichText],
+  imports: [ReactiveFormsModule, Offcanvas, Field, Btn, RichText, OrderDetail, DamageLines],
   template: `
-    <app-offcanvas #oc [(open)]="open" [title]="s() ? 'Receive ' + s()!.refNo : 'Receive shipment'" [subtitle]="subject()" size="md" [dirty]="form.dirty">
+    <app-offcanvas #oc [(open)]="open" [title]="s() ? 'Receive ' + s()!.refNo : 'Receive shipment'" [subtitle]="subject()" split asideLabel="Order details" [dirty]="form.dirty"
+      help="Confirm what reached your warehouse. Damaged, missing or poor quality bundles become claims the manufacturer must answer; their value stays out of what is due until then.">
+      <app-order-detail offcanvasAside [orderId]="open() ? s()?.orderId : null" />
       @if (error()) {
         <div class="notice" data-tone="danger" role="alert">{{ error() }}</div>
       }
@@ -115,6 +119,9 @@ export class ShipForm extends FormModal {
                    [error]="short() && invalid('note') ? 'Say what was short or damaged' : null">
           <app-rich-text formControlName="note" [max]="500" [storeMax]="500" />
         </app-field>
+        @if (s()?.destination === 'Distributor') {
+          <app-damage-lines [(lines)]="damages" [maxBundles]="receivedBundles()" title="Damage found on arrival" />
+        }
       </form>
       <ng-container offcanvasFooter>
         <button appBtn type="button" (click)="oc.requestClose()">Cancel</button>
@@ -131,6 +138,9 @@ export class ReceiveForm extends FormModal {
   readonly form = this.fb.nonNullable.group({ receivedContainers: [0, [Validators.required, Validators.min(0)]], date: [today(), Validators.required], note: [''] });
   private value = toSignal(this.form.valueChanges, { initialValue: this.form.getRawValue() });
   protected short = computed(() => Number(this.value().receivedContainers ?? 0) < (this.s()?.containers ?? 0));
+  /** damage lines: each becomes a claim on this load */
+  protected damages = signal<DamageLine[]>([]);
+  protected receivedBundles = computed(() => Number(this.value().receivedContainers ?? 0) * (this.s()?.bundlesPerContainer ?? 0));
   protected subject = computed(() => {
     const s = this.s();
     return s ? `${fmtNumber(s.containers)} × ${s.product.sku} from ${s.manufacturer.name}` : '';
@@ -147,11 +157,23 @@ export class ReceiveForm extends FormModal {
 
   protected reset() {
     this.form.reset({ receivedContainers: this.s()?.containers ?? 0, date: today(), note: '' });
+    this.damages.set([]);
+  }
+
+  protected override submit() {
+    if (!damagesValid(this.damages())) {
+      this.error.set('Each damage line needs the bundles and what happened.');
+      return;
+    }
+    super.submit();
   }
 
   protected request() {
     const v = this.form.getRawValue();
-    return this.factory.receive(this.s()!.id, { receivedContainers: Number(v.receivedContainers), date: v.date, ...(v.note.trim() ? { note: v.note.trim() } : {}) });
+    return this.factory.receive(this.s()!.id, {
+      receivedContainers: Number(v.receivedContainers), date: v.date, ...(v.note.trim() ? { note: v.note.trim() } : {}),
+      ...(this.damages().length ? { damages: damagesBody(this.damages()) } : {}),
+    });
   }
 
   protected successMessage() {
@@ -235,7 +257,7 @@ export class ShipmentsPanel {
     },
     {
       id: 'ref', label: 'Shipment no. / quantity', kind: 'mono', value: (s) => s.refNo, sortValue: (s) => s.shipDate,
-      sub: (s) => subLine(docDate(s, s.shipDate), qtyLabel(s.containers, s.containers * s.bundlesPerContainer), `order ${s.order.refNo}`),
+      sub: (s) => subLine(docDate(s, s.shipDate), qtyLabel(s.containers, s.containers * s.bundlesPerContainer, s.order?.containerUnit ?? s.product.containerUnit), `order ${s.order.refNo}`),
     },
     {
       id: 'route', label: 'Transport', priority: 3,

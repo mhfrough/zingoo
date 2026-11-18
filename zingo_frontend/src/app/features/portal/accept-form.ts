@@ -39,7 +39,11 @@ const today = () => new Date().toISOString().slice(0, 10);
               } @else {
                 <strong>{{ req()?.product?.sku }} has no manufacturer.</strong> Assign one in Settings &amp; Data first.
               }
-              {{ fmt(req()?.cartons ?? 0) }} bundles asked = {{ suggested() }} container{{ suggested() === 1 ? '' : 's' }} of {{ perContainer() }} bundles.
+              @if (req()?.containers) {
+                {{ fmt(req()!.containers!) }} container{{ req()!.containers === 1 ? '' : 's' }} asked, packed {{ req()!.packetsPerBundle }} packets × {{ perContainer() }} bundles{{ req()!.packaging ? ' (' + req()!.packaging + ')' : '' }}{{ req()!.groupRef ? ' · order ' + req()!.groupRef : '' }}.
+              } @else {
+                {{ fmt(req()?.cartons ?? 0) }} bundles asked = {{ suggested() }} container{{ suggested() === 1 ? '' : 's' }} of {{ perContainer() }} bundles.
+              }
             </span>
           </div>
           <app-field label="Containers" [required]="true" [error]="invalid('containers') ? 'At least 1' : null"
@@ -105,9 +109,10 @@ export class AcceptForm extends FormModal {
   protected perContainer = computed(() => {
     const p = this.req()?.product;
     const tpl = p?.packagings?.find((t) => t.isDefault);
-    return tpl?.bundlesPerContainer || p?.bundlesPerContainer || 1;
+    // the packing the distributor asked for on this order wins over the product's default template
+    return this.req()?.bundlesPerContainer || tpl?.bundlesPerContainer || p?.bundlesPerContainer || 1;
   });
-  protected suggested = computed(() => Math.max(1, Math.ceil((this.req()?.cartons ?? 0) / this.perContainer())));
+  protected suggested = computed(() => this.req()?.containers || Math.max(1, Math.ceil((this.req()?.cartons ?? 0) / this.perContainer())));
   protected bundles = computed(() => Number(this.value().containers ?? 0) * this.perContainer());
 
   constructor() {

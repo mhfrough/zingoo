@@ -49,7 +49,7 @@ const today = () => new Date().toISOString().slice(0, 10);
     .cards small { display: block; font-size: var(--text-xs); color: var(--text-3); }
     .cards strong { font-variant-numeric: tabular-nums; }
     .notes { display: flex; flex-direction: column; gap: var(--space-2); margin: 0; padding: 0; list-style: none; }
-    .notes li { padding: var(--space-2) var(--space-3); border-inline-start: 3px solid var(--border-strong); background: var(--surface); font-size: var(--text-sm); }
+    .notes li { padding: var(--space-2) var(--space-3); border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--surface); font-size: var(--text-sm); }
     .notes li[data-kind='overdue'], .notes li[data-kind='advice'] { border-color: var(--danger); }
     .notes li[data-kind='due'] { border-color: var(--warning); }
     .notes small { display: block; color: var(--text-3); }

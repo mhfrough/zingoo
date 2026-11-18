@@ -7,6 +7,7 @@ import {
   input, model, signal, untracked, viewChild,
 } from '@angular/core';
 import { ConfirmService } from './confirm';
+import { Help } from './help';
 import { IconComponent, IconName } from './icon';
 import { tokenMs } from './motion';
 
@@ -33,12 +34,13 @@ let nextOffcanvasId = 0;
   selector: 'app-offcanvas',
   encapsulation: ViewEncapsulation.None,
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [IconComponent],
+  imports: [IconComponent, Help],
   template: `
     <dialog
       #dlg
       class="offcanvas"
       [attr.data-size]="size()"
+      [attr.data-split]="split() ? '' : null"
       [attr.data-closing]="closing() ? '' : null"
       [attr.aria-labelledby]="titleId"
       (cancel)="onCancel($event)"
@@ -48,7 +50,14 @@ let nextOffcanvasId = 0;
       <div class="offcanvas__panel">
         <header class="offcanvas__head">
           <div>
-            <h2 [id]="titleId">{{ title() }}</h2>
+            @if (help(); as text) {
+              <div class="offcanvas__title-row">
+                <h2 [id]="titleId">{{ title() }}</h2>
+                <app-help [title]="title()" [text]="text" />
+              </div>
+            } @else {
+              <h2 [id]="titleId">{{ title() }}</h2>
+            }
             @if (subtitle()) {
               <p>{{ subtitle() }}</p>
             }
@@ -58,7 +67,12 @@ let nextOffcanvasId = 0;
             <app-icon name="x" [size]="18" />
           </button>
         </header>
-        <div class="offcanvas__body scroll-shadow"><ng-content /></div>
+        <div class="offcanvas__body" [class.scroll-shadow]="!split()">
+          @if (split()) {
+            <aside class="offcanvas__aside scroll-shadow" [attr.aria-label]="asideLabel()"><ng-content select="[offcanvasAside]" /></aside>
+          }
+          <div class="offcanvas__main" [class.scroll-shadow]="split()"><ng-content /></div>
+        </div>
         <footer class="offcanvas__foot"><ng-content select="[offcanvasFooter]" /></footer>
       </div>
     </dialog>
@@ -71,8 +85,17 @@ export class Offcanvas {
   readonly title = input.required<string>();
   /** small line under the heading (a record number, a distributor name) */
   readonly subtitle = input<string>();
+  /** a "?" next to the heading: what this panel does, in one or two sentences */
+  readonly help = input<string>();
   /** md = 32rem, lg = 50dvw, xl = 70dvw; full width on phones and small tablets */
   readonly size = input<'md' | 'lg' | 'xl'>('md');
+  /**
+   * Two panes: the record in full on the left (content marked `offcanvasAside`), the form on the right. The panel
+   * gets wider (about 80% of the screen); on tablets and phones the details stack under the form.
+   */
+  readonly split = input(false, { transform: booleanAttribute });
+  /** screen-reader name of the left pane */
+  readonly asideLabel = input('Details');
   /** the form has unsaved changes: closing asks "Discard changes?" first */
   readonly dirty = input(false, { transform: booleanAttribute });
   /** CSS selector of the element that gets focus when the panel opens (default: the first control) */
@@ -134,7 +157,7 @@ export class Offcanvas {
     const sel = this.focusSelector();
     queueMicrotask(() => {
       const target = sel ? el.querySelector<HTMLElement>(sel) : el.querySelector<HTMLElement>('.offcanvas__body :is(input, select, textarea, [role=combobox], [contenteditable]):not([disabled])');
-      (target ?? el.querySelector<HTMLElement>('.offcanvas__head button'))?.focus();
+      (target ?? el.querySelector<HTMLElement>('.offcanvas__head button[aria-label="Close panel"]'))?.focus();
     });
   }
 

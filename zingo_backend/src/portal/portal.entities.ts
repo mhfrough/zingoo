@@ -4,7 +4,7 @@ import { AppEntity } from '../common/app.entity';
 import { DocEntity } from '../common/doc.entity';
 import { numeric } from '../common/numeric.transformer';
 import { SalesOrder } from '../distribution/distribution.entities';
-import { ProductionOrder } from '../manufacturing/production-orders.entities';
+import { OrderTransport, ProductionOrder } from '../manufacturing/production-orders.entities';
 
 /** Distributor asks for stock; staff accept it into a production order (or, with sales orders on, a warehouse sales order). */
 @Entity('portal_requests')
@@ -59,6 +59,36 @@ export class PortalRequest extends DocEntity {
   /** staff note when the request is rejected */
   @Column({ type: 'text', nullable: true })
   reviewNote: string | null;
+
+  /** the order this line belongs to (DO-001): an order of several products is one request per product */
+  @Column({ type: 'varchar', length: 30, nullable: true })
+  groupRef: string | null;
+
+  /** containers asked for (empty on old requests: then `cartons` bundles, rounded up to containers) */
+  @Column({ type: 'int', nullable: true })
+  containers: number | null;
+
+  /** packaging template picked, and the packing figures used on this order (may differ from the template) */
+  @Column({ type: 'varchar', length: 60, nullable: true })
+  packaging: string | null;
+
+  @Column({ type: 'int', nullable: true })
+  packetsPerBundle: number | null;
+
+  @Column({ type: 'int', nullable: true })
+  bundlesPerContainer: number | null;
+
+  /** planned transport (transporter, vehicle, driver) */
+  @Column({ type: 'jsonb', nullable: true })
+  transport: OrderTransport | null;
+
+  /** the manufacturer picked for this line (a SKU can have several); empty = the product's default */
+  @Column({ type: 'uuid', nullable: true })
+  manufacturerId: string | null;
+
+  /** Carton, Bora: from the template picked, or changed on the order */
+  @Column({ type: 'varchar', length: 40, nullable: true })
+  containerUnit: string | null;
 }
 
 /** Proof of delivery filed by the distributor, with damaged / missing cartons. */

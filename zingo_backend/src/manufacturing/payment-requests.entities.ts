@@ -60,6 +60,18 @@ export class MfrPaymentRequest extends AppEntity {
   @Column({ type: 'varchar', length: 60, nullable: true })
   invoiceNo: string | null;
 
+  /** when Zen Foods should pay it: the request date for an advance, plus the manufacturer's credit days for a balance */
+  @Column({ type: 'date', nullable: true })
+  dueDate: string | null;
+
+  /** every account printed on the invoice (one or more); `bank` is the first */
+  @Column({ type: 'jsonb', default: () => "'[]'" })
+  banks: RequestBank[];
+
+  /** the manufacturer's own invoice copy (an order document, ORDER_INVOICE) */
+  @Column({ type: 'uuid', nullable: true })
+  invoiceFileId: string | null;
+
   @Column({ type: 'jsonb' })
   bank: RequestBank;
 

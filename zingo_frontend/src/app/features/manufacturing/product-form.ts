@@ -26,7 +26,7 @@ const withCurrent = (list: string[], current: string | null | undefined): Select
   imports: [MoneyInput, ReactiveFormsModule, Offcanvas, Field, Btn, Select, MultiSelect, RichText],
   template: `
     <app-offcanvas #oc [(open)]="open" [title]="product() ? 'Edit product / SKU' : 'Add product / SKU'"
-               subtitle="Rates are per packet, in PKR." size="lg" [dirty]="form.dirty">
+               subtitle="Rates are per packet, in PKR." size="xl" [dirty]="form.dirty">
       @if (error()) {
         <div class="notice" data-tone="danger" role="alert">{{ error() }}</div>
       }
@@ -91,6 +91,14 @@ const withCurrent = (list: string[], current: string | null | undefined): Select
                 <app-field label="Name" [required]="true"><input type="text" formControlName="name" maxlength="60" /></app-field>
                 <app-field label="Packets per bundle" [required]="true"><input type="number" formControlName="packetsPerBundle" min="1" step="1" /></app-field>
                 <app-field label="Bundles per container" [required]="true"><input type="number" formControlName="bundlesPerContainer" min="1" step="1" /></app-field>
+                <app-field label="Container is a" [help]="i === 0 ? 'What one container of this packing is called when it is counted: a Carton or a Bora (sack). Shown as 2 containers (Bora). The list is on Settings & Data.' : undefined">
+                  <select formControlName="containerUnit">
+                    <option value="">Not set</option>
+                    @for (u of units(); track u.value) {
+                      <option [value]="u.value">{{ u.label }}</option>
+                    }
+                  </select>
+                </app-field>
                 <span class="tpl__total">{{ num(perContainerOf(i)) }} packets / container</span>
                 <label class="tpl__default"><input type="radio" name="tpl-default" [checked]="g.value.isDefault" (change)="makeDefault(i)" /> Default</label>
                 <button appBtn type="button" variant="ghost" icon="trash" iconOnly (click)="removeTemplate(i)" [disabled]="templates.length === 1"
@@ -104,7 +112,8 @@ const withCurrent = (list: string[], current: string | null | undefined): Select
         <section class="block">
           <header><h3>Partners</h3><p>Who makes it and who sells it. Sell-out days: how long a distributor has to sell one container (0 = no limit).</p></header>
           <div class="form-grid">
-            <app-field label="Manufacturer" hint="Makes this product">
+            <app-field label="Default manufacturer" hint="New orders go to it unless another is picked"
+              help="A SKU can be made by several manufacturers, each at its own price. The default one gets the orders unless the order picks another. Its rate is the Manufacturer rate below, and the margins use it.">
               <app-select formControlName="manufacturerId" [options]="manufacturerOptions()" placeholder="Choose a manufacturer" />
             </app-field>
             <app-field label="Sell-out days" [hint]="selloutHint()" [error]="invalid('selloutDays') ? '0 to 365 days' : null">
@@ -113,6 +122,22 @@ const withCurrent = (list: string[], current: string | null | undefined): Select
             <app-field label="Distributors" [wide]="true" hint="One or more; the first is the default for orders">
               <app-multi-select formControlName="distributorIds" [options]="distributorOptions()" placeholder="Add a distributor" />
             </app-field>
+          </div>
+          <div class="makers" formArrayName="others">
+            <h4>Other manufacturers <span>each at its own rate per packet</span></h4>
+            @for (g of others.controls; track g; let i = $index) {
+              <div class="maker" [formGroupName]="i">
+                <app-field label="Manufacturer" [required]="true" [error]="otherInvalid(i) ? 'Choose one, not the default' : null">
+                  <app-select formControlName="manufacturerId" [options]="manufacturerOptions()" placeholder="Choose a manufacturer" [clearable]="false" />
+                </app-field>
+                <app-field label="Rate / packet" [required]="true"><app-money-input formControlName="rate" /></app-field>
+                <button appBtn type="button" size="sm" (click)="makeMakerDefault(i)" [disabled]="!g.value.manufacturerId">Make default</button>
+                <button appBtn type="button" variant="ghost" icon="trash" iconOnly (click)="removeMaker(i)" [attr.aria-label]="'Remove manufacturer ' + (i + 1)"></button>
+              </div>
+            } @empty {
+              <p class="muted">Only the default manufacturer makes it.</p>
+            }
+            <div><button appBtn type="button" size="sm" icon="plus" (click)="addMaker()" [disabled]="!form.controls.manufacturerId.value">Add manufacturer</button></div>
           </div>
         </section>
 
@@ -125,7 +150,7 @@ const withCurrent = (list: string[], current: string | null | undefined): Select
             <app-field label="Distributor price" [required]="true" hint="What the distributor pays Zen Foods">
               <app-money-input formControlName="rate" />
             </app-field>
-            <app-field label="Manufacturer rate">
+            <app-field label="Manufacturer rate" hint="Of the default manufacturer">
               <app-money-input formControlName="manufacturerRate" />
             </app-field>
             <app-field label="Packaging cost" hint="Only if bought separately">
@@ -223,9 +248,37 @@ const withCurrent = (list: string[], current: string | null | undefined): Select
       gap: var(--space-3);
     }
 
+    .makers {
+      display: flex;
+      flex-direction: column;
+      gap: var(--space-2);
+      margin-block-start: var(--space-4);
+
+      & h4 {
+        margin: 0;
+        font-size: var(--text-sm);
+
+        & span {
+          font-weight: 400;
+          color: var(--text-3);
+        }
+      }
+    }
+
+    .maker {
+      display: grid;
+      grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr) auto auto;
+      align-items: end;
+      gap: var(--space-2);
+
+      @media (max-width: 760px) {
+        grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+      }
+    }
+
     .tpl {
       display: grid;
-      grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr) minmax(0, 1fr) auto auto auto;
+      grid-template-columns: minmax(9rem, 1.4fr) minmax(5.5rem, 1fr) minmax(5.5rem, 1fr) minmax(7rem, 1fr) auto auto auto;
       align-items: end;
       gap: var(--space-2);
       padding-block-end: var(--space-3);
@@ -332,7 +385,49 @@ export class ProductForm extends FormModal {
     inboundRate: this.fb.nonNullable.control(0, Validators.min(0)),
     outboundRate: this.fb.nonNullable.control(0, Validators.min(0)),
     active: this.fb.nonNullable.control('true'),
+    others: this.fb.array<FormGroup>([]),
   });
+
+  /** the manufacturers besides the default, each with its rate */
+  protected get others() {
+    return this.form.controls.others as FormArray<FormGroup>;
+  }
+
+  private makerGroup(m?: { manufacturerId?: string | null; rate?: number }) {
+    return this.fb.group({
+      manufacturerId: this.fb.control<string | null>(m?.manufacturerId ?? null, Validators.required),
+      rate: this.fb.nonNullable.control(m?.rate ?? Number(this.form.controls.manufacturerRate.value ?? 0), [Validators.required, Validators.min(0)]),
+    });
+  }
+
+  protected addMaker() {
+    this.others.push(this.makerGroup());
+    this.form.markAsDirty();
+  }
+
+  protected removeMaker(i: number) {
+    this.others.removeAt(i);
+    this.form.markAsDirty();
+  }
+
+  /** the row becomes the default (and its rate the manufacturer rate); the old default takes its place in the list */
+  protected makeMakerDefault(i: number) {
+    const row = this.others.at(i).getRawValue() as { manufacturerId: string | null; rate: number };
+    const oldId = this.form.controls.manufacturerId.value;
+    const oldRate = Number(this.form.controls.manufacturerRate.value ?? 0);
+    this.form.patchValue({ manufacturerId: row.manufacturerId, manufacturerRate: Number(row.rate) });
+    if (oldId) this.others.at(i).setValue({ manufacturerId: oldId, rate: oldRate });
+    else this.others.removeAt(i);
+    this.form.markAsDirty();
+  }
+
+  /** a row must name a manufacturer, not the default one, and not twice */
+  protected otherInvalid(i: number) {
+    const g = this.others.at(i);
+    const id = g.get('manufacturerId')?.value;
+    const ids = this.others.controls.map((c) => c.get('manufacturerId')?.value);
+    return (g.touched || g.dirty) && (!id || id === this.form.controls.manufacturerId.value || ids.indexOf(id) !== i);
+  }
 
   protected get templates() {
     return this.form.controls.packagings as FormArray<FormGroup>;
@@ -341,6 +436,12 @@ export class ProductForm extends FormModal {
   private value = toSignal(this.form.valueChanges, { initialValue: this.form.getRawValue() });
 
   protected flavours = computed(() => withCurrent(this.store.options('FLAVOUR'), this.value().flavour ?? this.product()?.flavour));
+  /** Carton, Bora ... plus any unit a template still uses that was switched off in Settings */
+  protected units = computed(() => {
+    const used = ((this.value().packagings ?? []) as Partial<PackagingTemplate>[]).map((t) => t.containerUnit).filter((u): u is string => !!u);
+    const list = this.store.options('CONTAINER_UNIT');
+    return [...list, ...used.filter((u) => !list.includes(u))].map((u) => ({ value: u, label: u }));
+  });
   protected sizes = computed(() => withCurrent(this.store.options('PACKET_SIZE'), this.value().packetSize ?? this.product()?.packetSize));
   protected manufacturerOptions = computed<SelectOption<string>[]>(() =>
     this.manufacturers().map((m) => ({ value: m.id, label: m.name, sub: m.poc ?? m.contact ?? undefined })));
@@ -384,13 +485,16 @@ export class ProductForm extends FormModal {
       name: [t?.name ?? '', Validators.required],
       packetsPerBundle: [t?.packetsPerBundle ?? 432, [Validators.required, Validators.min(1)]],
       bundlesPerContainer: [t?.bundlesPerContainer ?? 10, [Validators.required, Validators.min(1)]],
+      containerUnit: [t?.containerUnit ?? ''],
       isDefault: [t?.isDefault ?? false],
     });
   }
 
   protected addTemplate() {
     const d = this.defaultTemplate();
-    this.templates.push(this.templateGroup({ name: `Template ${this.templates.length + 1}`, packetsPerBundle: d.packetsPerBundle, bundlesPerContainer: d.bundlesPerContainer }));
+    this.templates.push(this.templateGroup({
+      name: `Template ${this.templates.length + 1}`, packetsPerBundle: d.packetsPerBundle, bundlesPerContainer: d.bundlesPerContainer, containerUnit: d.containerUnit,
+    }));
     this.form.markAsDirty();
   }
 
@@ -409,7 +513,7 @@ export class ProductForm extends FormModal {
   private defaultTemplate = computed(() => {
     const list = (this.value().packagings ?? []) as Partial<PackagingTemplate>[];
     const d = list.find((t) => t.isDefault) ?? list[0];
-    return { packetsPerBundle: Number(d?.packetsPerBundle || 0), bundlesPerContainer: Number(d?.bundlesPerContainer || 0) };
+    return { packetsPerBundle: Number(d?.packetsPerBundle || 0), bundlesPerContainer: Number(d?.bundlesPerContainer || 0), containerUnit: d?.containerUnit ?? '' };
   });
   protected perContainerOf = (i: number) => {
     const t = ((this.value().packagings ?? [])[i] ?? {}) as Partial<PackagingTemplate>;
@@ -457,9 +561,11 @@ export class ProductForm extends FormModal {
     const s = this.store.settings();
     this.adding.set(null);
     this.templates.clear();
+    // a template saved before units moved onto templates takes the product's unit
+    const firstUnit = p?.containerUnit ?? this.store.options('CONTAINER_UNIT')[0] ?? '';
     const templates: Partial<PackagingTemplate>[] = p?.packagings?.length
-      ? p.packagings
-      : [{ name: 'Standard', packetsPerBundle: p?.packsPerCarton ?? s?.packsPerCarton ?? 432, bundlesPerContainer: p?.bundlesPerContainer ?? s?.bundlesPerContainer ?? 10, isDefault: true }];
+      ? p.packagings.map((t) => ({ ...t, containerUnit: t.containerUnit ?? firstUnit }))
+      : [{ name: 'Standard', packetsPerBundle: p?.packsPerCarton ?? s?.packsPerCarton ?? 432, bundlesPerContainer: p?.bundlesPerContainer ?? s?.bundlesPerContainer ?? 10, containerUnit: firstUnit, isDefault: true }];
     for (const t of templates) this.templates.push(this.templateGroup(t));
     this.form.reset(p
       ? {
@@ -476,19 +582,27 @@ export class ProductForm extends FormModal {
       });
     // reset() above sets the template rows back to their first values; put them back
     templates.forEach((t, i) => this.templates.at(i).reset({ ...t, isDefault: !!t.isDefault }));
+    this.others.clear();
+    for (const m of (p?.makers ?? []).filter((x) => !x.isDefault && x.manufacturerId !== p?.manufacturerId)) this.others.push(this.makerGroup(m));
   }
 
   protected request() {
-    const v = this.form.getRawValue();
+    const { others, ...v } = this.form.getRawValue();
+    const rest = (others as { manufacturerId: string | null; rate: number }[])
+      .filter((m) => m.manufacturerId && m.manufacturerId !== v.manufacturerId)
+      .map((m) => ({ manufacturerId: m.manufacturerId!, rate: Number(m.rate), isDefault: false }));
+    const makers = v.manufacturerId ? [{ manufacturerId: v.manufacturerId, rate: Number(v.manufacturerRate), isDefault: true }, ...rest] : rest;
     const days = v.selloutDays === null || (v.selloutDays as unknown) === '' ? null : Number(v.selloutDays);
     const grams = v.gramsPerPacket === null || (v.gramsPerPacket as unknown) === '' ? null : Number(v.gramsPerPacket);
     return this.api.saveProduct(this.product()?.id ?? null, {
       ...v, sku: v.sku.trim(), name: v.name.trim(), description: v.description.trim() || null,
       selloutDays: days, gramsPerPacket: grams, active: v.active === 'true',
       packagings: (v.packagings as PackagingTemplate[]).map((t) => ({
-        name: t.name.trim(), packetsPerBundle: Number(t.packetsPerBundle), bundlesPerContainer: Number(t.bundlesPerContainer), isDefault: !!t.isDefault,
+        name: t.name.trim(), packetsPerBundle: Number(t.packetsPerBundle), bundlesPerContainer: Number(t.bundlesPerContainer),
+        containerUnit: t.containerUnit || null, isDefault: !!t.isDefault,
       })),
       packsPerCarton: Number(this.packetsPerBundle()), bundlesPerContainer: Number(this.defaultTemplate().bundlesPerContainer),
+      makers,
     });
   }
 

@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
+import { AttachmentsModule } from '../attachments/attachments.module';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { LedgerModule } from '../ledger/ledger.module';
 import { SetupModule } from '../setup/setup.module';
@@ -18,14 +19,14 @@ import { ShipmentsService } from './shipments.service';
 import { ProductionOrder, ProductionOrderEvent } from './production-orders.entities';
 import { ProductionOrdersService } from './production-orders.service';
 import { DeliveryClaimsController } from './delivery-claims.controller';
-import { DeliveryClaim } from './delivery-claims.entities';
+import { DeliveryClaim, DeliveryClaimNote } from './delivery-claims.entities';
 import { DeliveryClaimsService } from './delivery-claims.service';
 import { DistDispatchesController } from './dist-dispatches.controller';
 import { DistributorDispatch } from './dist-dispatches.entities';
 import { DistDispatchesService } from './dist-dispatches.service';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([ProductionBatch, ManufacturerPayment, ProductionOrder, ProductionOrderEvent, MfrPaymentRequest, MfrRequestPayment, ProductionShipment, DistributorInvoice, DistributorInvoiceLine, DistributorInvoicePayment, DeliveryClaim, DistributorDispatch]), LedgerModule, SetupModule],
+  imports: [TypeOrmModule.forFeature([ProductionBatch, ManufacturerPayment, ProductionOrder, ProductionOrderEvent, MfrPaymentRequest, MfrRequestPayment, ProductionShipment, DistributorInvoice, DistributorInvoiceLine, DistributorInvoicePayment, DeliveryClaim, DeliveryClaimNote, DistributorDispatch]), LedgerModule, SetupModule, AttachmentsModule],
   controllers: [BatchesController, MfrPaymentsController, ProductionOrdersController, PaymentRequestsController, ShipmentsController, DistInvoicesController, DeliveryClaimsController, DistDispatchesController],
   providers: [BatchesService, MfrPaymentsService, ProductionOrdersService, PaymentRequestsService, ShipmentsService, DistInvoicesService, DeliveryClaimsService, DistDispatchesService],
   exports: [BatchesService, MfrPaymentsService, ProductionOrdersService, PaymentRequestsService, ShipmentsService, DistInvoicesService],

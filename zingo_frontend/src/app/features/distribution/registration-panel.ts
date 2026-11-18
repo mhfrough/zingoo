@@ -109,7 +109,6 @@ const TONE: Record<string, Tone> = {
     ol.trail {
       margin: 0;
       padding-inline-start: var(--space-4);
-      border-inline-start: 2px solid var(--border);
       list-style: none;
       display: flex;
       flex-direction: column;

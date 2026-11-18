@@ -6,6 +6,8 @@ export interface PackagingTemplate {
   name: string;
   packetsPerBundle: number;
   bundlesPerContainer: number;
+  /** what one container of this packing is called (Settings list CONTAINER_UNIT): Carton, Bora */
+  containerUnit?: string | null;
   isDefault: boolean;
 }
 
@@ -34,6 +36,10 @@ export interface Product {
   bundlesPerContainer: number;
   flavour: string | null;
   packetSize: string | null;
+  /** every manufacturer that can make it, each at its own rate; the default is also manufacturerId / manufacturerRate */
+  makers?: { manufacturerId: string; rate: number; isDefault: boolean }[];
+  /** what a container of this SKU is called (Settings list CONTAINER_UNIT): Carton, Bora */
+  containerUnit?: string | null;
   description: string | null;
   manufacturerId: string | null;
   manufacturer?: Manufacturer | null;
@@ -283,6 +289,8 @@ export interface Settings {
   bundlesPerContainer?: number;
   /** sell-out days, default for a new distributor */
   defaultSelloutDays?: number;
+  /** days on the road factory to distributor; expected date = ready date + these */
+  transitDays?: number;
   /** manufacturer advance %, default for a new manufacturer */
   defaultAdvancePct?: number;
   /** the earlier sales-order flow (warehouse dispatch, invoice at dispatch) is shown */

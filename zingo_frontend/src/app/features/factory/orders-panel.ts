@@ -85,7 +85,7 @@ export class OrdersPanel {
     { id: 'order', label: 'Order / Deliver to', kind: 'title', value: (o) => productLabel(o.product), sub: (o) => destination(o) },
     {
       id: 'ref', label: 'Order no. / quantity', kind: 'mono', value: (o) => o.refNo, sortValue: (o) => o.date,
-      sub: (o) => subLine(docDate(o), qtyLabel(o.containers, o.bundles), `${fmtNumber(o.packets)} packets`),
+      sub: (o) => subLine(docDate(o), qtyLabel(o.containers, o.bundles, o.containerUnit ?? o.product.containerUnit), `${fmtNumber(o.packets)} packets`, o.groupRef ? `order ${o.groupRef}` : null),
     },
     this.mode() === 'company'
       ? { id: 'who', label: 'Manufacturer', priority: 2, value: (o) => o.manufacturer.name, sub: (o) => (o.dueDate ? `due ${fmtDate(o.dueDate)}` : null) }

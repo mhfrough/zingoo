@@ -22,7 +22,8 @@ export const INCOTERMS = ['EXW', 'FOB', 'CFR', 'CIF', 'DAP', 'DDP'] as const;
 export const EXPORT_STATUS = ['Quote', 'Shipped'] as const;
 
 /** a distributor login's role in the portal (spec section 7) */
-export const PORTAL_ROLES = ['Owner', 'Sales', 'Finance', 'Warehouse', 'Read-only'] as const;
+/** distributor logins: Owner, Sales, Finance, Warehouse, Read-only; manufacturer logins: Owner, Manager, Read-only */
+export const PORTAL_ROLES = ['Owner', 'Sales', 'Finance', 'Warehouse', 'Read-only', 'Manager'] as const;
 export type PortalRole = (typeof PORTAL_ROLES)[number];
 
 /** What a ledger line came from (used to replace the lines when the document changes). */

@@ -1,6 +1,6 @@
 import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectDataSource } from '@nestjs/typeorm';
-import { DataSource, EntityManager } from 'typeorm';
+import { DataSource, EntityManager, In } from 'typeorm';
 import { Distributor, Manufacturer, Product } from '../catalog/catalog.entities';
 import { round2 } from '../common/numeric.transformer';
 import { nextRef } from '../common/ref';
@@ -11,7 +11,17 @@ import { LINK, Note, NotificationsService, TEAM, plural } from '../notifications
 import {
   AcceptProductionOrderDto, CreateProductionOrderDto, ReasonDto, StageDto, UpdateProductionOrderDto,
 } from './production-orders.dto';
-import { ProductionOrder, ProductionOrderEvent } from './production-orders.entities';
+import { OrderTransport, ProductionOrder, ProductionOrderEvent } from './production-orders.entities';
+import { ProductionShipment } from './shipments.entities';
+import { expectedDate } from './order-movement';
+import { Attachment } from '../attachments/attachment.entity';
+import { AttachmentsService } from '../attachments/attachments.service';
+
+/** what a file on an order is: the signed dispatch voucher, the manufacturer's invoice copy, anything else */
+export const ORDER_DOC_KINDS = ['CHALLAN', 'INVOICE', 'OTHER'] as const;
+export type OrderDocKind = (typeof ORDER_DOC_KINDS)[number];
+const ORDER_DOC_TYPES: string[] = ORDER_DOC_KINDS.map((k) => `ORDER_${k}`);
+import { DeliveryClaim } from './delivery-claims.entities';
 
 /** who is calling: staff, or a manufacturer login tied to its own manufacturer */
 export interface OrderUser {
@@ -19,6 +29,7 @@ export interface OrderUser {
   name: string;
   role: Role;
   manufacturerId?: string | null;
+  distributorId?: string | null;
 }
 
 /**
@@ -26,12 +37,24 @@ export interface OrderUser {
  * rejects it from its portal and then reports each production step. Nothing posts to the ledger here: the advance
  * payment and the delivery post in their own phases.
  */
+/** trimmed transport with the empty fields dropped; null when nothing is left */
+export function cleanTransport(t: OrderTransport | null | undefined): OrderTransport | null {
+  if (!t) return null;
+  const out: OrderTransport = {};
+  for (const k of ['transporter', 'vehicleNo', 'driverName', 'driverPhone', 'driverCnic'] as const) {
+    const v = t[k]?.trim();
+    if (v) out[k] = v;
+  }
+  return Object.keys(out).length ? out : null;
+}
+
 @Injectable()
 export class ProductionOrdersService {
   constructor(
     @InjectDataSource() private readonly db: DataSource,
     private readonly settings: SettingsService,
     private readonly notes: NotificationsService,
+    private readonly attachments: AttachmentsService,
   ) {}
 
   // ───────────── reads ─────────────
@@ -56,6 +79,116 @@ export class ProductionOrdersService {
     this.checkOwner(user, o);
     if (this.isManufacturer(user) && o.status === 'Draft') throw new NotFoundException('Production order not found');
     return this.shape(o, (await this.movedMap(this.db.manager))[o.id]);
+  }
+
+  /**
+   * One order in full for the order panel: the order with its timeline, every load that left the factory (with
+   * transport), the claims raised on it and the production steps. A manufacturer sees only its own (never drafts),
+   * a distributor only the orders made for it; the partner money filter still applies on the way out.
+   */
+  /** the order if this login may see it: its manufacturer (not drafts), the distributor it is for, or staff */
+  private async visible(em: EntityManager, user: OrderUser, id: string) {
+    const o = await this.load(em, id);
+    this.checkOwner(user, o);
+    if (this.isManufacturer(user) && o.status === 'Draft') throw new NotFoundException('Production order not found');
+    if (user.role === 'Distributor') {
+      if (!user.distributorId) throw new ForbiddenException('This login is not linked to a distributor.');
+      if (o.distributorId !== user.distributorId || o.status === 'Draft') throw new NotFoundException('Production order not found');
+    }
+    return o;
+  }
+
+  /** the order's files: signed dispatch vouchers, the manufacturer's invoice copies (never shown to the distributor), others */
+  private async documentsOf(em: EntityManager, user: OrderUser, id: string) {
+    const kinds = user.role === 'Distributor' ? ['ORDER_CHALLAN', 'ORDER_OTHER'] : ORDER_DOC_TYPES;
+    const rows = await em.find(Attachment, { where: { ownerId: id, ownerType: In(kinds) }, order: { createdAt: 'ASC' } });
+    return rows.map((a) => ({ id: a.id, name: a.name, mime: a.mime, size: a.size, kind: a.ownerType!.slice(6), uploadedBy: a.uploadedBy, createdAt: a.createdAt }));
+  }
+
+  /**
+   * Adds a file to an order: CHALLAN = the dispatch voucher signed by the driver / receiver (manufacturer, distributor
+   * or staff), INVOICE = the manufacturer's own invoice copy (manufacturer or staff), OTHER = anything else.
+   */
+  async addDocument(user: OrderUser, id: string, kind: OrderDocKind, file: Parameters<AttachmentsService['create']>[0]) {
+    const em = this.db.manager;
+    const o = await this.visible(em, user, id);
+    if (kind === 'INVOICE' && user.role === 'Distributor') throw new ForbiddenException('Only the manufacturer or Zen Foods attach its invoice.');
+    if (o.status !== 'Accepted') throw new BadRequestException(`${o.refNo} is ${o.status.toLowerCase()}: documents go on an accepted order.`);
+    const meta = await this.attachments.create(file, user.name, { type: `ORDER_${kind}`, id });
+    const what = kind === 'CHALLAN' ? 'Signed dispatch voucher' : kind === 'INVOICE' ? 'Manufacturer invoice copy' : 'Document';
+    await this.event(em, id, user, `${what} attached`, meta.name);
+    if (kind === 'CHALLAN') {
+      await this.notes.send(em, user,
+        { to: { staff: TEAM.manufacturing }, kind: 'order.document', refNo: o.refNo, link: LINK.manufacturing('orders'),
+          title: `Signed dispatch voucher on ${o.refNo}`, body: `${meta.name} · by ${user.name}` },
+        ...(o.distributorId && user.role !== 'Distributor' ? [{ to: { distributorId: o.distributorId }, kind: 'order.document', refNo: o.refNo, link: LINK.portal('stock'),
+          title: `Signed dispatch voucher on ${o.refNo}`, body: meta.name }] : []),
+        ...(user.role !== 'Manufacturer' ? [{ to: { manufacturerId: o.manufacturerId }, kind: 'order.document', refNo: o.refNo, link: LINK.factory,
+          title: `Signed dispatch voucher on ${o.refNo}`, body: meta.name }] : []),
+      );
+    }
+    return { ...meta, kind };
+  }
+
+  /** one of the order's files, if this login may see the order (and, for a distributor, not an invoice copy) */
+  async documentContent(user: OrderUser, id: string, docId: string) {
+    const em = this.db.manager;
+    await this.visible(em, user, id);
+    const a = await this.attachments.content(docId);
+    const allowed = user.role === 'Distributor' ? ['ORDER_CHALLAN', 'ORDER_OTHER'] : ORDER_DOC_TYPES;
+    if (a.ownerId !== id || !allowed.includes(a.ownerType ?? '')) throw new NotFoundException('File not found.');
+    return a;
+  }
+
+  /** the uploader (or Admin / Manufacturing) removes a file while no invoice uses it */
+  async removeDocument(user: OrderUser, id: string, docId: string) {
+    const em = this.db.manager;
+    await this.visible(em, user, id);
+    const a = await em.findOne(Attachment, { where: { id: docId } });
+    if (!a || a.ownerId !== id || !ORDER_DOC_TYPES.includes(a.ownerType ?? '')) throw new NotFoundException('File not found.');
+    if (a.uploadedBy !== user.name && !['Admin', 'Manufacturing'].includes(user.role)) throw new ForbiddenException('Only the person who attached it can remove it.');
+    const used: unknown[] = await em.query(`SELECT 1 FROM mfr_payment_requests WHERE "invoiceFileId" = $1 AND status = 'Submitted' LIMIT 1`, [docId]);
+    if (used.length) throw new BadRequestException('A payment request uses this invoice copy. Withdraw the request first.');
+    await em.remove(a);
+    await this.event(em, id, user, 'Document removed', a.name);
+    return { deleted: true };
+  }
+
+  async detail(user: OrderUser, id: string) {
+    const em = this.db.manager;
+    const o = await this.visible(em, user, id);
+    const [shipments, claims, stages] = await Promise.all([
+      em.find(ProductionShipment, { where: { orderId: id }, order: { shipDate: 'ASC', createdAt: 'ASC' } }),
+      em.find(DeliveryClaim, { where: { orderId: id }, order: { date: 'ASC', createdAt: 'ASC' } }),
+      em.find(Lookup, { where: { list: 'ORDER_STAGE', active: true }, order: { sortOrder: 'ASC' } }),
+    ]);
+    const steps = stages.map((l) => l.code);
+    const last = steps[steps.length - 1] ?? null;
+    // the manufacturer's invoices on this order (never to the distributor: they carry the manufacturer's price)
+    const invoices = user.role === 'Distributor' ? [] : await this.invoicesOf(em, id);
+    const s = await this.settings.get(em);
+    return {
+      order: this.shape(o, (await this.movedMap(em))[o.id]),
+      /** ready date plus the transit days of Settings */
+      expectedDate: expectedDate(o.readyDate, s.transitDays),
+      transitDays: s.transitDays ?? 2,
+      documents: await this.documentsOf(em, user, id),
+      invoices,
+      stages: steps,
+      /** the manufacturer reported the last step: the goods can be collected or sent */
+      ready: o.status === 'Accepted' && (!last || o.stage === last),
+      shipments: shipments.map((s) => ({
+        id: s.id, refNo: s.refNo, shipDate: s.shipDate, containers: s.containers, method: s.method, status: s.status,
+        vehicle: s.vehicle, waybill: s.waybill, note: s.note, shippedBy: s.shippedBy,
+        receivedDate: s.receivedDate, receivedContainers: s.receivedContainers, receivedBy: s.receivedBy, receiptNote: s.receiptNote,
+        bundlesPerContainer: s.bundlesPerContainer, packetsPerBundle: s.packetsPerBundle,
+      })),
+      claims: claims.map((c) => ({
+        id: c.id, refNo: c.refNo, date: c.date, shipmentId: c.shipmentId, kind: c.kind, bundles: c.bundles, value: c.value,
+        note: c.note, hasEvidence: !!c.evidence, raisedBy: c.raisedBy, status: c.status, resolution: c.resolution,
+        decisionNote: c.decisionNote, decidedBy: c.decidedBy, decidedDate: c.decidedDate,
+      })),
+    };
   }
 
   /** the manufacturer a portal page shows: a manufacturer login sees its own, staff pick one (or the first) */
@@ -89,11 +222,11 @@ export class ProductionOrdersService {
   }
 
   /** places an order inside the caller's transaction (also used when a distributor's stock request is accepted) */
-  async createIn(em: EntityManager, user: OrderUser, dto: CreateProductionOrderDto, origin: string | null = null) {
+  async createIn(em: EntityManager, user: OrderUser, dto: CreateProductionOrderDto, origin: string | null = null, groupRef: string | null = null) {
     const fields = await this.resolve(em, dto, null);
     const s = await this.settings.get(em);
     const refNo = await nextRef(em, ProductionOrder, s.docPrefixes['production'] ?? 'MO', 3, 1);
-    const o = await em.save(em.create(ProductionOrder, { ...fields, refNo, status: 'Draft' }));
+    const o = await em.save(em.create(ProductionOrder, { ...fields, refNo, groupRef, status: 'Draft' }));
     await this.event(em, o.id, user, 'Created', origin);
     if (dto.send) await this.markSent(em, o, user);
     return o;
@@ -263,8 +396,18 @@ export class ProductionOrdersService {
 
   private async event(em: EntityManager, orderId: string, user: OrderUser, event: string, note: string | null) {
     await em.save(em.create(ProductionOrderEvent, {
-      orderId, event, note, by: user.name, side: this.isManufacturer(user) ? 'Manufacturer' : 'Company',
+      orderId, event, note, by: user.name, side: this.isManufacturer(user) ? 'Manufacturer' : user.role === 'Distributor' ? 'Distributor' : 'Company',
     }));
+  }
+
+  /** the manufacturer's payment invoices on one order with what was paid on each */
+  private async invoicesOf(em: EntityManager, orderId: string) {
+    const rows: Record<string, unknown>[] = await em.query(
+      `SELECT r.id, r."refNo", r.kind, r.amount::float8 AS amount, to_char(r.date, 'YYYY-MM-DD') AS date,
+              to_char(r."dueDate", 'YYYY-MM-DD') AS "dueDate", r.status, r."invoiceNo", r."invoiceFileId", r.banks, r.bank,
+              COALESCE((SELECT SUM(p.amount) FROM mfr_request_payments p WHERE p."requestId" = r.id), 0)::float8 AS paid
+         FROM mfr_payment_requests r WHERE r."orderId" = $1 ORDER BY r.date, r."refNo"`, [orderId]);
+    return rows.map((r) => ({ ...r, banks: (r['banks'] as unknown[])?.length ? r['banks'] : [r['bank']] }));
   }
 
   /**
@@ -306,6 +449,10 @@ export class ProductionOrdersService {
     const tpl = wanted ? templates.find((t) => t.name === wanted) : templates.find((t) => t.isDefault);
     if (wanted && !tpl) throw new BadRequestException(`${product.sku} has no packaging template "${wanted}".`);
     const repack = productChanged || dto.packaging !== undefined;
+    const bundlesPerContainer = dto.bundlesPerContainer
+      ?? (repack ? tpl?.bundlesPerContainer ?? product.bundlesPerContainer : before!.bundlesPerContainer);
+    const packetsPerBundle = dto.packetsPerBundle
+      ?? (repack ? tpl?.packetsPerBundle ?? product.packsPerCarton : before!.packetsPerBundle);
 
     return {
       date,
@@ -315,12 +462,17 @@ export class ProductionOrdersService {
       destination,
       distributorId,
       containers: dto.containers ?? before!.containers,
-      bundlesPerContainer: repack ? tpl?.bundlesPerContainer ?? product.bundlesPerContainer : before!.bundlesPerContainer,
-      packetsPerBundle: repack ? tpl?.packetsPerBundle ?? product.packsPerCarton : before!.packetsPerBundle,
-      rate: dto.rate ?? (productChanged ? Number(product.manufacturerRate) : before!.rate),
+      bundlesPerContainer,
+      packetsPerBundle,
+      // the rate of the manufacturer picked (each maker of the SKU has its own); another manufacturer: the default rate
+      rate: dto.rate ?? (productChanged || manufacturer.id !== before?.manufacturerId
+        ? Number((product.makers ?? []).find((m) => m.manufacturerId === manufacturer.id)?.rate ?? product.manufacturerRate)
+        : before!.rate),
       advancePct: !before || manufacturer.id !== before.manufacturerId ? Number(manufacturer.advancePct ?? 0) : before.advancePct,
       dueDate,
       notes: dto.notes !== undefined ? dto.notes?.trim() || null : before?.notes ?? null,
+      transport: dto.transport !== undefined ? cleanTransport(dto.transport) : before?.transport ?? null,
+      containerUnit: dto.containerUnit?.trim() || (repack ? tpl?.containerUnit ?? product.containerUnit ?? null : before?.containerUnit ?? null),
     };
   }
 

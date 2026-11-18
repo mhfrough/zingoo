@@ -79,7 +79,7 @@ export class UsersService implements OnApplicationBootstrap {
       seat: dto.role === 'Admin' || dto.role === 'Finance' ? dto.seat : 'None',
       distributorId: dto.role === 'Distributor' ? dto.distributorId : null,
       manufacturerId: dto.role === 'Manufacturer' ? dto.manufacturerId : null,
-      portalRole: dto.role === 'Distributor' ? (dto.portalRole ?? 'Owner') : 'Owner',
+      portalRole: dto.role === 'Distributor' || dto.role === 'Manufacturer' ? (dto.portalRole ?? 'Owner') : 'Owner',
     });
     return this.view(u);
   }

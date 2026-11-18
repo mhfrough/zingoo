@@ -12,9 +12,9 @@ import { AuthService } from '../../core/auth.service';
 import { downloadCsv } from '../../shared/csv';
 import { errorText } from '../../shared/errors';
 import { downloadBase64, downloadText } from '../../shared/files';
-import { docDate, subLine, Tone, fmtAmount2, fmtDate, fmtMoney, fmtNumber, fmtPct, productLabel, setNumberLocale } from '../../shared/format';
+import { docDate, dueCountdown, dueTone, qtyLabel, subLine, Tone, fmtAmount2, fmtDate, fmtMoney, fmtNumber, fmtPct, productLabel, setNumberLocale } from '../../shared/format';
 import {
-  Btn, ConfirmService, DataTable, Kpi, PageHeader, RowAction, RowActionEvent, TabItem, TabPanel, Tabs, Tag, TableColumn, ToastService,
+  Btn, ConfirmService, DataTable, Help, Kpi, PageHeader, RowAction, SelectOption, ViewAs, RowActionEvent, TabItem, TabPanel, Tabs, Tag, TableColumn, ToastService,
 } from '../../ui';
 import { OpsApi } from '../ops/ops.api';
 import { AcceptForm } from './accept-form';
@@ -57,7 +57,8 @@ const orderState = (r: PortalRequest): { label: string; tone: Tone } => {
 const orderLine = (r: PortalRequest) => {
   const o = r.productionOrder;
   if (!o) return r.order ? `Order ${r.order.refNo}` : r.reviewNote;
-  return [o.refNo, o.manufacturer?.name, o.readyDate ? `ready ${fmtDate(o.readyDate)}` : null, o.reason].filter(Boolean).join(' · ');
+  return [o.refNo, o.manufacturer?.name, o.readyDate ? `ready ${fmtDate(o.readyDate)}` : null,
+    o.expectedDate && o.status === 'Accepted' && (o.received ?? 0) < (o.containers ?? 1) ? `expected ${fmtDate(o.expectedDate)}` : null, o.reason].filter(Boolean).join(' · ');
 };
 /** "Masala Masti · Z10-MAS" */
 
@@ -66,11 +67,35 @@ const orderLine = (r: PortalRequest) => {
  * payments and credit, agreed prices and the statement. Staff see the same for any distributor, and the approval desk:
  * requests to accept, payment advices to verify and damage claims to review. Only verified payments reach cash.
  */
+/** "2 containers (Bora) · 10 bundles" for a request that asked for containers, else "10 bundles" (older requests) */
+function reqQty(r: PortalRequest): string {
+  return r.containers ? qtyLabel(r.containers, r.cartons, r.containerUnit ?? r.product.containerUnit) : `${fmtNumber(r.cartons)} bundles`;
+}
+
+/** green = fully paid, amber = part paid, red = overdue with money still open; no colour while nothing is due */
+function paidTone(o: PortalOrder): Tone | null {
+  if (o.billed > 0 && o.collected + o.credited >= o.billed - 0.01) return 'success';
+  if (o.portalStatus === 'Overdue') return 'danger';
+  return o.collected > 0 ? 'warning' : null;
+}
+
+/** "Fully paid", "95% settled · 1 payment · 2,700.00 credited", "Nothing paid" (+ money reported and not yet checked) */
+function paidLine(o: PortalOrder): string {
+  const n = o.payments?.length ?? 0;
+  const pending = o.pendingAdvice > 0 ? ` · ${fmtAmount2(o.pendingAdvice)} being checked` : '';
+  if (o.billed > 0 && o.collected + o.credited >= o.billed - 0.01) return `Fully paid${n > 1 ? ` · ${n} payments` : ''}`;
+  if (o.collected <= 0) return `Nothing paid${pending}`;
+  // same share as the bar: payments plus credit notes against the bill
+  const pct = o.billed > 0 ? Math.floor(((o.collected + o.credited) / o.billed) * 100) : 0;
+  const credit = o.credited > 0 ? ` · ${fmtAmount2(o.credited)} credited` : '';
+  return `${pct}% settled · ${n} payment${n === 1 ? '' : 's'}${credit}${pending}`;
+}
+
 @Component({
   selector: 'app-portal',
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [
-    Btn, DataTable, Kpi, PageHeader, Tag, Tabs, TabPanel, RequestForm, ReceiptForm, AdviceForm, AcceptForm, ReasonForm, ShipmentsPanel, DeliveryClaimsPanel, InvoicesPanel, TrailPanel, IntlPortal, IncomingPanel, DispatchesPanel,
+    Btn, DataTable, Help, Kpi, PageHeader, ViewAs, Tag, Tabs, TabPanel, RequestForm, ReceiptForm, AdviceForm, AcceptForm, ReasonForm, ShipmentsPanel, DeliveryClaimsPanel, InvoicesPanel, TrailPanel, IntlPortal, IncomingPanel, DispatchesPanel,
   ],
   templateUrl: './portal.html',
   styleUrl: './portal.css',
@@ -83,6 +108,7 @@ export class Portal {
   protected auth = inject(AuthService);
 
   protected isDistributor = computed(() => this.auth.user()?.role === 'Distributor');
+  protected isAdmin = computed(() => this.auth.user()?.role === 'Admin');
   protected canManage = computed(() => ['Admin', 'Finance', 'Distribution'].includes(this.auth.user()?.role ?? ''));
   protected canFinance = computed(() => ['Admin', 'Finance'].includes(this.auth.user()?.role ?? ''));
 
@@ -91,6 +117,10 @@ export class Portal {
   protected selected = signal<string | undefined>(undefined);
   protected distributors = rxResource({ params: () => (this.isDistributor() ? undefined : true), stream: () => this.ops.distributors() });
   /** the distributor id sent to the API: nothing for a distributor login (the server knows), the chosen one for staff */
+  protected distributorOptions = computed<SelectOption<string>[]>(() =>
+    (this.distributors.value() ?? []).map((d) => ({
+      value: d.id, label: d.name, sub: [d.region, d.status && d.status !== 'Active' ? d.status : ''].filter(Boolean).join(' · '),
+    })));
   protected dist = computed(() => (this.isDistributor() ? undefined : this.selected() ?? this.distributors.value()?.[0]?.id));
   private params = computed(() => (this.isDistributor() || this.dist() ? { tick: this.tick(), d: this.dist() } : undefined));
 
@@ -177,8 +207,15 @@ export class Portal {
 
   protected invoiceColumns: TableColumn<PortalOrder>[] = [
     { id: 'ref', label: 'Invoice', kind: 'title', value: (o) => productLabel(o.product), sub: (o) => o.refNo },
-    { id: 'due', label: 'Due', kind: 'date', value: (o) => o.dueDate, sortValue: (o) => o.dueDate, sub: (o) => `${o.paymentTermsDays} day terms`, priority: 2 },
-    { id: 'out', label: 'Balance (PKR)', kind: 'money', value: (o) => o.outstanding },
+    {
+      id: 'due', label: 'Due', kind: 'date', value: (o) => o.dueDate, sortValue: (o) => o.dueDate, priority: 2,
+      valueTone: (o) => (o.outstanding > 0.01 ? dueTone(o.dueDate) : null),
+      sub: (o) => (o.outstanding > 0.01 ? dueCountdown(o.dispatchDate ?? o.date, o.dueDate) : 'Settled') ?? `${o.paymentTermsDays} day terms`,
+    },
+    {
+      id: 'out', label: 'Balance (PKR)', kind: 'money', value: (o) => o.outstanding,
+      sub: (o) => (o.credited > 0 ? `after ${fmtAmount2(o.credited)} credit notes` : null),
+    },
     this.statusCol('status', 'Status', (o) => o.portalStatus),
   ];
   protected payAction = (o: PortalOrder): RowAction[] => (payableOf(o) > 0 ? [{ id: 'pay', label: 'Pay', tone: 'success' }] : []);
@@ -197,8 +234,14 @@ export class Portal {
   ];
 
   protected requestColumns: TableColumn<PortalRequest>[] = [
-    { id: 'product', label: 'Product', kind: 'title', value: (r) => productLabel(r.product), sub: (r) => `${fmtNumber(r.cartons)} bundles` },
-    { id: 'ref', label: 'Order no.', kind: 'mono', value: (r) => r.refNo, sub: (r) => docDate(r), sortValue: (r) => `${r.date}|${r.createdAt ?? ''}` },
+    {
+      id: 'product', label: 'Product', kind: 'title', value: (r) => productLabel(r.product),
+      sub: (r) => reqQty(r),
+    },
+    {
+      id: 'ref', label: 'Order no.', kind: 'mono', value: (r) => r.groupRef ?? r.refNo, sub: (r) => subLine(r.groupRef ? r.refNo : null, docDate(r)),
+      sortValue: (r) => `${r.date}|${r.createdAt ?? ''}`,
+    },
     { id: 'wanted', label: 'Wanted by', kind: 'date', value: (r) => r.requestedDate, priority: 3 },
     { id: 'status', label: 'Status', kind: 'tag', value: (r) => orderState(r).label, tone: (r) => orderState(r).tone, sub: orderLine },
   ];
@@ -236,9 +279,18 @@ export class Portal {
     { id: 'ref', label: 'Order', kind: 'title', value: (o) => productLabel(o.product), sub: (o) => o.refNo },
     this.statusCol('status', 'Status', (o) => o.portalStatus, (o) => (o.status === 'Dispatched' ? `Due ${fmtDate(o.dueDate)}` : 'At dispatch')),
     { id: 'billed', label: 'Billed (PKR)', kind: 'money', value: (o) => o.billed, priority: 2 },
-    { id: 'paid', label: 'Paid', kind: 'money', value: (o) => o.collected, priority: 3 },
+    {
+      id: 'paid', label: 'Paid', kind: 'money', value: (o) => o.collected, priority: 2,
+      valueTone: (o) => paidTone(o),
+      meter: (o) => (o.billed > 0 ? (o.collected + o.credited) / o.billed : null),
+      sub: (o) => paidLine(o),
+      tip: (o) => (o.payments ?? []).map((p) => `${fmtDate(p.date)} · ${p.refNo} · PKR ${fmtAmount2(p.amount)}${p.advance ? ' (advance)' : ''} · ${p.method}`).join('\n') || 'No payments yet',
+    },
     { id: 'credit', label: 'Credit notes', kind: 'money', value: (o) => o.credited, priority: 3 },
-    { id: 'open', label: 'Open (PKR)', kind: 'money', value: (o) => (o.status === 'Dispatched' ? o.outstanding : Math.max(0, o.billed - o.collected)) },
+    {
+      id: 'open', label: 'Open (PKR)', kind: 'money', value: (o) => (o.status === 'Dispatched' ? o.outstanding : Math.max(0, o.billed - o.collected)),
+      valueTone: (o) => (o.portalStatus === 'Overdue' ? 'danger' : o.portalStatus === 'Paid' ? 'success' : null),
+    },
   ];
 
   protected rateColumns: TableColumn<PortalRate>[] = [
@@ -272,7 +324,7 @@ export class Portal {
   // desk
   protected deskRequestColumns: TableColumn<DeskRequest>[] = [
     { id: 'order', label: 'Order / Distributor', kind: 'title', value: (r) => productLabel(r.product), sub: (r) => r.distributor.name },
-    { id: 'ref', label: 'Order no. / bundles', kind: 'mono', value: (r) => r.refNo, sub: (r) => subLine(docDate(r), `${fmtNumber(r.cartons)} bundles`), priority: 2 },
+    { id: 'ref', label: 'Order no. / quantity', kind: 'mono', value: (r) => r.groupRef ?? r.refNo, sub: (r) => subLine(r.groupRef ? r.refNo : null, docDate(r), reqQty(r)), priority: 2 },
     { id: 'value', label: 'Value (PKR)', kind: 'money', value: (r) => r.value, sub: (r) => `${fmtAmount2(r.rate)} / pack` },
     { id: 'wanted', label: 'Wanted by', kind: 'date', value: (r) => r.requestedDate, priority: 3 },
   ];
@@ -280,7 +332,7 @@ export class Portal {
   /** the desk watches distributor orders with the manufacturers (no action: the manufacturer answers them) */
   protected deskOrderColumns: TableColumn<DeskOrder>[] = [
     { id: 'order', label: 'Order / Distributor', kind: 'title', value: (r) => productLabel(r.product), sub: (r) => r.distributor.name },
-    { id: 'ref', label: 'Order no. / bundles', kind: 'mono', value: (r) => r.refNo, sub: (r) => subLine(docDate(r), `${fmtNumber(r.cartons)} bundles`), priority: 2 },
+    { id: 'ref', label: 'Order no. / quantity', kind: 'mono', value: (r) => r.groupRef ?? r.refNo, sub: (r) => subLine(r.groupRef ? r.refNo : null, docDate(r), reqQty(r)), priority: 2 },
     { id: 'mfr', label: 'Manufacturer', value: (r) => r.productionOrder?.manufacturer?.name ?? '-', sub: (r) => r.productionOrder?.refNo ?? null },
     { id: 'status', label: 'Status', kind: 'tag', value: (r) => orderState(r).label, tone: (r) => orderState(r).tone,
       sub: (r) => (r.productionOrder?.readyDate ? `Ready ${fmtDate(r.productionOrder.readyDate)}` : r.productionOrder?.reason ?? r.reviewNote) },

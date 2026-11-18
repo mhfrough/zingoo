@@ -20,7 +20,7 @@
       }
     </div>
 
-    <div class="sidebar__foot">Zen Foods (Pvt.) Ltd.<br />Sample data, not live accounts.</div>
+    <div class="sidebar__foot">Zen Foods (Pvt.) Ltd.</div>
   </nav>
 
   <div class="scrim" (click)="navOpen.set(false)"></div>
@@ -65,7 +65,6 @@
       @if (conn) {
         <app-connection-status [status]="conn()" />
       }
-      <app-tag tone="warning">Sample data</app-tag>
       <app-notification-bell />
 
       <div class="user">

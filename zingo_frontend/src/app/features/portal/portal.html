@@ -8,7 +8,7 @@
 
 <div class="stack">
   @if (!isDistributor()) {
-    <app-view-as kind="Distributor" icon="truck" [options]="distributorOptions()" [value]="dist()" (valueChange)="selected.set($event ?? undefined)" />
+    <app-view-as kind="Distributor" icon="truck" [options]="distributorOptions()" [value]="dist()" (valueChange)="pickDistributor($event)" />
   }
   @if (profile.value(); as p) {
     <div class="card hero">
@@ -213,6 +213,7 @@
             </div>
             <div class="card__body">
               <app-data-table [columns]="deskOrderColumns" [rows]="desk.value()?.recent ?? []" [loading]="desk.isLoading()" searchPlaceholder="Search orders"
+                [actions]="deskOrderActions" (action)="onDeskOrderAction($event)"
                 emptyTitle="No distributor orders yet" emptyText="Orders from distributors appear here." />
             </div>
           </div>
@@ -258,6 +259,7 @@
   </app-tabs>
 </div>
 
+<app-order-timeline [(open)]="orderViewOpen" [orderId]="viewingOrder()?.id ?? null" [refNo]="viewingOrder()?.refNo ?? null" />
 <app-request-form [(open)]="requestOpen" [rates]="rates.value() ?? []" [distributorId]="dist()" [direct]="direct()" [canAddSku]="isAdmin()"
   (saved)="reload()" (skuAdded)="rates.reload()" />
 <app-receipt-form [(open)]="receiptOpen" [order]="receiving()" [distributorId]="dist()" (saved)="reload()" />

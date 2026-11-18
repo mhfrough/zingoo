@@ -26,9 +26,9 @@ const today = () => new Date().toISOString().slice(0, 10);
       }
       <form [id]="formId" [formGroup]="form" (ngSubmit)="submit()" class="form-grid" novalidate>
         @if (salesEnabled()) {
-          <div class="choice" role="radiogroup" aria-label="What the request becomes">
-            <label><input type="radio" formControlName="into" value="Production" /> <span><strong>Production order</strong> · the manufacturer makes it and sends it to the distributor</span></label>
-            <label><input type="radio" formControlName="into" value="Sales" /> <span><strong>Sales order</strong> · from the Zen Foods warehouse</span></label>
+          <div class="choice" role="radiogroup" aria-label="What the request becomes" style="grid-column: 1 / -1; display: flex; flex-direction: column; gap: var(--space-2)">
+            <label class="check"><input type="radio" formControlName="into" value="Production" /> <span><strong>Production order</strong> · the manufacturer makes it and sends it to the distributor</span></label>
+            <label class="check"><input type="radio" formControlName="into" value="Sales" /> <span><strong>Sales order</strong> · from the Zen Foods warehouse</span></label>
           </div>
         }
         @if (production()) {

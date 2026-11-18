@@ -1,3 +1,5 @@
+import { OrderTimeline } from '../factory/answer-forms';
+import { recall, remember } from '../../shared/remember';
 import { ChangeDetectionStrategy, Component, computed, effect, inject, signal } from '@angular/core';
 import { FactoryApi } from '../factory/factory.api';
 import { ShipmentsPanel } from '../factory/shipments-panel';
@@ -95,7 +97,7 @@ function paidLine(o: PortalOrder): string {
   selector: 'app-portal',
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [
-    Btn, DataTable, Help, Kpi, PageHeader, ViewAs, Tag, Tabs, TabPanel, RequestForm, ReceiptForm, AdviceForm, AcceptForm, ReasonForm, ShipmentsPanel, DeliveryClaimsPanel, InvoicesPanel, TrailPanel, IntlPortal, IncomingPanel, DispatchesPanel,
+    Btn, DataTable, Help, Kpi, PageHeader, ViewAs, Tag, OrderTimeline, Tabs, TabPanel, RequestForm, ReceiptForm, AdviceForm, AcceptForm, ReasonForm, ShipmentsPanel, DeliveryClaimsPanel, InvoicesPanel, TrailPanel, IntlPortal, IncomingPanel, DispatchesPanel,
   ],
   templateUrl: './portal.html',
   styleUrl: './portal.css',
@@ -113,15 +115,26 @@ export class Portal {
   protected canFinance = computed(() => ['Admin', 'Finance'].includes(this.auth.user()?.role ?? ''));
 
   protected tick = signal(0);
-  /** staff: which distributor to look at */
-  protected selected = signal<string | undefined>(undefined);
+  /** staff: which distributor to look at (kept in this browser, so a reload stays on it) */
+  protected selected = signal<string | undefined>(recall('portal-distributor') ?? undefined);
   protected distributors = rxResource({ params: () => (this.isDistributor() ? undefined : true), stream: () => this.ops.distributors() });
   /** the distributor id sent to the API: nothing for a distributor login (the server knows), the chosen one for staff */
   protected distributorOptions = computed<SelectOption<string>[]>(() =>
     (this.distributors.value() ?? []).map((d) => ({
       value: d.id, label: d.name, sub: [d.region, d.status && d.status !== 'Active' ? d.status : ''].filter(Boolean).join(' · '),
     })));
-  protected dist = computed(() => (this.isDistributor() ? undefined : this.selected() ?? this.distributors.value()?.[0]?.id));
+  /** the one picked if it still exists, else the first */
+  protected dist = computed(() => {
+    if (this.isDistributor()) return undefined;
+    const list = this.distributors.value() ?? [];
+    const want = this.selected();
+    return want && (!list.length || list.some((d) => d.id === want)) ? want : list[0]?.id;
+  });
+
+  protected pickDistributor(id: string | null | undefined) {
+    this.selected.set(id ?? undefined);
+    remember('portal-distributor', id);
+  }
   private params = computed(() => (this.isDistributor() || this.dist() ? { tick: this.tick(), d: this.dist() } : undefined));
 
   protected profile = rxResource({ params: () => this.params(), stream: ({ params }) => this.api.profile(params.d) });
@@ -330,6 +343,18 @@ export class Portal {
   ];
 
   /** the desk watches distributor orders with the manufacturers (no action: the manufacturer answers them) */
+  /** the production order open in the order panel (from the desk) */
+  protected orderViewOpen = signal(false);
+  protected viewingOrder = signal<{ id: string; refNo: string } | null>(null);
+  protected deskOrderActions = (r: DeskOrder): RowAction[] => (r.productionOrder?.id ? [{ id: 'view', label: 'View order' }] : []);
+  protected onDeskOrderAction(e: RowActionEvent<DeskOrder>) {
+    const o = e.row.productionOrder;
+    if (e.id === 'view' && o?.id) {
+      this.viewingOrder.set({ id: o.id, refNo: o.refNo });
+      this.orderViewOpen.set(true);
+    }
+  }
+
   protected deskOrderColumns: TableColumn<DeskOrder>[] = [
     { id: 'order', label: 'Order / Distributor', kind: 'title', value: (r) => productLabel(r.product), sub: (r) => r.distributor.name },
     { id: 'ref', label: 'Order no. / quantity', kind: 'mono', value: (r) => r.groupRef ?? r.refNo, sub: (r) => subLine(r.groupRef ? r.refNo : null, docDate(r), reqQty(r)), priority: 2 },

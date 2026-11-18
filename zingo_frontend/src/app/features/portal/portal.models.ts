@@ -58,7 +58,7 @@ export interface PortalRequest {
   order: { refNo: string } | null;
   /** the production order the request became */
   productionOrder: {
-    refNo: string; status: string; stage: string | null; readyDate: string | null; reason?: string | null;
+    id: string; refNo: string; status: string; stage: string | null; readyDate: string | null; reason?: string | null;
     /** ready date plus the transit days of Settings */
     expectedDate?: string | null;
     containers?: number; shipped?: number; received?: number;

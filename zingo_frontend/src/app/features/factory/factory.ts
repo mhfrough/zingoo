@@ -1,3 +1,4 @@
+import { recall, remember } from '../../shared/remember';
 import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
 import { rxResource } from '@angular/core/rxjs-interop';
 import { of } from 'rxjs';
@@ -46,7 +47,7 @@ import { MfrStatement } from './trail-panel';
     <div class="stack">
       @if (!isManufacturer()) {
         <app-view-as kind="Manufacturer" icon="factory" [options]="manufacturerOptions()"
-          [value]="picked() ?? profile.value()?.manufacturer?.id" (valueChange)="picked.set($event ?? null)" />
+          [value]="picked() ?? profile.value()?.manufacturer?.id" (valueChange)="pickManufacturer($event)" />
       }
 
       <div class="grid-auto">
@@ -105,8 +106,13 @@ export class Factory {
   protected canAnswer = computed(() => this.isManufacturer() || this.auth.can('manufacturing'));
 
   protected tick = signal(0);
-  /** staff: the manufacturer picked in the selector (empty = the first one) */
-  protected picked = signal<string | null>(null);
+  /** staff: the manufacturer picked in the selector (empty = the first one); kept in this browser */
+  protected picked = signal<string | null>(recall('factory-manufacturer'));
+
+  protected pickManufacturer(id: string | null | undefined) {
+    this.picked.set(id ?? null);
+    remember('factory-manufacturer', id);
+  }
 
   protected profile = rxResource({
     params: () => ({ t: this.tick(), m: this.picked() }),

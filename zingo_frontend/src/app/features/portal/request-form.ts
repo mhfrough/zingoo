@@ -3,25 +3,29 @@ import { toSignal } from '@angular/core/rxjs-interop';
 import { FormArray, FormGroup, ReactiveFormsModule, Validators } from '@angular/forms';
 import { startWith } from 'rxjs';
 import { containersLabel, fmtAmount2, fmtMoney, fmtNumber } from '../../shared/format';
-import { Btn, Field, Help, Offcanvas, RefInput, RichText, Select, SelectOption } from '../../ui';
+import { AttachmentMeta } from '../../core/attachments.api';
+import { Btn, Field, FileInput, Help, MoneyInput, Offcanvas, RefInput, RichText, Select, SelectOption } from '../../ui';
 import { ProductForm } from '../manufacturing/product-form';
 import { Distributor, Manufacturer } from '../ops/models';
 import { FormModal } from '../ops/form-modal';
-import { SettingsStore } from '../../core/settings.store';
 import { PortalApi } from './portal.api';
 import { PortalRate } from './portal.models';
 
 const today = () => new Date().toISOString().slice(0, 10);
 const inDays = (n: number) => new Date(Date.now() + n * 86_400_000).toISOString().slice(0, 10);
 
+/** how a line is counted: so many containers, full trucks, or one half truck */
+type Load = 'containers' | 'full' | 'half';
+
 interface LineValue {
   productId: string;
   manufacturerId: string;
   packaging: string;
-  containerUnit: string;
   packetsPerBundle: number;
   bundlesPerContainer: number;
+  load: Load;
   containers: number;
+  trucks: number;
 }
 
 /**
@@ -33,7 +37,7 @@ interface LineValue {
 @Component({
   selector: 'app-request-form',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [ReactiveFormsModule, Offcanvas, Field, Btn, RichText, Select, Help, ProductForm, RefInput],
+  imports: [ReactiveFormsModule, Offcanvas, Field, Btn, RichText, Select, Help, ProductForm, RefInput, MoneyInput, FileInput],
   styles: `
     .block {
       display: flex;
@@ -64,11 +68,41 @@ interface LineValue {
       }
     }
 
+    .line__grid {
+      display: grid;
+      grid-template-columns: minmax(0, 2fr) repeat(4, minmax(0, 1fr));
+      gap: var(--space-2) var(--space-3);
+      align-items: start;
+
+      & .span-2 {
+        grid-column: span 2;
+      }
+
+      @media (max-width: 900px) {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+    }
+
+    .packing {
+      display: flex;
+      flex-wrap: wrap;
+      gap: var(--space-1) var(--space-2);
+      font-size: var(--text-xs);
+      color: var(--text-2);
+
+      & span {
+        padding: 1px var(--space-2);
+        border: 1px solid var(--border);
+        border-radius: 999px;
+        background: var(--surface-sunken);
+      }
+    }
+
     .line {
       display: flex;
       flex-direction: column;
-      gap: var(--space-3);
-      padding: var(--space-3) var(--space-4);
+      gap: var(--space-2);
+      padding: var(--space-2) var(--space-3);
       border: 1px solid var(--border);
       border-radius: var(--radius-md);
       background: var(--surface-card);
@@ -97,7 +131,7 @@ interface LineValue {
         font-variant-numeric: tabular-nums;
 
         & strong {
-          color: var(--text);
+          color: var(--tone-success-fg);
         }
       }
 
@@ -128,7 +162,18 @@ interface LineValue {
       & strong {
         display: block;
         font-size: var(--text-md);
+        color: var(--tone-success-fg);
       }
+    }
+
+    .advance-guide {
+      grid-column: 1 / -1;
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: var(--space-2) var(--space-3);
+      font-size: var(--text-sm);
+      color: var(--text-2);
     }
   `,
   template: `
@@ -174,9 +219,8 @@ interface LineValue {
                     <button appBtn type="button" size="sm" variant="ghost" icon="trash" (click)="removeLine(i)" [attr.aria-label]="'Remove product ' + (i + 1)">Remove</button>
                   }
                 </div>
-                <div class="form-grid">
-                  <app-field label="Product" [required]="true" [wide]="true" [error]="lineInvalid(i, 'productId') ? 'Choose a product' : null"
-                    [hint]="rate?.manufacturerName && (rate?.madeBy?.length ?? 0) < 2 ? 'Made by ' + rate!.manufacturerName : undefined">
+                <div class="line__grid">
+                  <app-field label="Product" [required]="true" class="span-2" [error]="lineInvalid(i, 'productId') ? 'Choose a product' : null">
                     <app-select formControlName="productId" [options]="optionsFor(i)" placeholder="Choose a product" />
                   </app-field>
                   @if ((rate?.madeBy?.length ?? 0) > 1) {
@@ -201,23 +245,40 @@ interface LineValue {
                   <app-field label="Packets per bundle" [required]="true" [error]="lineInvalid(i, 'packetsPerBundle') ? '1 or more' : null">
                     <input type="number" formControlName="packetsPerBundle" min="1" step="1" />
                   </app-field>
-                  <app-field label="Bundles per container" [required]="true" [error]="lineInvalid(i, 'bundlesPerContainer') ? '1 or more' : null">
+                  <app-field [label]="'Bundles per ' + (unitOf(i) || 'container')" [required]="true" [error]="lineInvalid(i, 'bundlesPerContainer') ? '1 or more' : null">
                     <input type="number" formControlName="bundlesPerContainer" min="1" step="1" />
                   </app-field>
-                  <app-field label="Containers" [required]="true" [error]="lineInvalid(i, 'containers') ? 'A whole number, 1 or more' : null"
-                    [hint]="unitOf(i) ? 'Counted in ' + unitOf(i)!.toLowerCase() + 's' : undefined">
-                    <input type="number" formControlName="containers" min="1" step="1" />
-                  </app-field>
-                  <app-field label="Carton / Bora" [hint]="tpl?.containerUnit ? tpl!.containerUnit + ' on the template' : undefined"
-                    help="What one container is called on this order: a Carton or a Bora (sack). It comes from the packaging template; change it here for this order only.">
-                    <select formControlName="containerUnit">
-                      <option value="">Not set</option>
-                      @for (u of units(); track u) {
-                        <option [value]="u">{{ u }}</option>
+                  <app-field label="Load" help="Order a number of containers, or a full or half truck / shipping container when the packaging template says how many fill one.">
+                    <select formControlName="load">
+                      <option value="containers">{{ unitOf(i) || 'Container' }}s</option>
+                      @if (tpl?.containersPerTruck) {
+                        <option value="full">Full {{ truckOf(i) }}</option>
+                        <option value="half">Half {{ truckOf(i) }}</option>
                       }
                     </select>
                   </app-field>
+                  @switch (g.value.load) {
+                    @case ('full') {
+                      <app-field [label]="truckOf(i) + 's'" [required]="true" [error]="lineInvalid(i, 'trucks') ? '1 or more' : null">
+                        <input type="number" formControlName="trucks" min="1" step="1" />
+                      </app-field>
+                    }
+                    @case ('half') {}
+                    @default {
+                      <app-field [label]="(unitOf(i) || 'Container') + 's'" [required]="true" [error]="lineInvalid(i, 'containers') ? 'A whole number, 1 or more' : null">
+                        <input type="number" formControlName="containers" min="1" step="1" />
+                      </app-field>
+                    }
+                  }
                 </div>
+                @if (tpl) {
+                  <div class="packing" aria-label="Packing of this product (from its template, read only)">
+                    <span>Container: {{ tpl.containerUnit || 'not set' }}</span>
+                    @if ((tpl.piecesPerPacket ?? 1) > 1) { <span>{{ tpl.piecesPerPacket }} pieces / packet</span> }
+                    @if (tpl.containersPerTruck) { <span>Full {{ truckOf(i) }}: {{ num(tpl.containersPerTruck) }} {{ tpl.containerUnit || 'containers' }}</span> }
+                    @if ((rate?.madeBy?.length ?? 0) < 2 && rate?.manufacturerName) { <span>Made by {{ rate!.manufacturerName }}</span> }
+                  </div>
+                }
                 @let s = sums()[i];
                 @if (s) {
                   <div class="line__sum">
@@ -244,22 +305,35 @@ interface LineValue {
           </div>
         </section>
 
-        <section class="block" formGroupName="transport">
+        <section class="block">
           <header>
             <div>
-              <h3>Planned transport
-                <app-help title="Planned transport" text="Optional. Who will carry the goods and the driver, if you already know. It goes with every product of the order so the factory knows who is coming." />
+              <h3>Advance payment
+                <app-help title="Advance payment" text="If you pay part of the order up front, enter what you paid and upload the proof (bank slip or transfer screenshot). Zen Foods checks it against the bank. Leave the amount empty if you pay later." />
               </h3>
-              <p>Optional: fill in what you know</p>
+              <p>Optional. When you enter an amount, the method, date and proof are required</p>
             </div>
           </header>
           <div class="form-grid">
-            <app-field label="Transporter" hint="Company or owner of the vehicle"><input type="text" formControlName="transporter" maxlength="80" /></app-field>
-            <app-field label="Vehicle no."><input type="text" formControlName="vehicleNo" maxlength="30" placeholder="e.g. KHI-1234" /></app-field>
-            <app-field label="Driver name"><input type="text" formControlName="driverName" maxlength="80" /></app-field>
-            <app-field label="Driver phone"><input type="tel" formControlName="driverPhone" maxlength="30" placeholder="03xx-xxxxxxx" /></app-field>
-            <app-field label="Driver CNIC" help="Pakistani national identity card number of the driver (13 digits), so the factory can check who collects.">
-              <input type="text" formControlName="driverCnic" maxlength="20" placeholder="xxxxx-xxxxxxx-x" />
+            @if (advancePct() > 0 && total().value > 0) {
+              <div class="advance-guide">
+                <span>Your advance guide is {{ advancePct() }}% of {{ money(total().value) }} = <strong class="info-figure">{{ money(guide()) }}</strong></span>
+                <button appBtn type="button" size="sm" (click)="useGuide()">Pay {{ money(guide()) }}</button>
+              </div>
+            }
+            <app-field label="Amount paid" [error]="advErr('amount')"><app-money-input formControlName="advAmount" /></app-field>
+            <app-field label="Method" [required]="advOn()" [error]="advErr('method')">
+              <select formControlName="advMethod">
+                <option value="">Choose</option>
+                @for (m of methods(); track m) {
+                  <option [value]="m">{{ m }}</option>
+                }
+              </select>
+            </app-field>
+            <app-field label="Paid on" [required]="advOn()" [error]="advErr('date')"><input type="date" formControlName="advDate" [max]="today" /></app-field>
+            <app-field label="Bank / transfer reference"><input type="text" formControlName="advRef" maxlength="80" /></app-field>
+            <app-field label="Proof of payment" [wide]="true" [required]="advOn()" [error]="advErr('proof')" hint="Bank slip or transfer screenshot: picture or PDF, 5 MB at most">
+              <app-file-input formControlName="advProof" />
             </app-field>
           </div>
         </section>
@@ -292,6 +366,13 @@ export class RequestForm extends FormModal {
   readonly canAddSku = input(false);
   /** a SKU was added: reload the rates */
   readonly skuAdded = output<void>();
+  /** the distributor's advance guide, % of the order value */
+  readonly advancePct = input(0);
+  /** payment methods the distributor may use */
+  readonly methods = input<string[]>(['Bank Transfer']);
+  protected today = today();
+  /** Pay (amount entered): the advance details are checked */
+  private tried = signal(false);
   readonly formId = 'form-request';
   private portal = inject(PortalApi);
 
@@ -306,8 +387,31 @@ export class RequestForm extends FormModal {
     orderNo: [''],
     notes: [''],
     lines: this.fb.array<FormGroup>([]),
-    transport: this.fb.nonNullable.group({ transporter: [''], vehicleNo: [''], driverName: [''], driverPhone: [''], driverCnic: [''] }),
+    advAmount: this.fb.control<number | null>(null),
+    advMethod: [''],
+    advDate: [today()],
+    advRef: [''],
+    advProof: this.fb.control<AttachmentMeta | null>(null),
   });
+
+  private formValue = toSignal(this.form.valueChanges, { initialValue: this.form.getRawValue() });
+  /** an advance amount was entered */
+  protected advOn = computed(() => Number(this.formValue().advAmount || 0) > 0);
+  /** the advance guide amount: % of the order value */
+  protected guide = computed(() => Math.round(this.total().value * this.advancePct()) / 100);
+  protected useGuide() {
+    this.form.patchValue({ advAmount: this.guide() });
+    this.form.markAsDirty();
+  }
+  /** the message of one advance field, once Send was pressed */
+  protected advErr(k: 'amount' | 'method' | 'date' | 'proof'): string | null {
+    if (!this.tried() || !this.advOn()) return null;
+    const v = this.formValue();
+    if (k === 'amount') return Number(v.advAmount) > this.total().value + 0.001 ? 'More than the order value' : null;
+    if (k === 'method') return v.advMethod ? null : 'Choose the method';
+    if (k === 'date') return v.advDate ? null : 'Enter the date';
+    return v.advProof ? null : 'Upload the proof';
+  }
 
   protected get lines() {
     return this.form.controls.lines as FormArray<FormGroup>;
@@ -348,12 +452,11 @@ export class RequestForm extends FormModal {
     return this.lines.controls.map((g, i) => {
       const v = g.getRawValue() as LineValue;
       const rate = this.rateOf(i);
-      const containers = Math.max(0, Number(v.containers) || 0);
+      const containers = this.containersOf(i);
       const bundles = containers * Math.max(0, Number(v.bundlesPerContainer) || 0);
       const packets = bundles * Math.max(0, Number(v.packetsPerBundle) || 0);
       const tpl = this.templateOf(i);
-      const changed = !!tpl && (Number(v.packetsPerBundle) !== tpl.packetsPerBundle || Number(v.bundlesPerContainer) !== tpl.bundlesPerContainer
-        || (v.containerUnit || null) !== (tpl.containerUnit || null));
+      const changed = !!tpl && (Number(v.packetsPerBundle) !== tpl.packetsPerBundle || Number(v.bundlesPerContainer) !== tpl.bundlesPerContainer);
       return v.productId ? { containers, bundles, packets, value: packets * (rate?.rate ?? 0), changed } : null;
     });
   });
@@ -367,13 +470,25 @@ export class RequestForm extends FormModal {
   protected amount = fmtAmount2;
   protected unitLabel = containersLabel;
 
-  private settings = inject(SettingsStore);
-  /** Carton, Bora ... (Settings list CONTAINER_UNIT) */
-  protected units = computed(() => this.settings.options('CONTAINER_UNIT'));
-
+  /** Carton, Bora: from the line's packaging template (read only) */
   protected unitOf(i: number): string | null {
     this.lineValues();
-    return this.lines.at(i)?.get('containerUnit')?.value || null;
+    return this.templateOf(i)?.containerUnit || this.rateOf(i)?.containerUnit || null;
+  }
+
+  /** Truck, Container 20 ft: the full load of the line's template */
+  protected truckOf(i: number): string {
+    return this.templateOf(i)?.transportUnit || 'truck';
+  }
+
+  /** containers on a line: as typed, full trucks x containers per truck, or half a truck (rounded up) */
+  protected containersOf(i: number): number {
+    const v = this.lines.at(i)?.getRawValue() as LineValue | undefined;
+    if (!v) return 0;
+    const per = Number(this.templateOf(i)?.containersPerTruck || 0);
+    if (v.load === 'full' && per) return Math.max(0, Number(v.trucks) || 0) * per;
+    if (v.load === 'half' && per) return Math.ceil(per / 2);
+    return Math.max(0, Number(v.containers) || 0);
   }
 
   protected rateOf(i: number): PortalRate | null {
@@ -392,10 +507,11 @@ export class RequestForm extends FormModal {
       productId: [productId, Validators.required],
       manufacturerId: [''],
       packaging: [''],
-      containerUnit: [''],
       packetsPerBundle: [1, [Validators.required, Validators.min(1)]],
       bundlesPerContainer: [1, [Validators.required, Validators.min(1)]],
+      load: ['containers' as Load],
       containers: [1, [Validators.required, Validators.min(1)]],
+      trucks: [1, [Validators.required, Validators.min(1)]],
     });
     // a new product brings its default template (and its figures)
     g.controls.productId.valueChanges.subscribe((id) => this.fillFromProduct(g, id));
@@ -409,7 +525,7 @@ export class RequestForm extends FormModal {
     g.patchValue({
       manufacturerId: r?.madeBy?.find((m) => m.isDefault)?.id ?? r?.madeBy?.[0]?.id ?? '',
       packaging: tpl?.name ?? '',
-      containerUnit: tpl?.containerUnit ?? r?.containerUnit ?? '',
+      load: 'containers',
       packetsPerBundle: tpl?.packetsPerBundle ?? r?.packsPerCarton ?? 1,
       bundlesPerContainer: tpl?.bundlesPerContainer ?? r?.bundlesPerContainer ?? 1,
     }, { emitEvent: true });
@@ -418,7 +534,7 @@ export class RequestForm extends FormModal {
   /** picking another template puts its figures back (they can still be changed) */
   protected applyTemplate(i: number) {
     const tpl = this.templateOf(i);
-    if (tpl) this.lines.at(i).patchValue({ packetsPerBundle: tpl.packetsPerBundle, bundlesPerContainer: tpl.bundlesPerContainer, containerUnit: tpl.containerUnit ?? '' });
+    if (tpl) this.lines.at(i).patchValue({ packetsPerBundle: tpl.packetsPerBundle, bundlesPerContainer: tpl.bundlesPerContainer, ...(tpl.containersPerTruck ? {} : { load: 'containers' }) });
   }
 
   /** a new line starts on the first product not already in the order */
@@ -453,15 +569,21 @@ export class RequestForm extends FormModal {
       this.error.set('A product is on two lines. Put it on one line with more containers.');
       return;
     }
+    this.tried.set(true);
+    if (this.advOn() && (['amount', 'method', 'date', 'proof'] as const).some((k) => this.advErr(k))) {
+      this.error.set('Complete the advance payment: method, date and proof, or clear the amount.');
+      return;
+    }
     this.submit();
   }
 
   protected reset() {
     this.lines.clear();
     const first = this.rates().find((r) => !this.direct() || r.manufacturerName);
+    this.tried.set(false);
     this.form.reset({
       date: today(), requestedDate: inDays(5), poRef: '', orderNo: '', notes: '',
-      transport: { transporter: '', vehicleNo: '', driverName: '', driverPhone: '', driverCnic: '' },
+      advAmount: null, advMethod: this.methods()[0] ?? '', advDate: today(), advRef: '', advProof: null,
     });
     this.lines.push(this.lineGroup(first?.productId ?? ''));
     this.form.markAsPristine();
@@ -469,15 +591,17 @@ export class RequestForm extends FormModal {
 
   protected request() {
     const v = this.form.getRawValue();
-    const lines = (v.lines as LineValue[]).map((l) => ({
-      productId: l.productId, containers: Number(l.containers), packaging: l.packaging || undefined, manufacturerId: l.manufacturerId || undefined,
-      packetsPerBundle: Number(l.packetsPerBundle), bundlesPerContainer: Number(l.bundlesPerContainer), containerUnit: l.containerUnit || null,
+    const lines = (v.lines as LineValue[]).map((l, i) => ({
+      productId: l.productId, containers: this.containersOf(i), packaging: l.packaging || undefined, manufacturerId: l.manufacturerId || undefined,
+      packetsPerBundle: Number(l.packetsPerBundle), bundlesPerContainer: Number(l.bundlesPerContainer),
     }));
-    const t = v.transport;
-    const transport = Object.values(t).some((x) => x.trim()) ? t : undefined;
+    const amount = Number(v.advAmount || 0);
+    const advance = amount > 0 && v.advProof
+      ? { amount, method: v.advMethod, date: v.advDate, reference: v.advRef.trim() || undefined, proofId: v.advProof.id }
+      : undefined;
     return this.portal.createRequest({
       date: v.date, orderNo: v.orderNo.trim() || undefined, requestedDate: v.requestedDate || undefined, poRef: v.poRef.trim() || undefined, notes: v.notes.trim() || undefined,
-      lines, transport, distributorId: this.distributorId(),
+      lines, advance, distributorId: this.distributorId(),
     });
   }
 

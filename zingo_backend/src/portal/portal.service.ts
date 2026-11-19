@@ -17,7 +17,7 @@ import { LINK, NotificationsService, TEAM, plural } from '../notifications/notif
 import {
   AcceptRequestDto, CreateAdviceDto, CreateReceiptDto, CreateRequestDto, ProofDto,
 } from './portal.dto';
-import { AuditLog, CargoReceipt, CreditNote, PaymentAdvice, PortalRequest } from './portal.entities';
+import { AuditLog, CargoReceipt, CreditNote, OrderAdvance, PaymentAdvice, PortalRequest } from './portal.entities';
 
 /** The signed-in person, as the portal needs them. */
 export interface PortalUser {
@@ -365,6 +365,18 @@ export class PortalService {
         if (l.packaging && !(p.packagings ?? []).some((t) => t.name === l.packaging)) throw new BadRequestException(`${p.sku} has no packaging template "${l.packaging}".`);
       }
       const autoDo = () => nextGroupRef(em, s.docPrefixes['distOrder'] ?? 'DO');
+      // an advance paid with the order: a payment method from Settings and an uploaded proof that is not on another record
+      let advance: OrderAdvance | null = null;
+      if (dto.advance) {
+        await this.lookups.assertActive('PAY_METHOD', dto.advance.method, em);
+        const [f]: { name: string; ownerId: string | null }[] = await em.query(`SELECT name, "ownerId" FROM attachments WHERE id = $1`, [dto.advance.proofId]);
+        if (!f) throw new BadRequestException('Upload the proof of the advance again.');
+        if (f.ownerId) throw new BadRequestException('That proof is already on another record. Upload it again.');
+        advance = {
+          amount: round2(dto.advance.amount), method: dto.advance.method, date: dto.advance.date,
+          reference: dto.advance.reference?.trim() || null, proofId: dto.advance.proofId, proofName: f.name,
+        };
+      }
       const groupRef = !multi ? null : dto.orderNo?.trim() ? await claimRef(em, 'distOrder', dto.orderNo, null, { prefixes: s.docPrefixes, make: autoDo }) : await autoDo();
       const transport = cleanTransport(dto.transport);
       const made: unknown[] = [];
@@ -380,7 +392,7 @@ export class PortalService {
         const refNo = await nextRef(em, PortalRequest, 'REQ', 3);
         const r = await em.save(em.create(PortalRequest, {
           date: dto.date, distributorId, productId: p.id, cartons, requestedDate: dto.requestedDate ?? null, poRef: dto.poRef ?? null,
-          notes: dto.notes ?? null, refNo, status: 'Requested', groupRef, transport,
+          notes: dto.notes ?? null, refNo, status: 'Requested', groupRef, transport, advance,
           containers, packaging: containers ? tpl?.name ?? null : null,
           packetsPerBundle: containers ? packetsPerBundle : null, bundlesPerContainer: containers ? bundlesPerContainer : null,
           containerUnit: l.containerUnit?.trim() || tpl?.containerUnit || p.containerUnit || null,
@@ -397,6 +409,17 @@ export class PortalService {
         } else {
           made.push(r);
         }
+      }
+      if (advance) {
+        // the proof belongs to the order (its first line); Finance is told what was paid
+        const first = await em.findOne(PortalRequest, { where: { refNo: filed[0].refNo } });
+        await em.query(`UPDATE attachments SET "ownerType" = 'DIST_ADVANCE', "ownerId" = $2 WHERE id = $1`, [advance.proofId, first!.id]);
+        const ref = groupRef ?? filed[0].refNo;
+        await this.notes.send(em, user,
+          { to: { staff: TEAM.finance }, kind: 'request.advance', tone: 'warning', refNo: ref, link: LINK.desk,
+            title: `${await this.distName(em, distributorId)} paid an advance of PKR ${advance.amount.toLocaleString('en-US')} on ${ref}`,
+            body: `${advance.method} on ${advance.date}${advance.reference ? ` · ref ${advance.reference}` : ''}. Proof: ${advance.proofName}. Check it against the bank.` },
+        );
       }
       if (direct && multi) await this.orderSentNotes(em, user, groupRef!, sent);
       if (!direct) {

@@ -20,7 +20,7 @@ const HIDE_FROM_DISTRIBUTOR = new Set([
 /** fields a manufacturer login never receives, wherever they are */
 const HIDE_FROM_MANUFACTURER = new Set([
   'saleRate', 'standardRate', 'minMarginPct', 'unitCost', 'costRate', 'margin', 'packagingRate', 'printingRate', 'inboundRate',
-  'outboundRate', 'profitAllocationPerPack', 'spread', 'spreadPct', 'makers', 'saleValue',
+  'outboundRate', 'profitAllocationPerPack', 'spread', 'spreadPct', 'makers', 'saleValue', 'distAdvance',
 ]);
 
 type Obj = Record<string, unknown>;

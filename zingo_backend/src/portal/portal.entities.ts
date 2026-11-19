@@ -7,6 +7,16 @@ import { SalesOrder } from '../distribution/distribution.entities';
 import { OrderTransport, ProductionOrder } from '../manufacturing/production-orders.entities';
 
 /** Distributor asks for stock; staff accept it into a production order (or, with sales orders on, a warehouse sales order). */
+/** an advance paid with a distributor order: what, how, when, and the proof (an uploaded file) */
+export interface OrderAdvance {
+  amount: number;
+  method: string;
+  date: string;
+  reference: string | null;
+  proofId: string;
+  proofName: string;
+}
+
 @Entity('portal_requests')
 export class PortalRequest extends DocEntity {
   @Column({ type: 'date' })
@@ -81,6 +91,10 @@ export class PortalRequest extends DocEntity {
   /** planned transport (transporter, vehicle, driver) */
   @Column({ type: 'jsonb', nullable: true })
   transport: OrderTransport | null;
+
+  /** the advance the distributor says it paid with the order, with its proof (same on every line of the order) */
+  @Column({ type: 'jsonb', nullable: true })
+  advance: OrderAdvance | null;
 
   /** the manufacturer picked for this line (a SKU can have several); empty = the product's default */
   @Column({ type: 'uuid', nullable: true })

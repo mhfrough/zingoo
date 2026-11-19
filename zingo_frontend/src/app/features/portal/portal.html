@@ -264,6 +264,7 @@
 
 <app-order-timeline [(open)]="orderViewOpen" [orderId]="viewingOrder()?.id ?? null" [refNo]="viewingOrder()?.refNo ?? null" />
 <app-request-form [(open)]="requestOpen" [rates]="rates.value() ?? []" [distributorId]="dist()" [direct]="direct()" [canAddSku]="isAdmin()"
+  [advancePct]="profile.value()?.distributor?.advancePct ?? 0" [methods]="profile.value()?.paymentMethods ?? ['Bank Transfer']"
   (saved)="reload()" (skuAdded)="rates.reload()" />
 <app-receipt-form [(open)]="receiptOpen" [order]="receiving()" [distributorId]="dist()" (saved)="reload()" />
 <app-advice-form [(open)]="adviceOpen" [orders]="orders.value() ?? []" [methods]="profile.value()?.paymentMethods ?? ['Bank Transfer']" [orderId]="payingOrder()" [distributorId]="dist()" (saved)="reload()" />

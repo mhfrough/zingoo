@@ -137,7 +137,10 @@ export interface PortalRate {
   agreed: boolean;
   packsPerCarton: number;
   /** saved packaging templates: the order form picks one (figures can be changed per order) */
-  packagings?: { name: string; packetsPerBundle: number; bundlesPerContainer: number; containerUnit?: string | null; isDefault: boolean }[];
+  packagings?: {
+    name: string; piecesPerPacket?: number; packetsPerBundle: number; bundlesPerContainer: number; containerUnit?: string | null;
+    containersPerTruck?: number | null; transportUnit?: string | null; isDefault: boolean;
+  }[];
   bundlesPerContainer?: number;
   /** what a container is called (Carton, Bora) */
   containerUnit?: string | null;

@@ -191,7 +191,11 @@ export class ProductionOrdersService {
     // the manufacturer's invoices on this order (never to the distributor: they carry the manufacturer's price)
     const invoices = user.role === 'Distributor' ? [] : (await Promise.all(ids.map((x) => this.invoicesOf(em, x)))).flat();
     const s = await this.settings.get(em);
+    // the advance the distributor paid with its order (on the request the order came from)
+    const [adv]: { advance: unknown }[] = this.isManufacturer(user) ? [] : await em.query(
+      `SELECT advance FROM portal_requests WHERE "productionOrderId" = ANY($1::uuid[]) AND advance IS NOT NULL LIMIT 1`, [ids]);
     return {
+      distAdvance: adv?.advance ?? null,
       order: this.shape(o, (await this.movedMap(em))[o.id]),
       /** ready date plus the transit days of Settings */
       expectedDate: expectedDate(o.readyDate, s.transitDays),

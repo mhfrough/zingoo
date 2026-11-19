@@ -495,3 +495,10 @@ Progress (2026-11-19): K4 built.
 - Settings > Document numbers: prefixes for production orders, distributor orders, product SKU codes, manufacturer invoices.
 - Not browser-checked: the distributor order form and the manufacturer invoice forms (API checks cover them).
 
+Progress (2026-11-19): K5 built.
+- Order stock form: container unit (Bag / Carton / Bora) and full load come from the packaging template, read only (chips under the line); packets per bundle and bundles per container stay editable for the order. New "Load": containers, Full truck(s) (trucks x containers per truck) or Half truck (half, rounded up) when the template has a full load.
+- Planned transport removed from the form (the API still accepts it).
+- Tighter line layout (product + 4 small fields per row); key figures (line quantities, totals) in bold green.
+- Advance payment section: amount (with "Pay" the advance guide % of the order value when the distributor has one), method (Settings), date, reference, proof upload; method, date and proof required once an amount is entered. Stored as `PortalRequest.advance` on every line of the order, proof attached (DIST_ADVANCE), Finance notified. The order panel shows it to staff (proof download) and the distributor; never to the manufacturer (`distAdvance` hidden).
+- Not booked into the books yet: it is recorded with its proof for Finance to check. Booking it as a customer advance and applying it to the invoice belongs with K6 (Pay modal).
+

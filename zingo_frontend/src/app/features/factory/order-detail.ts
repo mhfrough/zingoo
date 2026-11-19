@@ -6,7 +6,7 @@ import { Tone, containersLabel, dueCountdown, fmtDate, fmtAmount2, fmtDateTime, 
 import { printVoucher } from '../../shared/print';
 import { Btn, ConfirmService, Help, IconComponent, PlainPipe, RichPipe, SkeletonText, Tag, ToastService } from '../../ui';
 import { AuthService } from '../../core/auth.service';
-import { ATTACHMENT_ACCEPT, ATTACHMENT_MAX_BYTES } from '../../core/attachments.api';
+import { ATTACHMENT_ACCEPT, ATTACHMENT_MAX_BYTES, AttachmentsApi } from '../../core/attachments.api';
 import { OrderInvoiceForm } from './order-invoice-form';
 import { FactoryApi, ORDER_TONE, OrderClaim, OrderDetailData, OrderDoc, OrderInvoice, OrderLoad, ProductionOrder, orderState } from './factory.api';
 import { dispatchVoucher, orderVoucher } from './vouchers';
@@ -479,6 +479,25 @@ type StepState = 'done' | 'now' | 'next';
         </section>
       }
 
+      @if (d.distAdvance; as a) {
+        <section>
+          <h4>Advance paid by the distributor
+            <app-help title="Advance paid by the distributor" text="What the distributor says it paid with the order, with its proof. Finance checks it against the bank." />
+          </h4>
+          <dl class="facts">
+            <div><dt>Amount</dt><dd><strong class="info-figure">{{ money(a.amount) }}</strong></dd></div>
+            <div><dt>Method</dt><dd>{{ a.method }}</dd></div>
+            <div><dt>Paid on</dt><dd>{{ date(a.date) }}</dd></div>
+            @if (a.reference) { <div><dt>Reference</dt><dd>{{ a.reference }}</dd></div> }
+            <div><dt>Proof</dt><dd>
+              @if (isStaff()) {
+                <button appBtn type="button" size="sm" variant="ghost" icon="download" (click)="downloadProof(a)">{{ a.proofName }}</button>
+              } @else { {{ a.proofName }} }
+            </dd></div>
+          </dl>
+        </section>
+      }
+
       @if (o.status === 'Accepted' || d.shipments.length) {
         <section>
           <h4>Loads
@@ -778,6 +797,13 @@ export class OrderDetail {
         this.docError.set(errorText(err));
       },
     });
+  }
+
+  /** staff can open any uploaded file; a partner login cannot */
+  protected isStaff = computed(() => !['Distributor', 'Manufacturer'].includes(this.role()));
+  private attachments = inject(AttachmentsApi);
+  protected downloadProof(a: { proofId: string; proofName: string }) {
+    this.attachments.download({ id: a.proofId, name: a.proofName }).subscribe({ error: (err) => this.docError.set(errorText(err)) });
   }
 
   protected download(orderId: string, f: Pick<OrderDoc, 'id' | 'name'>) {

@@ -2038,5 +2038,21 @@ if (k4DistProd) {
   ok('the same distributor order number twice -> 409', (await call(T.dist, 'POST', '/portal/requests', { orderNo: `K4D-${k4Stamp}`, date: kDay, lines: [{ productId: k4DistProd.productId, containers: 1 }] })).status === 409);
 }
 
+// ---------- K5: an advance with its proof on the distributor's order ----------
+const k5Proof = await (await fetch(`${BASE}/attachments`, { method: 'POST', headers: { Authorization: `Bearer ${T.dist}` },
+  body: (() => { const f = new FormData(); f.append('file', new Blob(['%PDF-1.4\n%%EOF'], { type: 'application/pdf' }), 'k5-bank-slip.pdf'); return f; })() })).json();
+ok('the distributor uploads the proof of its advance', !!k5Proof?.id, JSON.stringify(k5Proof));
+const k5Line = k4DistProd ? [{ productId: k4DistProd.productId, containers: 1 }] : [];
+const k5Methods = (await call(T.dist, 'GET', '/portal/profile')).json?.paymentMethods ?? ['Bank Transfer'];
+ok('an advance needs its proof', (await call(T.dist, 'POST', '/portal/requests', { date: kDay, lines: k5Line, advance: { amount: 1000, method: k5Methods[0], date: kDay } })).status === 400);
+ok('an advance needs a payment method from Settings', (await call(T.dist, 'POST', '/portal/requests', { date: kDay, lines: k5Line, advance: { amount: 1000, method: 'Gold coins', date: kDay, proofId: k5Proof?.id } })).status === 400);
+const k5Req = await call(T.dist, 'POST', '/portal/requests', { date: kDay, lines: k5Line, advance: { amount: 1500.5, method: k5Methods[0], date: kDay, reference: 'TRX-K5', proofId: k5Proof?.id } });
+const k5Rows = k5Req.json?.requests ?? [];
+ok('the order keeps the advance on its lines', k5Req.status === 201 && k5Rows.length > 0 && k5Rows.every((r) => r.advance?.amount === 1500.5), JSON.stringify(k5Req.json).slice(0, 300));
+const k5Desk = (await call(T.owner, 'GET', `/portal/requests?distributorId=${k2DistId}`)).json ?? [];
+const k5Mine = (Array.isArray(k5Desk) ? k5Desk : k5Desk.requests ?? []).find((r) => r.groupRef && r.groupRef === k5Req.json?.groupRef);
+ok('staff see the advance with method, reference and proof', k5Mine?.advance?.method === k5Methods[0] && k5Mine?.advance?.reference === 'TRX-K5' && k5Mine?.advance?.proofName === 'k5-bank-slip.pdf', JSON.stringify(k5Mine?.advance));
+ok('the same proof cannot go on a second order', (await call(T.dist, 'POST', '/portal/requests', { date: kDay, lines: k5Line, advance: { amount: 10, method: k5Methods[0], date: kDay, proofId: k5Proof?.id } })).status === 400);
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

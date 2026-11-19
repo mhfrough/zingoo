@@ -150,6 +150,8 @@ export interface OrderInvoice {
 /** GET production-orders/:id/detail: one order in full (money fields absent for a distributor login) */
 export interface OrderDetailData {
   order: ProductionOrder;
+  /** the advance the distributor paid with its order (never sent to the manufacturer) */
+  distAdvance?: { amount: number; method: string; date: string; reference: string | null; proofId: string; proofName: string } | null;
   /** every product of the combined order (just the one order when it is a single-product order) */
   lines: ProductionOrder[];
   /** ready date plus the transit days of Settings */

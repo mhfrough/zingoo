@@ -13,6 +13,16 @@ export class ProofDto {
 }
 
 /** A distributor asks for stock. Staff can file one on the distributor's behalf with `distributorId`. */
+/** an advance paid with the order: amount, method, date and the proof are required */
+export class OrderAdvanceDto {
+  @IsNumber() @IsPositive() amount: number;
+  @IsString() @IsNotEmpty() @MaxLength(40) method: string;
+  @IsDateString() date: string;
+  @IsOptional() @IsString() @MaxLength(80) reference?: string;
+  /** the uploaded proof (bank slip, transfer screenshot) */
+  @IsUUID() proofId: string;
+}
+
 /** one product of a distributor order: so many containers, packed by a template (figures may be changed for this order) */
 export class RequestLineDto {
   @IsUUID() productId: string;
@@ -30,6 +40,8 @@ export class CreateRequestDto {
   @IsOptional() @IsUUID() distributorId?: string;
   /** the order number for all the product lines; empty = the next one (DO-012) */
   @IsOptional() @IsString() @MaxLength(30) orderNo?: string;
+  /** an advance paid with the order, with its proof */
+  @IsOptional() @ValidateNested() @Type(() => OrderAdvanceDto) advance?: OrderAdvanceDto;
   @IsDateString() date: string;
   /** several products in one order (each becomes its own production order, grouped under one order number) */
   @IsOptional() @IsArray() @ArrayMinSize(1) @ArrayMaxSize(30) @ValidateNested({ each: true }) @Type(() => RequestLineDto) lines?: RequestLineDto[];

@@ -4,7 +4,7 @@ import { rxResource } from '@angular/core/rxjs-interop';
 import { of } from 'rxjs';
 import { AuthService } from '../../core/auth.service';
 import { fmtMoney, fmtNumber } from '../../shared/format';
-import { Kpi, PageHeader, SelectOption, ViewAs } from '../../ui';
+import { Kpi, PageHeader, SelectOption, TabItem, TabPanel, Tabs, ViewAs } from '../../ui';
 import { OpsApi } from '../ops/ops.api';
 import { FactoryApi } from './factory.api';
 import { OrdersPanel } from './orders-panel';
@@ -21,7 +21,7 @@ import { MfrStatement } from './trail-panel';
 @Component({
   selector: 'app-factory',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [Kpi, PageHeader, ViewAs, OrdersPanel, RequestsPanel, ShipmentsPanel, DeliveryClaimsPanel, MfrStatement],
+  imports: [Kpi, PageHeader, ViewAs, Tabs, TabPanel, OrdersPanel, RequestsPanel, ShipmentsPanel, DeliveryClaimsPanel, MfrStatement],
   styles: `
     .terms {
       display: grid;
@@ -54,45 +54,39 @@ import { MfrStatement } from './trail-panel';
         <app-kpi label="Waiting for your answer" [value]="num(profile.value()?.waiting ?? 0)" icon="clock" tone="warning" foot="Accept or reject" />
         <app-kpi label="In production" [value]="num(profile.value()?.inProduction ?? 0)" icon="factory" tone="info"
           [foot]="num(profile.value()?.containersInProduction ?? 0) + ' containers'" />
-        <app-kpi label="Value in production" [value]="money(profile.value()?.valueInProduction ?? 0)" icon="coins" tone="accent" foot="Accepted orders" />
-        <app-kpi label="Paid to you" [value]="money(position.value()?.totals?.paid ?? 0)" icon="coins" tone="success"
-          [foot]="'Still to pay ' + money(position.value()?.totals?.toPay ?? 0)" />
-        <app-kpi label="Advance on order" [value]="(profile.value()?.manufacturer?.advancePct ?? 0) + '%'" icon="landmark" tone="success"
-          [foot]="'Balance in ' + (profile.value()?.manufacturer?.paymentDays ?? 0) + ' days'" />
+        <app-kpi label="Completed orders" [value]="num(completed().length)" icon="check" tone="success"
+          [foot]="num(completedContainers()) + ' containers dispatched'" />
+        <app-kpi label="Payments received" [value]="money(position.value()?.totals?.paid ?? 0)" icon="coins" tone="success"
+          [foot]="'Still to receive ' + money(position.value()?.totals?.toPay ?? 0)" />
+        <app-kpi label="Invoices sent" [value]="num(invoices().length)" icon="file" tone="accent"
+          [foot]="money(invoicedAmount()) + ' invoiced'" />
       </div>
 
-      <div class="card">
-        <div class="card__head"><div><h2>Payment details</h2><p>Where Zen Foods pays you. Ask Zen Foods to change them</p></div></div>
-        <div class="card__body">
-          <dl class="terms">
-            @for (b of profile.value()?.manufacturer?.bankAccounts ?? []; track b.account) {
-              <div>
-                <dt>{{ b.isDefault ? 'Default account' : 'Other account' }}</dt>
-                <dd>{{ b.bank }} · {{ b.account }}<br />{{ b.title }}{{ b.branch ? ' · ' + b.branch : '' }}</dd>
-              </div>
-            } @empty {
-              <div><dt>Bank account</dt><dd>None on file yet</dd></div>
-            }
-          </dl>
-        </div>
-      </div>
-
-      <app-orders-panel mode="factory" [orders]="visibleOrders()" [loading]="orders.isLoading()"
-        [error]="orders.error() ? 'The server did not answer.' : null" [stages]="profile.value()?.stages ?? []"
-        [canAnswer]="canAnswer()" (changed)="reload()" />
-
-      <app-shipments-panel mode="factory" [shipments]="shipments.value() ?? []" [orders]="orders.value() ?? []"
-        [loading]="shipments.isLoading()" [error]="shipments.error() ? 'The server did not answer.' : null"
-        [canShip]="canAnswer()" (changed)="reload()" />
-
-      <app-delivery-claims-panel mode="factory" [manufacturerId]="isManufacturer() ? null : (profile.value()?.manufacturer?.id ?? null)"
-        [tick]="tick()" [canDecide]="canAnswer()" (changed)="reload()" />
-
-      <app-requests-panel mode="factory" [requests]="requests.value() ?? []" [position]="position.value() ?? null"
-        [loading]="requests.isLoading()" [error]="requests.error() ? 'The server did not answer.' : null"
-        [manufacturer]="profile.value()?.manufacturer ?? null" [canRequest]="canAnswer()" (changed)="reload()" />
-
-      <app-mfr-statement [rows]="statement.value()?.entries ?? []" [loading]="statement.isLoading()" />
+      <app-tabs [tabs]="tabs()" [(active)]="tab" ariaLabel="Manufacturer portal sections">
+        <ng-template appTabPanel="orders">
+          <app-orders-panel mode="factory" [orders]="visibleOrders()" [loading]="orders.isLoading()"
+            [error]="orders.error() ? 'The server did not answer.' : null" [stages]="profile.value()?.stages ?? []"
+            [canAnswer]="canAnswer()" [requests]="requests.value() ?? []" [position]="position.value() ?? null"
+            [manufacturer]="profile.value()?.manufacturer ?? null" (changed)="reload()" />
+        </ng-template>
+        <ng-template appTabPanel="deliveries">
+          <app-shipments-panel mode="factory" [shipments]="shipments.value() ?? []" [orders]="orders.value() ?? []"
+            [loading]="shipments.isLoading()" [error]="shipments.error() ? 'The server did not answer.' : null"
+            [canShip]="canAnswer()" (changed)="reload()" />
+        </ng-template>
+        <ng-template appTabPanel="claims">
+          <app-delivery-claims-panel mode="factory" [manufacturerId]="isManufacturer() ? null : (profile.value()?.manufacturer?.id ?? null)"
+            [tick]="tick()" [canDecide]="canAnswer()" (changed)="reload()" />
+        </ng-template>
+        <ng-template appTabPanel="payments">
+          <app-requests-panel mode="factory" [requests]="requests.value() ?? []" [position]="position.value() ?? null"
+            [loading]="requests.isLoading()" [error]="requests.error() ? 'The server did not answer.' : null"
+            [manufacturer]="profile.value()?.manufacturer ?? null" [canRequest]="canAnswer()" (changed)="reload()" />
+        </ng-template>
+        <ng-template appTabPanel="statement">
+          <app-mfr-statement [rows]="statement.value()?.entries ?? []" [loading]="statement.isLoading()" />
+        </ng-template>
+      </app-tabs>
     </div>
   `,
 })
@@ -149,6 +143,23 @@ export class Factory {
 
   protected num = fmtNumber;
   protected money = fmtMoney;
+
+  // ───────── counters and sections ─────────
+  /** orders whose goods all left the factory (Ready to dispatch done, or everything delivered) */
+  protected completed = computed(() => this.visibleOrders().filter((o) => o.status === 'Accepted'
+    && ((o.readyContainers != null && o.shippedContainers >= o.readyContainers) || o.receivedContainers >= o.containers)));
+  protected completedContainers = computed(() => this.completed().reduce((n, o) => n + (o.shippedContainers || o.receivedContainers), 0));
+  /** invoices (payment requests) sent to Zen Foods, rejected ones left out */
+  protected invoices = computed(() => (this.requests.value() ?? []).filter((r) => r.status !== 'Rejected'));
+  protected invoicedAmount = computed(() => this.invoices().reduce((n, r) => n + Number(r.amount), 0));
+  protected tab = signal('orders');
+  protected tabs = computed<TabItem[]>(() => [
+    { id: 'orders', label: 'Orders', icon: 'package', count: this.profile.value()?.waiting || null },
+    { id: 'deliveries', label: 'Deliveries', icon: 'truck' },
+    { id: 'claims', label: 'Faulty goods claims', icon: 'alert' },
+    { id: 'payments', label: 'Invoices & payments', icon: 'banknote', count: this.invoices().length || null },
+    { id: 'statement', label: 'Statement', icon: 'file' },
+  ]);
 
   protected reload() {
     this.tick.update((n) => n + 1);

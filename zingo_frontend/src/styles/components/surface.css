@@ -469,4 +469,54 @@
     margin-block: var(--section-gap) var(--space-3);
     font-size: var(--text-xl);
   }
+
+  /* a voucher shown before it is downloaded (shared/print.ts) */
+  .voucher-dialog {
+    position: fixed;
+    inset: 0;
+    margin: auto;
+    inline-size: min(52rem, calc(100vw - 2rem));
+    block-size: min(90vh, 60rem);
+    padding: 0;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg, var(--radius-md));
+    background: var(--surface-card);
+    color: var(--text);
+    box-shadow: var(--shadow-lg, 0 20px 50px rgb(0 0 0 / 0.25));
+
+    &[open] {
+      display: flex;
+      flex-direction: column;
+    }
+
+    &::backdrop {
+      background: rgb(8 15 25 / 0.55);
+    }
+
+    & > header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: var(--space-3);
+      padding: var(--space-3) var(--space-4);
+      border-block-end: 1px solid var(--border);
+
+      & h2 {
+        margin: 0;
+        font-size: var(--text-md);
+      }
+
+      & > div {
+        display: flex;
+        gap: var(--space-2);
+      }
+    }
+
+    & > iframe {
+      flex: 1;
+      inline-size: 100%;
+      border: 0;
+      background: #fff;
+    }
+  }
 }

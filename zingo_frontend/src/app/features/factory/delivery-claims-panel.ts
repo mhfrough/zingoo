@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, computed, inject, input, model, output, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, effect, inject, input, model, output, signal } from '@angular/core';
 import { rxResource, toSignal } from '@angular/core/rxjs-interop';
 import { ReactiveFormsModule, Validators } from '@angular/forms';
 import { errorText } from '../../shared/errors';
@@ -44,6 +44,14 @@ const proofCount = (c: DeliveryClaim) => (c.proofs?.length ?? 0) + (c.hasEvidenc
       & small { display: block; color: var(--text-3); font-size: var(--text-xs); } }
     .compose { display: flex; flex-direction: column; gap: var(--space-2); margin-block-start: var(--space-3);
       & textarea { min-block-size: 4.5rem; } }
+    .decide { display: flex; flex-direction: column; gap: var(--space-2); padding: var(--space-3); border: 1px solid var(--border);
+      border-radius: var(--radius-md); background: var(--surface-sunken);
+      & textarea { min-block-size: 3.5rem; } }
+    .choices { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(12rem, 100%), 1fr)); gap: var(--space-2);
+      & label { display: flex; align-items: flex-start; gap: var(--space-2); padding: var(--space-2) var(--space-3); border: 1px solid var(--border);
+        border-radius: var(--radius-md); background: var(--surface-card); font-size: var(--text-sm); cursor: pointer; }
+      & label:has(input:checked) { border-color: var(--accent); background: var(--accent-soft); }
+      & strong { display: block; } }
   `,
   template: `
     <app-offcanvas [(open)]="open" [title]="'Claim ' + (c()?.refNo ?? '')" [subtitle]="subject()" size="lg"
@@ -57,9 +65,6 @@ const proofCount = (c: DeliveryClaim) => (c.proofs?.length ?? 0) + (c.hasEvidenc
           <div style="grid-column: 1 / -1"><dt>What happened</dt><dd>{{ c.note | plain }}</dd></div>
           @if (c.decisionNote) { <div style="grid-column: 1 / -1"><dt>{{ c.status === 'Hold' ? 'Why on hold' : 'Answer' }}</dt><dd>{{ c.decisionNote | plain }}</dd></div> }
         </dl>
-        @if (canDecide() && (c.status === 'Pending' || c.status === 'Hold')) {
-          <button appBtn type="button" variant="primary" size="sm" (click)="decide.emit()">Accept, reject or hold</button>
-        }
         <h4>Proof <app-help title="Proof" text="Photos or PDFs the distributor attached: the damaged bundles, the signed voucher with the shortage written on it, a weighbridge slip." /></h4>
         <div class="files">
           @for (f of c.proofs ?? []; track f.id) {
@@ -68,6 +73,27 @@ const proofCount = (c: DeliveryClaim) => (c.proofs?.length ?? 0) + (c.hasEvidenc
           @if (c.hasEvidence) { <button appBtn type="button" size="sm" icon="download" (click)="oldEvidence(c.id)">Earlier attachment</button> }
           @if (!(c.proofs?.length) && !c.hasEvidence) { <span class="muted">No proof attached.</span> }
         </div>
+        @if (canDecide() && (c.status === 'Pending' || c.status === 'Hold')) {
+          <h4>Your decision <app-help title="Decision" text="Accept with a credit (it comes off what Zen Foods owes you) or with replacement goods, put it on hold to check first, or reject it. A hold or a rejection needs a reason; the distributor and Zen Foods see it." /></h4>
+          <div class="decide">
+            <div class="choices" role="radiogroup" aria-label="Decision">
+              <label><input type="radio" name="claim-decision" value="Credit" [checked]="decision() === 'Credit'" (change)="decision.set('Credit')" /> <span><strong>Accept · credit</strong> {{ money(c.value) }} off what Zen Foods owes</span></label>
+              <label><input type="radio" name="claim-decision" value="Replace" [checked]="decision() === 'Replace'" (change)="decision.set('Replace')" /> <span><strong>Accept · replace</strong> send new goods</span></label>
+              @if (c.status !== 'Hold') {
+                <label><input type="radio" name="claim-decision" value="Hold" [checked]="decision() === 'Hold'" (change)="decision.set('Hold')" /> <span><strong>Hold</strong> check it first</span></label>
+              }
+              <label><input type="radio" name="claim-decision" value="Reject" [checked]="decision() === 'Reject'" (change)="decision.set('Reject')" /> <span><strong>Reject</strong></span></label>
+            </div>
+            <textarea maxlength="500" [value]="reason()" (input)="reason.set($any($event.target).value)" aria-label="Reason for the decision"
+              [placeholder]="needsReason() ? 'Say why (required): the distributor sees it' : 'Note (optional)'"></textarea>
+            @if (decideErr()) { <div class="notice" data-tone="danger" role="alert">{{ decideErr() }}</div> }
+            <div>
+              <button appBtn type="button" [variant]="decision() === 'Reject' ? 'danger' : 'primary'" icon="check" [loading]="deciding()" (click)="saveDecision(c.id)">
+                {{ decision() === 'Reject' ? 'Reject claim' : decision() === 'Hold' ? 'Put on hold' : 'Accept claim' }}
+              </button>
+            </div>
+          </div>
+        }
         <h4>Messages</h4>
         <ul class="msgs">
           @for (m of c.thread ?? []; track m.id) {
@@ -94,8 +120,43 @@ export class ClaimThread {
   readonly c = input<DeliveryClaim | null>(null);
   readonly canDecide = input(false);
   readonly changed = output<void>();
-  readonly decide = output<void>();
   protected text = signal('');
+  // ───────── the decision, in the same panel as the proof ─────────
+  protected decision = signal<'Credit' | 'Replace' | 'Hold' | 'Reject'>('Credit');
+  protected reason = signal('');
+  protected deciding = signal(false);
+  protected decideErr = signal('');
+  protected needsReason = computed(() => this.decision() === 'Reject' || this.decision() === 'Hold');
+  protected money = fmtMoney;
+
+  constructor() {
+    // another claim opened: start the decision afresh
+    effect(() => {
+      this.c()?.id;
+      this.decision.set('Credit');
+      this.reason.set('');
+      this.decideErr.set('');
+    });
+  }
+
+  protected saveDecision(id: string) {
+    const note = this.reason().trim();
+    if (this.needsReason() && !note) { this.decideErr.set('Give a reason: the distributor sees it.'); return; }
+    this.decideErr.set('');
+    this.deciding.set(true);
+    const d = this.decision();
+    this.factory.decideClaim(id, d === 'Reject' || d === 'Hold' ? { decision: d, note } : { decision: 'Accept', resolution: d, ...(note ? { note } : {}) }).subscribe({
+      next: () => {
+        this.deciding.set(false);
+        this.toast.success('Decision saved. The distributor and Zen Foods are notified.');
+        this.changed.emit();
+      },
+      error: (e) => {
+        this.deciding.set(false);
+        this.decideErr.set(errorText(e));
+      },
+    });
+  }
   protected sending = signal(false);
   protected err = signal('');
   protected date = fmtDate;
@@ -222,80 +283,6 @@ export class DeliveryClaimForm extends FormModal {
   }
 }
 
-/** The manufacturer (or Admin / Manufacturing for it) accepts with a credit or a replacement, or rejects with a reason. */
-@Component({
-  selector: 'app-delivery-claim-decide',
-  changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [ReactiveFormsModule, Offcanvas, Field, Btn, RichText, PlainPipe],
-  template: `
-    <app-offcanvas #oc [(open)]="open" [title]="'Decide ' + (c()?.refNo ?? 'claim')" [subtitle]="subject()" size="md" [dirty]="form.dirty">
-      @if (error()) {
-        <div class="notice" data-tone="danger" role="alert">{{ error() }}</div>
-      }
-      @if (c(); as c) {
-        <div class="notice" style="margin-block-end: var(--space-4)"><span><strong>{{ c.distributor }}</strong>: {{ c.note | plain }}</span></div>
-      }
-      <form [id]="formId" [formGroup]="form" (ngSubmit)="submit()" class="form-grid" novalidate>
-        <app-field label="Decision" [wide]="true" [required]="true">
-          <select formControlName="decision">
-            <option value="Credit">Accept: take it off what Zen Foods owes ({{ money(c()?.value ?? 0) }})</option>
-            <option value="Replace">Accept: send replacement goods</option>
-            @if (c()?.status !== 'Hold') { <option value="Hold">Hold: check it first (say why)</option> }
-            <option value="Reject">Reject</option>
-          </select>
-        </app-field>
-        <app-field label="Note" [wide]="true" [required]="needsNote()" [hint]="needsNote() ? 'Say why; the distributor sees it' : 'Optional'"
-                   [error]="needsNote() && invalid('note') ? 'Give a reason' : null">
-          <app-rich-text formControlName="note" [max]="500" [storeMax]="500" />
-        </app-field>
-      </form>
-      <ng-container offcanvasFooter>
-        <button appBtn type="button" (click)="oc.requestClose()">Cancel</button>
-        <button appBtn [variant]="rejecting() ? 'danger' : 'primary'" type="submit" [attr.form]="formId" icon="check" [loading]="busy()">{{ rejecting() ? 'Reject claim' : holding() ? 'Put on hold' : 'Accept claim' }}</button>
-      </ng-container>
-    </app-offcanvas>
-  `,
-})
-export class DeliveryClaimDecide extends FormModal {
-  private factory = inject(FactoryApi);
-  readonly c = input<DeliveryClaim | null>(null);
-  readonly formId = 'form-delivery-claim-decide';
-  protected money = (v: number) => fmtMoney(v);
-  readonly form = this.fb.nonNullable.group({ decision: ['Credit', Validators.required], note: [''] });
-  private v = toSignal(this.form.valueChanges, { initialValue: this.form.getRawValue() });
-  protected rejecting = computed(() => this.v().decision === 'Reject');
-  protected holding = computed(() => this.v().decision === 'Hold');
-  protected needsNote = computed(() => this.rejecting() || this.holding());
-  protected subject = computed(() => {
-    const c = this.c();
-    return c ? `${fmtNumber(c.bundles)} ${c.kind.toLowerCase()} bundles of ${c.sku} on ${c.shipmentRef}` : '';
-  });
-
-  constructor() {
-    super();
-    this.form.controls.decision.valueChanges.subscribe(() => {
-      this.form.controls.note.setValidators(this.needsNote() ? Validators.required : null);
-      this.form.controls.note.updateValueAndValidity({ emitEvent: false });
-    });
-  }
-
-  protected reset() {
-    this.form.reset({ decision: 'Credit', note: '' });
-  }
-
-  protected request() {
-    const x = this.form.getRawValue();
-    const note = x.note.trim();
-    return this.factory.decideClaim(this.c()!.id, x.decision === 'Reject' || x.decision === 'Hold'
-      ? { decision: x.decision, note }
-      : { decision: 'Accept', resolution: x.decision, ...(note ? { note } : {}) });
-  }
-
-  protected successMessage() {
-    return 'Decision saved. The distributor and Zen Foods are notified.';
-  }
-}
-
 /**
  * Faulty-goods claims on manufacturer deliveries, for every side:
  * - `distributor`: raise a claim on a delivery it received and follow the answer;
@@ -306,7 +293,7 @@ export class DeliveryClaimDecide extends FormModal {
 @Component({
   selector: 'app-delivery-claims-panel',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [Btn, DataTable, DeliveryClaimForm, DeliveryClaimDecide, ClaimThread],
+  imports: [Btn, DataTable, DeliveryClaimForm, ClaimThread],
   template: `
     <div class="card" data-flush>
       <div class="card__head">
@@ -330,8 +317,7 @@ export class DeliveryClaimDecide extends FormModal {
     </div>
 
     <app-delivery-claim-form [(open)]="raiseOpen" [lots]="lots()" (saved)="saved()" />
-    <app-delivery-claim-decide [(open)]="decideOpen" [c]="current()" (saved)="saved()" />
-    <app-claim-thread [(open)]="threadOpen" [c]="current()" [canDecide]="canDecide()" (changed)="saved()" (decide)="decideOpen.set(true)" />
+    <app-claim-thread [(open)]="threadOpen" [c]="current()" [canDecide]="canDecide()" (changed)="saved()" />
   `,
 })
 export class DeliveryClaimsPanel {
@@ -352,7 +338,6 @@ export class DeliveryClaimsPanel {
 
   private local = signal(0);
   protected raiseOpen = signal(false);
-  protected decideOpen = signal(false);
   protected threadOpen = signal(false);
   /** the claim open in a panel, read from the list so a reload shows its new messages and status */
   private currentId = signal<string | null>(null);
@@ -413,8 +398,9 @@ export class DeliveryClaimsPanel {
   protected actions = (r: ClaimRow): RowAction[] => r.group.flatMap((c) => {
     const tag = r.group.length > 1 ? ` · ${c.sku}` : '';
     return [
-      ...((c.status === 'Pending' || c.status === 'Hold') && this.canDecide() ? [{ id: `decide:${c.id}`, label: `Accept, reject or hold${tag}`, tone: 'success' as const }] : []),
-      { id: `thread:${c.id}`, label: `${proofCount(c) ? `Proof & messages (${proofCount(c)})` : 'Messages'}${tag}` },
+      (c.status === 'Pending' || c.status === 'Hold') && this.canDecide()
+        ? { id: `thread:${c.id}`, label: `Review and decide${tag}`, tone: 'success' as const }
+        : { id: `thread:${c.id}`, label: `${proofCount(c) ? `Proof & messages (${proofCount(c)})` : 'Messages'}${tag}` },
       ...(c.hasEvidence ? [{ id: `evidence:${c.id}`, label: `Download old photo / PDF${tag}` }] : []),
     ];
   });
@@ -422,7 +408,6 @@ export class DeliveryClaimsPanel {
   protected onAction(e: RowActionEvent<ClaimRow>) {
     const [what, id] = e.id.split(':');
     this.currentId.set(id);
-    if (what === 'decide') this.decideOpen.set(true);
     if (what === 'thread') this.threadOpen.set(true);
     if (what === 'evidence') {
       this.factory.claimEvidence(id).subscribe({

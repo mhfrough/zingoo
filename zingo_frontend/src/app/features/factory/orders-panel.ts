@@ -4,7 +4,8 @@ import { Tone, docDate, subLine, fmtDate, fmtMoney, fmtNumber, productLabel, qty
 import { Btn, ConfirmService, DataTable, RowAction, RowActionEvent, TableColumn, ToastService } from '../../ui';
 import { Distributor, Manufacturer, Product } from '../ops/models';
 import { AcceptOrderForm, OrderReasonForm, OrderStageForm, OrderTimeline } from './answer-forms';
-import { FactoryApi, ORDER_TONE, OrderRow, ProductionOrder, groupOrders, groupTotals, orderRef, orderState } from './factory.api';
+import { FactoryApi, ORDER_TONE, OrderRow, PaymentRequest, Position, ProductionOrder, groupOrders, groupTotals, orderRef, orderState } from './factory.api';
+import { PaymentRequestForm } from './request-forms';
 import { Observable, concat, toArray } from 'rxjs';
 import { ProductionOrderForm } from './order-form';
 import { printVoucher } from '../../shared/print';
@@ -19,7 +20,7 @@ import { orderVoucher } from './vouchers';
 @Component({
   selector: 'app-orders-panel',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [Btn, DataTable, ProductionOrderForm, AcceptOrderForm, OrderReasonForm, OrderStageForm, OrderTimeline],
+  imports: [Btn, DataTable, ProductionOrderForm, AcceptOrderForm, OrderReasonForm, OrderStageForm, OrderTimeline, PaymentRequestForm],
   template: `
     <div class="card" data-flush>
       <div class="card__head">
@@ -48,6 +49,9 @@ import { orderVoucher } from './vouchers';
     <app-order-reason-form [(open)]="reasonOpen" [order]="current()" [heading]="reason().heading" [actionLabel]="reason().action"
       [hint]="reason().hint" [run]="reason().run" [done]="reason().done" (saved)="changed.emit()" />
     <app-order-timeline [(open)]="timelineOpen" [order]="current()" />
+    @if (mode() === 'factory') {
+      <app-payment-request-form [(open)]="invoiceOpen" [rows]="position()?.rows ?? []" [manufacturer]="manufacturer()" [orderId]="invoiceFor()" (saved)="changed.emit()" />
+    }
   `,
 })
 export class OrdersPanel {
@@ -68,8 +72,19 @@ export class OrdersPanel {
   readonly canPlace = input(false);
   /** may accept, reject and report progress (the manufacturer, or staff acting for it) */
   readonly canAnswer = input(false);
+  /** manufacturer portal: its invoices and payment position, so an order row can raise a payment request */
+  readonly requests = input<PaymentRequest[]>([]);
+  readonly position = input<Position | null>(null);
+  readonly manufacturer = input<Manufacturer | null>(null);
   /** something changed: reload */
   readonly changed = output<void>();
+  protected invoiceOpen = signal(false);
+  protected invoiceFor = signal<string | null>(null);
+  /** the first line of the order that left the factory and still has something to ask for */
+  private invoiceLine = (o: OrderRow) => o.group.find((x) => {
+    const row = this.position()?.rows.find((r) => r.orderId === x.id);
+    return (x.readyContainers != null || x.shippedContainers > 0) && !!row && row.value - row.requested > 0.01;
+  }) ?? null;
 
   protected formOpen = signal(false);
   protected acceptOpen = signal(false);
@@ -134,7 +149,9 @@ export class OrdersPanel {
       list.push({ id: 'stage', label: o.stage === last ? 'Ready to dispatch' : 'Report progress', tone: o.stage === last ? 'success' : undefined });
     }
     if (company && this.canPlace() && (o.status === 'Sent' || (o.status === 'Accepted' && !o.shippedContainers))) list.push({ id: 'cancel', label: 'Cancel order', tone: 'danger' });
-    list.push({ id: 'view', label: 'View order and timeline' }, { id: 'print', label: 'Print order' });
+    // after Ready to dispatch: ask Zen Foods to pay (the invoice), straight from the order
+    if (!company && this.canAnswer() && this.invoiceLine(o)) list.push({ id: 'invoice', label: 'Payment request', tone: 'success' });
+    list.push({ id: 'view', label: 'View order and timeline' }, { id: 'print', label: 'Voucher' });
     return list;
   };
 
@@ -163,6 +180,10 @@ export class OrdersPanel {
         return;
       case 'stage':
         this.stageOpen.set(true);
+        return;
+      case 'invoice':
+        this.invoiceFor.set(this.invoiceLine(o)?.id ?? null);
+        this.invoiceOpen.set(true);
         return;
       case 'reject':
         this.reason.set({

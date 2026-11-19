@@ -60,15 +60,50 @@ ${v.signatures?.length ? `<div class="signs">${v.signatures.map((s) => `<div><b>
 </body></html>`;
 }
 
-/** opens the print dialog on the voucher (from a hidden frame that is removed afterwards) */
+/**
+ * Shows the voucher in a pop-up: the voucher itself, with Download (the print dialog, where it can be saved as a
+ * PDF) and Close. Esc or a click outside closes it. Every "Voucher" button of the app opens this.
+ */
 export function printVoucher(v: Voucher) {
+  const html = voucherHtml(v);
+  const dlg = document.createElement('dialog');
+  dlg.className = 'voucher-dialog';
+  dlg.setAttribute('aria-label', `${v.title} ${v.ref}`);
+  const head = document.createElement('header');
+  const h = document.createElement('h2');
+  h.textContent = `${v.title} · ${v.ref}`;
+  const actions = document.createElement('div');
+  const button = (label: string, primary: boolean, run: () => void) => {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'btn';
+    b.dataset['size'] = 'sm';
+    if (primary) b.dataset['variant'] = 'primary';
+    b.textContent = label;
+    b.addEventListener('click', run);
+    return b;
+  };
+  actions.append(button('Download PDF', true, () => downloadVoucher(html)), button('Close', false, () => dlg.close()));
+  head.append(h, actions);
+  const frame = document.createElement('iframe');
+  frame.title = `${v.title} ${v.ref}`;
+  frame.srcdoc = html;
+  dlg.append(head, frame);
+  dlg.addEventListener('close', () => dlg.remove());
+  dlg.addEventListener('click', (e) => { if (e.target === dlg) dlg.close(); });
+  document.body.appendChild(dlg);
+  dlg.showModal();
+}
+
+/** opens the print dialog on a voucher page (from a hidden frame that is removed afterwards): print or save as PDF */
+function downloadVoucher(html: string) {
   const frame = document.createElement('iframe');
   frame.setAttribute('aria-hidden', 'true');
   frame.style.cssText = 'position:fixed;inset-inline-end:0;inset-block-end:0;inline-size:0;block-size:0;border:0;visibility:hidden';
   document.body.appendChild(frame);
   const doc = frame.contentDocument!;
   doc.open();
-  doc.write(voucherHtml(v));
+  doc.write(html);
   doc.close();
   const done = () => setTimeout(() => frame.remove(), 1000);
   frame.contentWindow!.addEventListener('afterprint', done, { once: true });

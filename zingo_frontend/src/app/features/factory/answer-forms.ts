@@ -131,7 +131,154 @@ export class OrderReasonForm extends FormModal {
       grid-column: 1 / -1;
       display: flex;
       flex-direction: column;
-      gap: var(--space-4);
+      gap: var(--space-3);
+    }
+
+    /* each part of the dispatch in its own numbered box */
+    .dispatch > section {
+      padding: var(--space-3) var(--space-4);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-md);
+      background: var(--surface-card);
+    }
+
+    .num {
+      display: inline-grid;
+      place-items: center;
+      inline-size: 1.25rem;
+      block-size: 1.25rem;
+      border-radius: 999px;
+      background: var(--accent-soft);
+      color: var(--accent-text);
+      font-size: var(--text-2xs);
+      letter-spacing: 0;
+    }
+
+    .totals {
+      display: flex;
+      flex-wrap: wrap;
+      gap: var(--space-2) var(--space-5);
+      margin-block-start: var(--space-2);
+      font-size: var(--text-sm);
+      color: var(--text-2);
+      font-variant-numeric: tabular-nums;
+    }
+
+    /* the production steps: done, now, and the ones that can be reported next */
+    .steps {
+      grid-column: 1 / -1;
+      padding: var(--space-3) var(--space-4);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-md);
+      background: var(--surface-card);
+
+      & h4 {
+        margin: 0 0 var(--space-2);
+        font-size: var(--text-xs);
+        font-weight: var(--weight-semibold);
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+        color: var(--text-3);
+      }
+    }
+
+    .stepper {
+      display: flex;
+      flex-direction: column;
+      margin: 0;
+      padding: 0;
+      list-style: none;
+
+      & li {
+        position: relative;
+        display: flex;
+        align-items: center;
+        gap: var(--space-3);
+        min-block-size: 2.5rem;
+        padding-inline-start: 0;
+        font-size: var(--text-sm);
+      }
+
+      /* the line joining one step to the next */
+      & li:not(:last-child)::after {
+        content: '';
+        position: absolute;
+        inset-inline-start: calc(0.75rem - 1px);
+        inset-block: calc(50% + 0.75rem) calc(-50% + 0.75rem);
+        inline-size: 2px;
+        background: var(--border);
+      }
+
+      & li[data-state='done']:not(:last-child)::after {
+        background: var(--tone-success-fg);
+      }
+
+      & .dot {
+        display: inline-grid;
+        flex: none;
+        place-items: center;
+        inline-size: 1.5rem;
+        block-size: 1.5rem;
+        border: 2px solid var(--border-strong, var(--border));
+        border-radius: 999px;
+        background: var(--surface-card);
+      }
+
+      & li[data-state='done'] .dot {
+        border-color: var(--tone-success-fg);
+        background: var(--tone-success-fg);
+        color: #fff;
+      }
+
+      & li[data-state='current'] .dot {
+        border-color: var(--accent);
+        box-shadow: inset 0 0 0 4px var(--surface-card);
+        background: var(--accent);
+      }
+
+      & li[data-state='current'] {
+        font-weight: var(--weight-semibold);
+      }
+
+      & small {
+        color: var(--text-3);
+        font-size: var(--text-xs);
+      }
+
+      & label {
+        display: flex;
+        flex: 1;
+        align-items: center;
+        gap: var(--space-3);
+        margin-inline-start: calc(-1 * var(--space-2));
+        padding: var(--space-1) var(--space-2);
+        border-radius: var(--radius-md);
+        cursor: pointer;
+
+        & input {
+          position: absolute;
+          opacity: 0;
+          pointer-events: none;
+        }
+
+        &:hover {
+          background: var(--surface-sunken);
+        }
+
+        &:has(input:checked) {
+          background: var(--accent-soft);
+          color: var(--accent-text);
+          font-weight: var(--weight-semibold);
+
+          & .dot {
+            border-color: var(--accent);
+          }
+        }
+
+        &:has(input:focus-visible) {
+          box-shadow: var(--focus-ring);
+        }
+      }
     }
 
     .dispatch h4 {
@@ -245,15 +392,28 @@ export class OrderReasonForm extends FormModal {
         <div class="notice" data-tone="danger" role="alert">{{ error() }}</div>
       }
       <form [id]="formId" [formGroup]="form" (ngSubmit)="send()" class="form-grid" novalidate>
-        @if (next().length) {
-          <app-field label="Step reached" [wide]="true" [required]="true" [hint]="order()?.stage ? 'Now: ' + order()!.stage : 'No step reported yet'"
-            help="Only the steps after the current one are offered. The steps are set in Settings (production steps). The last step is the dispatch.">
-            <select formControlName="stage">
-              @for (s of next(); track s) {
-                <option [value]="s">{{ s }}{{ s === lastStage() ? ' (dispatch)' : '' }}</option>
+        @if (stages().length && notDispatched()) {
+          <section class="steps" aria-label="Production steps">
+            <h4>Production steps · pick the step reached</h4>
+            <ol class="stepper">
+              @for (s of stages(); track s; let i = $index) {
+                <li [attr.data-state]="stepState(i)">
+                  @if (stepState(i) === 'next') {
+                    <label>
+                      <input type="radio" formControlName="stage" [value]="s" />
+                      <span class="dot" aria-hidden="true"></span>
+                      <span>{{ s }}</span>
+                      @if (s === lastStage()) { <small>· dispatch: load the vehicle</small> }
+                    </label>
+                  } @else {
+                    <span class="dot" aria-hidden="true">@if (stepState(i) === 'done') { <app-icon name="check" [size]="12" /> }</span>
+                    <span>{{ s }}</span>
+                    <small>{{ stepState(i) === 'done' ? 'done' : 'now' }}</small>
+                  }
+                </li>
               }
-            </select>
-          </app-field>
+            </ol>
+          </section>
         } @else if (!dispatching()) {
           <p class="notice" style="grid-column: 1 / -1">Every production step is reported and the order was dispatched.</p>
         }
@@ -261,12 +421,12 @@ export class OrderReasonForm extends FormModal {
         @if (dispatching()) {
           <div class="dispatch">
             <section>
-              <h4>Quantities
-                <app-help title="Quantities" text="Ordered is what the distributor asked for. Ready is what the factory made and loads now: it may be more or less than ordered, and it is what is paid for. Damaged in production stays at the factory; leave it empty when there is none." />
+              <h4><span class="num">1</span> Quantities
+                <app-help title="Quantities" text="Ordered is what the distributor asked for. Ready is what the factory made and loads now: it may be more or less than ordered, and it is what is paid for." />
               </h4>
               <div class="wrap">
                 <table class="qty">
-                  <thead><tr><th>Product</th><th>Ordered</th><th>Ready</th><th>Damaged in production</th></tr></thead>
+                  <thead><tr><th>Product</th><th>Ordered</th><th>Ready to load</th></tr></thead>
                   <tbody>
                     @for (o of lines(); track o.id) {
                       <tr>
@@ -277,19 +437,20 @@ export class OrderReasonForm extends FormModal {
                             [attr.aria-label]="'Ready containers of ' + o.product.sku" />
                           @if (ready()[o.id] !== o.containers) { <small class="diff">{{ ready()[o.id] > o.containers ? '+' : '' }}{{ ready()[o.id] - o.containers }} vs ordered</small> }
                         </td>
-                        <td>
-                          <input type="number" min="0" step="1" [value]="damaged()[o.id] ?? ''" (input)="setDamaged(o.id, $any($event.target).value)" placeholder="None"
-                            [attr.aria-label]="'Containers damaged in production of ' + o.product.sku" />
-                        </td>
                       </tr>
                     }
                   </tbody>
                 </table>
               </div>
+              <div class="totals" aria-live="polite">
+                <span>Ready: <strong class="info-figure">{{ readyTotal().containers }} containers</strong></span>
+                <span>{{ readyTotal().bundles }} bundles</span>
+                <span>{{ readyTotal().packets }} packets</span>
+              </div>
             </section>
 
             <section>
-              <h4>Vehicle and driver
+              <h4><span class="num">2</span> Vehicle and driver
                 <app-help title="Vehicle and driver" text="The distributor's vehicle that is being loaded: its registration number and the driver's name and phone. They are printed on the dispatch voucher and shown to the distributor." />
               </h4>
               <div class="form-grid">
@@ -312,7 +473,7 @@ export class OrderReasonForm extends FormModal {
             </section>
 
             <section>
-              <h4>Proof of handover
+              <h4><span class="num">3</span> Proof of handover
                 <app-help title="Proof of handover" text="The signed gate pass / delivery challan: the driver signs the printed dispatch voucher (or your own handover form) when the goods are loaded. Upload a photo or scan of it; at least one file is required." />
               </h4>
               <div class="files">
@@ -375,23 +536,30 @@ export class OrderStageForm extends FormModal {
     return all.slice(now + 1);
   });
   /** not dispatched yet (no ready quantity recorded) */
-  private notDispatched = computed(() => this.lines().every((o) => o.readyContainers == null));
+  protected notDispatched = computed(() => this.lines().every((o) => o.readyContainers == null));
+  /** step i: done (before the current one), now, or one that can be reported next */
+  protected stepState = (i: number): 'done' | 'current' | 'next' => {
+    const now = this.order()?.stage ? this.stages().indexOf(this.order()!.stage!) : -1;
+    return i < now ? 'done' : i === now ? 'current' : 'next';
+  };
+  /** what is loaded in total */
+  protected readyTotal = computed(() => {
+    const r = this.ready();
+    return this.lines().reduce((t, o) => {
+      const c = r[o.id] ?? 0;
+      return { containers: t.containers + c, bundles: t.bundles + c * o.bundlesPerContainer, packets: t.packets + c * o.bundlesPerContainer * o.packetsPerBundle };
+    }, { containers: 0, bundles: 0, packets: 0 });
+  });
   /** the last step picked (or already reached and not dispatched): the form becomes the dispatch */
   protected dispatching = computed(() => this.notDispatched() && (this.next().length ? this.v().stage === this.lastStage() : true));
 
   protected ready = signal<Record<string, number>>({});
-  protected damaged = signal<Record<string, number | null>>({});
   protected proofs = signal<{ id: string; name: string }[]>([]);
   protected uploading = signal(false);
   protected unitOf = (o: ProductionOrder) => o.containerUnit ?? o.product.containerUnit ?? null;
 
   protected setReady(id: string, v: string) {
     this.ready.update((r) => ({ ...r, [id]: Math.max(0, Math.floor(Number(v) || 0)) }));
-    this.form.markAsDirty();
-  }
-
-  protected setDamaged(id: string, v: string) {
-    this.damaged.update((r) => ({ ...r, [id]: v === '' ? null : Math.max(0, Math.floor(Number(v) || 0)) }));
     this.form.markAsDirty();
   }
 
@@ -423,7 +591,7 @@ export class OrderStageForm extends FormModal {
   protected voucher() {
     const v = this.form.getRawValue();
     printVoucher(dispatchVoucherFor(this.lines(), {
-      ref: this.lines()[0]?.groupRef ?? this.lines()[0]?.refNo ?? '', date: v.date, ready: this.ready(), damaged: this.damaged(),
+      ref: this.lines()[0]?.groupRef ?? this.lines()[0]?.refNo ?? '', date: v.date, ready: this.ready(), damaged: {},
       vehicleNo: v.vehicleNo, driverName: v.driverName, driverPhone: v.driverPhone, transporter: v.transporter, biltyNo: v.biltyNo,
     }));
   }
@@ -456,7 +624,6 @@ export class OrderStageForm extends FormModal {
       transporter: t?.transporter ?? '', biltyNo: '', date: today(),
     });
     this.ready.set(Object.fromEntries(this.lines().map((o) => [o.id, o.containers - (o.shippedContainers ?? 0)])));
-    this.damaged.set({});
     this.proofs.set([]);
   }
 
@@ -465,7 +632,7 @@ export class OrderStageForm extends FormModal {
     const note = v.note.trim();
     if (this.dispatching()) {
       return this.factory.dispatchOrder({
-        lines: this.lines().map((o) => ({ orderId: o.id, ready: this.ready()[o.id] ?? 0, damaged: this.damaged()[o.id] ?? null })),
+        lines: this.lines().map((o) => ({ orderId: o.id, ready: this.ready()[o.id] ?? 0 })),
         date: v.date, vehicleNo: v.vehicleNo.trim(), driverName: v.driverName.trim(), driverPhone: v.driverPhone.trim(),
         ...(v.transporter.trim() ? { transporter: v.transporter.trim() } : {}), ...(v.biltyNo.trim() ? { biltyNo: v.biltyNo.trim() } : {}),
         ...(note ? { note } : {}), proofIds: this.proofs().map((p) => p.id),

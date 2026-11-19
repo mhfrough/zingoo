@@ -512,3 +512,11 @@ Progress (2026-11-19): K6 built. Decision (user): order payments are held, then 
 - Fix: the portal price list now sends pieces per packet, full load and transport unit (K5's full / half truck needs them).
 - Not browser-checked: the damage columns on Receive delivery (no dispatch in transit in the local data).
 
+Progress (2026-11-19): K7 built (frontend only).
+- Manufacturer portal: counter cards Waiting for your answer, In production, Completed orders (all ready containers left the factory, or everything delivered), Payments received (still to receive), Invoices sent (amount invoiced); the Payment details card and the Advance on order card are gone. Sections are tabs: Orders, Deliveries, Faulty goods claims, Invoices & payments, Statement.
+- Orders: "Payment request" on the order row once Ready to dispatch is done and something is still to ask for (opens the request with the order and the next invoice number filled in); "Print order" is now "Voucher".
+- Report progress: the production steps as a stepper (done, now, pick the next); Ready to dispatch in three numbered boxes (quantities with a ready total, vehicle and driver, proof of handover); "Damaged in production" removed.
+- Faulty goods claims: the decision (accept with credit / replace, hold, reject, reason) sits in the claim panel with the proof and the messages; the separate decide panel is gone; the row action is "Review and decide".
+- Vouchers everywhere open in a pop-up with the voucher and Download PDF (the print dialog) / Close.
+- Tabs (every page): a contained strip with a raised card that slides behind the active tab.
+

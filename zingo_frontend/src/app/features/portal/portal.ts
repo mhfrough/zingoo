@@ -24,12 +24,13 @@ import { AcceptForm } from './accept-form';
 import { AdviceForm, payableOf } from './advice-form';
 import { PortalApi } from './portal.api';
 import {
-  AuditRow, DeskOrder, DeskRequest, PortalAdvice, PortalOrder, PortalRate, PortalReceipt, PortalRequest, StatementEntry, StatementInvoice,
+  AuditRow, DeskOrder, DeskRequest, OrderMoney, PortalAdvice, PortalOrder, PortalRate, PortalReceipt, PortalRequest, StatementEntry, StatementInvoice,
 } from './portal.models';
 import { ReasonForm } from './reason-form';
 import { ReceiptForm } from './receipt-form';
 import { RequestForm } from './request-form';
 import { IntlPortal } from './intl-portal';
+import { OrderLedger, OrderPay, daysTone } from './order-money';
 
 const STATUS_TONE: Record<string, Tone> = {
   Paid: 'success', Confirmed: 'success', Accepted: 'success', Approved: 'success', Open: 'info', 'Part paid': 'info',
@@ -37,18 +38,23 @@ const STATUS_TONE: Record<string, Tone> = {
 };
 const tone = (s: string): Tone => STATUS_TONE[s] ?? 'neutral';
 
+/** what a finished order is called: "Ready to ship" for a distributor abroad, "Ready to deliver" at home (set by the portal) */
+let readyWord = 'Ready to deliver';
+export const setReadyWord = (international: boolean) => (readyWord = international ? 'Ready to ship' : 'Ready to deliver');
+
 /** where a distributor order stands: the manufacturer's answer and progress once it became a production order */
 const orderState = (r: PortalRequest): { label: string; tone: Tone } => {
   const o = r.productionOrder;
   if (!o) return { label: r.status === 'Requested' ? 'Waiting' : r.status, tone: tone(r.status) };
   switch (o.status) {
     case 'Draft': return { label: 'Accepted by Zingo', tone: 'info' };
-    case 'Sent': return { label: 'With the manufacturer', tone: 'warning' };
+    case 'Sent': return { label: 'Acceptance pending', tone: 'warning' };
     case 'Accepted': {
       const all = o.containers ?? 0;
-      if (all && (o.received ?? 0) >= all) return { label: 'Delivered', tone: 'success' };
-      if (o.received) return { label: `Part delivered ${o.received}/${all}`, tone: 'info' };
+      if (all && (o.received ?? 0) >= all) return { label: 'Received', tone: 'success' };
+      if (o.received) return { label: `Part received ${o.received}/${all}`, tone: 'info' };
       if (o.shipped) return { label: 'On the way', tone: 'warning' };
+      if (o.stage && /ready/i.test(o.stage)) return { label: readyWord, tone: 'success' };
       return { label: o.stage ?? 'In production', tone: 'info' };
     }
     case 'Rejected': return { label: 'Manufacturer declined', tone: 'danger' };
@@ -60,7 +66,7 @@ const orderState = (r: PortalRequest): { label: string; tone: Tone } => {
 const orderLine = (r: PortalRequest) => {
   const o = r.productionOrder;
   if (!o) return r.order ? `Order ${r.order.refNo}` : r.reviewNote;
-  return [o.refNo, o.manufacturer?.name, o.readyDate ? `ready ${fmtDate(o.readyDate)}` : null,
+  return [o.refNo, o.readyDate ? `ready ${fmtDate(o.readyDate)}` : null,
     o.expectedDate && o.status === 'Accepted' && (o.received ?? 0) < (o.containers ?? 1) ? `expected ${fmtDate(o.expectedDate)}` : null, o.reason].filter(Boolean).join(' · ');
 };
 /** "Masala Masti · Z10-MAS" */
@@ -92,7 +98,7 @@ const groupQty = <T extends PortalRequest>(r: Grouped<T>) =>
   (r.group.length > 1 ? r.group.map((x) => `${x.product.sku}: ${reqQty(x)}`).join(' · ') : reqQty(r));
 /** the status of each manufacturer's part when they differ */
 const groupLine = <T extends PortalRequest>(r: Grouped<T>) => {
-  const parts = [...new Set(r.group.map((x) => [x.productionOrder?.manufacturer?.name, orderState(x).label].filter(Boolean).join(': ')))];
+  const parts = [...new Set(r.group.map((x) => orderState(x).label))];
   return parts.length > 1 ? parts.join(' · ') : orderLine(r);
 };
 
@@ -125,6 +131,7 @@ function paidLine(o: PortalOrder): string {
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [
     Btn, DataTable, Help, Kpi, PageHeader, ViewAs, Tag, OrderTimeline, Tabs, TabPanel, RequestForm, ReceiptForm, AdviceForm, AcceptForm, ReasonForm, ShipmentsPanel, DeliveryClaimsPanel, InvoicesPanel, TrailPanel, IntlPortal, IncomingPanel, DispatchesPanel,
+    OrderPay, OrderLedger,
   ],
   templateUrl: './portal.html',
   styleUrl: './portal.css',
@@ -198,6 +205,65 @@ export class Portal {
     return ['Admin', 'Distribution'].includes(u?.role ?? '');
   });
   protected desk = rxResource({ params: () => (this.canManage() ? this.tick() : undefined), stream: () => this.api.desk() });
+  /** every order with its amount, paid, balance and days since the goods arrived */
+  protected orderMoney = rxResource({ params: () => this.params(), stream: ({ params }) => this.api.orderMoney(params.d) });
+
+  // ───────────── order money: upcoming and overdue, Pay, Details ─────────────
+  /** received orders with money still open: overdue first, then the oldest arrival */
+  protected upcomingMoney = computed(() => (this.orderMoney.value() ?? [])
+    .filter((o) => o.receivedContainers > 0 && o.balance > 0.01)
+    .sort((a, b) => Number(b.overdue) - Number(a.overdue) || (b.daysSince ?? 0) - (a.daysSince ?? 0)));
+  protected moneyColumns: TableColumn<OrderMoney>[] = [
+    { id: 'order', label: 'Order', kind: 'title', value: (o) => o.orderRef, sub: (o) => o.products.join(', ') },
+    {
+      id: 'status', label: 'Status', kind: 'tag', value: (o) => o.state, tone: (o): Tone => (o.state === 'Received' ? 'success' : 'info'),
+      sub: (o) => (o.receivedDate ? `Received ${fmtDate(o.receivedDate)}` : null),
+    },
+    { id: 'amount', label: 'Amount', kind: 'money', value: (o) => o.amount },
+    {
+      id: 'paid', label: 'Paid', kind: 'money', value: (o) => o.paid, priority: 2,
+      valueTone: (o) => (o.balance <= 0.01 ? 'success' : o.paid > 0 ? 'warning' : null),
+      meter: (o) => (o.amount > 0 ? Math.min(1, o.paid / o.amount) : null),
+    },
+    { id: 'balance', label: 'Balance', kind: 'money', value: (o) => o.balance, valueTone: (o) => (o.overdue ? 'danger' : null) },
+    {
+      id: 'days', label: 'Days', kind: 'mono', align: 'end', value: (o) => (o.daysSince === null ? '—' : `${o.daysSince}/${o.creditDays}`),
+      sortValue: (o) => o.daysSince ?? -1, valueTone: (o) => daysTone(o),
+      sub: (o) => (o.dueDate ? (o.overdue ? `Overdue since ${fmtDate(o.dueDate)}` : `Due ${fmtDate(o.dueDate)}`) : null),
+      tip: () => 'Days since the goods arrived / days you have to pay (credit terms)',
+    },
+  ];
+  protected moneyActions = (o: OrderMoney): RowAction[] => [
+    ...(o.balance > 0.01 ? [{ id: 'pay', label: 'Pay', tone: 'success' as const }] : []),
+    { id: 'details', label: 'Details' },
+  ];
+  protected payingMoney = signal<OrderMoney | null>(null);
+  protected payMoneyOpen = signal(false);
+  protected ledgerRef = signal<string | null>(null);
+  protected ledgerOpen = signal(false);
+  protected onMoneyAction(e: RowActionEvent<OrderMoney>) {
+    if (e.id === 'pay') {
+      this.payingMoney.set(e.row);
+      this.payMoneyOpen.set(true);
+    } else {
+      this.ledgerRef.set(e.row.orderRef);
+      this.ledgerOpen.set(true);
+    }
+  }
+  /** Finance / Admin take back a payment that did not arrive */
+  protected reverseOrderPayment(id: string) {
+    this.askReason('Reverse payment', `${this.ledgerRef() ?? ''}: the money did not arrive`, 'Reverse payment', (note) => this.api.reverseOrderPayment(id, note));
+  }
+
+  /** View on an order row: the order panel (products, progress, deliveries) */
+  protected requestActions = (r: Grouped<PortalRequest>): RowAction[] => (r.productionOrder?.id ? [{ id: 'view', label: 'View' }] : []);
+  protected onRequestRowAction(e: RowActionEvent<Grouped<PortalRequest>>) {
+    const o = e.row.productionOrder;
+    if (e.id === 'view' && o?.id) {
+      this.viewingOrder.set({ id: o.id, refNo: e.row.groupRef ?? o.refNo });
+      this.orderViewOpen.set(true);
+    }
+  }
 
   protected tab = signal('dashboard');
   protected money = fmtMoney;
@@ -211,6 +277,7 @@ export class Portal {
     effect(() => {
       const p = this.profile.value();
       if (p && this.isDistributor()) setNumberLocale(p.numberFormat);
+      setReadyWord(((p?.distributor as { market?: string } | undefined)?.market ?? 'Local') === 'International');
     });
   }
 
@@ -281,8 +348,8 @@ export class Portal {
       sub: (r) => groupQty(r),
     },
     {
-      id: 'ref', label: 'Order no.', kind: 'mono', value: (r) => r.groupRef ?? r.refNo,
-      sub: (r) => subLine(r.groupRef ? r.group.map((x) => x.refNo).join(', ') : null, docDate(r)),
+      id: 'ref', label: 'Order no.', kind: 'mono', value: (r) => r.groupRef ?? r.productionOrder?.refNo ?? r.refNo,
+      sub: (r) => docDate(r),
       sortValue: (r) => `${r.date}|${r.createdAt ?? ''}`,
     },
     { id: 'wanted', label: 'Wanted by', kind: 'date', value: (r) => r.requestedDate, priority: 3 },

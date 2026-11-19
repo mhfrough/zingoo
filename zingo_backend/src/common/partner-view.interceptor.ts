@@ -16,6 +16,7 @@ import { Observable, map } from 'rxjs';
 const HIDE_FROM_DISTRIBUTOR = new Set([
   'manufacturerRate', 'packagingRate', 'printingRate', 'inboundRate', 'outboundRate', 'unitCost', 'costRate', 'cost', 'margin',
   'minMarginPct', 'profitAllocationPerPack', 'valueInProduction', 'makers', 'baseRate', 'packagingFee', 'printingFee',
+  'manufacturerName', 'madeBy',
 ]);
 /** fields a manufacturer login never receives, wherever they are */
 const HIDE_FROM_MANUFACTURER = new Set([
@@ -27,8 +28,8 @@ type Obj = Record<string, unknown>;
 const isObj = (v: unknown): v is Obj => !!v && typeof v === 'object' && !Array.isArray(v) && !(v instanceof Date) && !Buffer.isBuffer(v);
 const r2 = (n: number) => Math.round(n * 100) / 100;
 
-/** a manufacturer as a distributor may see it */
-const slimManufacturer = (m: Obj) => ({ id: m['id'], name: m['name'] });
+/** a manufacturer as a distributor may see it: never its name (the goods come from Zen Foods) */
+const slimManufacturer = (m: Obj) => ({ id: m['id'], name: 'Zen Foods' });
 /** a distributor as a manufacturer may see it (enough to deliver to it) */
 const slimDistributor = (d: Obj) => ({ id: d['id'], name: d['name'], region: d['region'] ?? null, address: d['address'] ?? null, contact: d['contact'] ?? null });
 
@@ -41,6 +42,8 @@ const isDeliveryClaim = (o: Obj) => 'kind' in o && 'bundles' in o && 'resolution
 
 function forDistributor(v: unknown, key = ''): unknown {
   if (Array.isArray(v)) return v.map((x) => forDistributor(x, key));
+  // a manufacturer given by name (claims, lists): the distributor sees Zen Foods
+  if (key === 'manufacturer' && typeof v === 'string') return 'Zen Foods';
   if (!isObj(v)) return v;
   if (key === 'manufacturer') return slimManufacturer(v);
   const o: Obj = {};

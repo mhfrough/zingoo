@@ -174,6 +174,8 @@ export interface DeliveryClaim {
   shipmentId: string;
   shipmentRef: string | null;
   orderId: string;
+  /** the order the claim is on: its DO- number, or the production order number */
+  orderRef?: string | null;
   sku: string | null;
   productName: string | null;
   manufacturerId: string;
@@ -610,5 +612,5 @@ export const orderState = (o: ProductionOrder) => {
   // dispatched at Ready to Dispatch: everything that was ready left the factory
   if (o.status === 'Accepted' && o.readyContainers != null && o.shippedContainers >= o.readyContainers) return o.receivedContainers > 0 ? `Received ${o.receivedContainers}` : 'Dispatched';
   if (o.status === 'Accepted' && o.shippedContainers > 0) return `Shipped ${o.shippedContainers}/${o.containers}`;
-  return o.status === 'Accepted' && o.stage ? o.stage : o.status === 'Sent' ? 'Waiting' : o.status;
+  return o.status === 'Accepted' && o.stage ? o.stage : o.status === 'Sent' ? 'Acceptance pending' : o.status;
 };

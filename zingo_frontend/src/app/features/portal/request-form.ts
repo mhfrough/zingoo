@@ -276,7 +276,6 @@ interface LineValue {
                     <span>Container: {{ tpl.containerUnit || 'not set' }}</span>
                     @if ((tpl.piecesPerPacket ?? 1) > 1) { <span>{{ tpl.piecesPerPacket }} pieces / packet</span> }
                     @if (tpl.containersPerTruck) { <span>Full {{ truckOf(i) }}: {{ num(tpl.containersPerTruck) }} {{ tpl.containerUnit || 'containers' }}</span> }
-                    @if ((rate?.madeBy?.length ?? 0) < 2 && rate?.manufacturerName) { <span>Made by {{ rate!.manufacturerName }}</span> }
                   </div>
                 }
                 @let s = sums()[i];
@@ -424,9 +423,9 @@ export class RequestForm extends FormModal {
     this.rates().map((r) => ({
       value: r.productId,
       label: `${r.name} · ${r.sku}`,
-      sub: [r.manufacturerName ? `Made by ${r.manufacturerName}` : this.direct() ? 'No manufacturer yet: cannot be ordered' : null, `PKR ${fmtAmount2(r.rate)} / packet`]
+      sub: [this.direct() && !this.canOrder(r) ? 'No manufacturer yet: cannot be ordered' : null, `PKR ${fmtAmount2(r.rate)} / packet`]
         .filter(Boolean).join(' · '),
-      disabled: this.direct() && !r.manufacturerName,
+      disabled: this.direct() && !this.canOrder(r),
     })));
 
   /**
@@ -491,6 +490,9 @@ export class RequestForm extends FormModal {
     return Math.max(0, Number(v.containers) || 0);
   }
 
+  /** a product with a manufacturer set up can be ordered */
+  protected canOrder = (r: PortalRate) => r.orderable ?? !!r.manufacturerName;
+
   protected rateOf(i: number): PortalRate | null {
     this.lineValues();
     const id = this.lines.at(i)?.get('productId')?.value;
@@ -540,7 +542,7 @@ export class RequestForm extends FormModal {
   /** a new line starts on the first product not already in the order */
   protected addLine() {
     const used = new Set(this.lines.controls.map((g) => g.get('productId')?.value).filter(Boolean));
-    const next = this.rates().find((r) => !used.has(r.productId) && (!this.direct() || r.manufacturerName));
+    const next = this.rates().find((r) => !used.has(r.productId) && (!this.direct() || this.canOrder(r)));
     this.lines.push(this.lineGroup(next?.productId ?? ''));
   }
 
@@ -579,7 +581,7 @@ export class RequestForm extends FormModal {
 
   protected reset() {
     this.lines.clear();
-    const first = this.rates().find((r) => !this.direct() || r.manufacturerName);
+    const first = this.rates().find((r) => !this.direct() || this.canOrder(r));
     this.tried.set(false);
     this.form.reset({
       date: today(), requestedDate: inDays(5), poRef: '', orderNo: '', notes: '',

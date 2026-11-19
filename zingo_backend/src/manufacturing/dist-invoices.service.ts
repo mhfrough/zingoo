@@ -1,4 +1,5 @@
 import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
+import { DistOrderMoneyService } from './dist-order-money.service';
 import { InjectDataSource } from '@nestjs/typeorm';
 import { DataSource, EntityManager, In } from 'typeorm';
 import { Distributor, Product } from '../catalog/catalog.entities';
@@ -35,6 +36,7 @@ export class DistInvoicesService {
     private readonly settings: SettingsService,
     private readonly lookups: LookupsService,
     private readonly notes: NotificationsService,
+    private readonly orderMoney: DistOrderMoneyService,
   ) {}
 
   /** tells the distributor and the Zen Foods desk about an invoice step */
@@ -118,6 +120,7 @@ export class DistInvoicesService {
       inv.verifiedBy = user.name;
       await em.save(inv);
       await this.posting.syncDistInvoice(em, id);
+      await this.orderMoney.syncApplied(em, inv.distributorId);
       await this.tell(em, user, inv, 'sales-invoice.verified', 'success', `Sales invoice ${inv.refNo} verified`, `Sales invoice ${inv.refNo} verified`,
         `PKR ${Number(inv.amount).toLocaleString('en-US')}${inv.dueDate ? ` · due ${inv.dueDate}` : ''}`);
       return this.one(em, id);
@@ -156,6 +159,7 @@ export class DistInvoicesService {
         reference: dto.reference?.trim() || null, note: dto.note?.trim() || null,
       }));
       await this.posting.syncDistInvoicePayment(em, p.id);
+      await this.orderMoney.syncApplied(em, inv.distributorId);
       const left = round2(shaped.due - dto.amount);
       await this.tell(em, user ?? null, inv, 'sales-invoice.paid', 'success', `Payment of PKR ${round2(dto.amount).toLocaleString('en-US')} recorded on ${inv.refNo}`,
         `PKR ${round2(dto.amount).toLocaleString('en-US')} received on ${inv.refNo}`, `${refNo} · ${dto.method}${left > 0 ? ` · PKR ${left.toLocaleString('en-US')} still due` : ' · paid in full'}`);
@@ -202,16 +206,20 @@ export class DistInvoicesService {
   private async shapeAll(em: EntityManager, rows: DistributorInvoice[]) {
     const ids = rows.map((r) => r.id);
     const pays = ids.length ? await em.find(DistributorInvoicePayment, { where: { invoiceId: In(ids) }, order: { date: 'ASC', refNo: 'ASC' } }) : [];
+    // what the distributor's order payments paid off on each invoice
+    const applied: Record<string, number> = {};
+    for (const d of [...new Set(rows.map((r) => r.distributorId))]) Object.assign(applied, (await this.orderMoney.money(em, d)).byInvoice);
     return rows.map((inv) => {
       const payments = pays.filter((p) => p.invoiceId === inv.id);
-      const paid = round2(payments.reduce((n, p) => n + Number(p.amount), 0));
+      const fromOrders = applied[inv.id] ?? 0;
+      const paid = round2(payments.reduce((n, p) => n + Number(p.amount), 0) + fromOrders);
       const due = inv.status === 'Verified' ? round2(Number(inv.amount) - paid) : 0;
       const containers = (inv.lines ?? []).reduce((n, l) => n + l.containers, 0);
       const packets = (inv.lines ?? []).reduce((n, l) => n + l.packets, 0);
       const overdue = due > 0.01 && !!inv.dueDate && inv.dueDate < today();
       const state = inv.status !== 'Verified' ? (inv.status === 'Submitted' ? 'Waiting verification' : 'Rejected')
         : due <= 0.01 ? 'Paid' : paid > 0 ? 'Part paid' : overdue ? 'Overdue' : 'Open';
-      return { ...inv, payments, paid, due, containers, packets, overdue, state, margin: round2(Number(inv.amount) - Number(inv.cost)) };
+      return { ...inv, payments, paid, fromOrders, due, containers, packets, overdue, state, margin: round2(Number(inv.amount) - Number(inv.cost)) };
     });
   }
 }

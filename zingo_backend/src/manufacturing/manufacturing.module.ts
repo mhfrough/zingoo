@@ -12,7 +12,9 @@ import { PaymentRequestsService } from './payment-requests.service';
 import { ProductionOrdersController } from './production-orders.controller';
 import { ShipmentsController } from './shipments.controller';
 import { DistInvoicesController } from './dist-invoices.controller';
-import { DistributorInvoice, DistributorInvoiceLine, DistributorInvoicePayment } from './dist-invoices.entities';
+import { DistOrderPayment, DistributorInvoice, DistributorInvoiceLine, DistributorInvoicePayment } from './dist-invoices.entities';
+import { DistOrderMoneyService } from './dist-order-money.service';
+import { DistOrderMoneyController } from './dist-order-money.controller';
 import { DistInvoicesService } from './dist-invoices.service';
 import { ProductionShipment } from './shipments.entities';
 import { ShipmentsService } from './shipments.service';
@@ -26,9 +28,9 @@ import { DistributorDispatch } from './dist-dispatches.entities';
 import { DistDispatchesService } from './dist-dispatches.service';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([ProductionBatch, ManufacturerPayment, ProductionOrder, ProductionOrderEvent, MfrPaymentRequest, MfrRequestPayment, ProductionShipment, DistributorInvoice, DistributorInvoiceLine, DistributorInvoicePayment, DeliveryClaim, DeliveryClaimNote, DistributorDispatch]), LedgerModule, SetupModule, AttachmentsModule],
-  controllers: [BatchesController, MfrPaymentsController, ProductionOrdersController, PaymentRequestsController, ShipmentsController, DistInvoicesController, DeliveryClaimsController, DistDispatchesController],
-  providers: [BatchesService, MfrPaymentsService, ProductionOrdersService, PaymentRequestsService, ShipmentsService, DistInvoicesService, DeliveryClaimsService, DistDispatchesService],
-  exports: [BatchesService, MfrPaymentsService, ProductionOrdersService, PaymentRequestsService, ShipmentsService, DistInvoicesService],
+  imports: [TypeOrmModule.forFeature([ProductionBatch, ManufacturerPayment, ProductionOrder, ProductionOrderEvent, MfrPaymentRequest, MfrRequestPayment, ProductionShipment, DistributorInvoice, DistributorInvoiceLine, DistributorInvoicePayment, DistOrderPayment, DeliveryClaim, DeliveryClaimNote, DistributorDispatch]), LedgerModule, SetupModule, AttachmentsModule],
+  controllers: [BatchesController, MfrPaymentsController, ProductionOrdersController, PaymentRequestsController, ShipmentsController, DistInvoicesController, DeliveryClaimsController, DistDispatchesController, DistOrderMoneyController],
+  providers: [BatchesService, MfrPaymentsService, ProductionOrdersService, PaymentRequestsService, ShipmentsService, DistInvoicesService, DeliveryClaimsService, DistDispatchesService, DistOrderMoneyService],
+  exports: [BatchesService, MfrPaymentsService, ProductionOrdersService, PaymentRequestsService, ShipmentsService, DistInvoicesService, DistOrderMoneyService],
 })
 export class ManufacturingModule {}

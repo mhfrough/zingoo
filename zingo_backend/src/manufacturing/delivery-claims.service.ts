@@ -242,22 +242,26 @@ export class DeliveryClaimsService {
 
   /** the proof files and the messages of each claim */
   private async extras(em: EntityManager, ids: string[]) {
-    if (!ids.length) return { proofs: {} as Record<string, ClaimProof[]>, thread: {} as Record<string, DeliveryClaimNote[]> };
-    const [files, notes] = await Promise.all([
+    if (!ids.length) return { proofs: {} as Record<string, ClaimProof[]>, thread: {} as Record<string, DeliveryClaimNote[]>, orderRefs: {} as Record<string, string> };
+    const [files, notes, refs] = await Promise.all([
       em.find(Attachment, { where: { ownerType: 'CLAIM_PROOF', ownerId: In(ids) }, order: { createdAt: 'ASC' } }),
       em.find(DeliveryClaimNote, { where: { claimId: In(ids) }, order: { createdAt: 'ASC' } }),
+      // the order each claim is on (its DO- number, or the production order number): the list shows one row per order
+      em.query(`SELECT c.id, COALESCE(o."groupRef", o."refNo") AS ref FROM delivery_claims c JOIN production_orders o ON o.id = c."orderId" WHERE c.id = ANY($1::uuid[])`, [ids]) as Promise<{ id: string; ref: string }[]>,
     ]);
+    const orderRefs: Record<string, string> = Object.fromEntries(refs.map((r) => [r.id, r.ref]));
     const proofs: Record<string, ClaimProof[]> = {};
     for (const f of files) (proofs[f.ownerId!] ??= []).push({ id: f.id, name: f.name, mime: f.mime, size: f.size });
     const thread: Record<string, DeliveryClaimNote[]> = {};
     for (const n of notes) (thread[n.claimId] ??= []).push(n);
-    return { proofs, thread };
+    return { proofs, thread, orderRefs };
   }
 
-  private shape(c: DeliveryClaim, extra?: { proofs: Record<string, ClaimProof[]>; thread: Record<string, DeliveryClaimNote[]> }) {
+  private shape(c: DeliveryClaim, extra?: { proofs: Record<string, ClaimProof[]>; thread: Record<string, DeliveryClaimNote[]>; orderRefs?: Record<string, string> }) {
     const { shipment, product, manufacturer, distributor, evidenceData: _data, ...rest } = c;
     return {
       ...rest,
+      orderRef: extra?.orderRefs?.[c.id] ?? null,
       shipmentRef: shipment?.refNo ?? null, shipmentStatus: shipment?.status ?? null, atGate: shipment?.method === 'Pickup' && shipment?.status !== 'Received',
       sku: product?.sku ?? null, productName: product?.name ?? null,
       manufacturer: manufacturer?.name ?? null, distributor: distributor?.name ?? null, hasEvidence: !!c.evidence,

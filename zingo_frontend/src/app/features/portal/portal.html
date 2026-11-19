@@ -11,22 +11,6 @@
     <app-view-as kind="Distributor" icon="truck" [options]="distributorOptions()" [value]="dist()" (valueChange)="pickDistributor($event)" />
   }
   @if (profile.value(); as p) {
-    <div class="card hero">
-      <div class="hero__main">
-        <span class="hero__eyebrow">{{ isDistributor() ? 'Your account' : 'Distributor account' }}</span>
-        <h2>{{ p.distributor.name }}</h2>
-        <p class="muted">{{ p.distributor.address || p.distributor.region }}</p>
-        <ul class="hero__facts">
-          <li><span>Credit terms <app-help title="Credit terms" text="Days you have to pay an invoice after the goods are dispatched. The due date on each invoice is the dispatch date plus these days." /></span><strong>{{ p.distributor.paymentDays }} days</strong></li>
-          <li><span>Advance guide <app-help title="Advance guide" text="Share of the order value Zen Foods asks you to pay before dispatch. Money paid before dispatch is held as an advance and set against the invoice when the goods leave." /></span><strong>{{ pct(p.distributor.advancePct) }}</strong></li>
-          @if (p.distributor.warrantyDays) {
-            <li><span>Warranty <app-help title="Warranty" text="For a warranty claim on goods you sold, contact the distributor within these days." /></span><strong>{{ p.distributor.warrantyDays }} days</strong></li>
-          }
-          <li><span>Credit limit <app-help title="Credit limit" text="Most you may owe Zen Foods at one time. A new dispatch that takes the balance above it waits for Finance to approve." /></span><strong>{{ money(p.creditLimit) }}</strong></li>
-        </ul>
-      </div>
-    </div>
-
     <div class="grid-auto">
       <app-kpi label="Account outstanding" [value]="money(p.openBalance)" icon="wallet" tone="accent"
         [foot]="p.overdue > 0 ? money(p.overdue) + ' overdue' : 'Nothing overdue'" />
@@ -43,36 +27,26 @@
       </ng-template>
     }
     <ng-template appTabPanel="dashboard">
-      <div class="two-col">
+      <div class="stack">
         <div class="card" data-flush>
-          <div class="card__head"><div><h2>Upcoming and overdue invoices</h2><p>Instalments stay linked to their invoice and due date</p></div></div>
+          <div class="card__head">
+            <div>
+              <h2>Upcoming and overdue invoices
+                <app-help title="Upcoming and overdue invoices" text="An order appears here once its goods are received. Amount = the received goods at your price; Paid = your payments on the order (advance included) and payments on its sales invoices; Days = days since the goods arrived / days you have to pay." />
+              </h2>
+              <p>Pay an order here; Details shows every payment on it with the balance after each</p>
+            </div>
+          </div>
           <div class="card__body">
-            <app-data-table keepOrder [columns]="invoiceColumns" [rows]="upcoming()" [actions]="payAction" [searchable]="false" [loading]="orders.isLoading()"
-              emptyTitle="Nothing to pay" emptyText="Dispatched invoices with a balance appear here." (action)="onOrderAction($event)" />
+            <app-data-table keepOrder [columns]="moneyColumns" [rows]="upcomingMoney()" [actions]="moneyActions" [searchable]="false" [loading]="orderMoney.isLoading()"
+              emptyTitle="Nothing to pay" emptyText="Received orders with a balance appear here." (action)="onMoneyAction($event)" />
           </div>
         </div>
-        <div class="stack">
-          <div class="card">
-            <div class="card__head"><div><h2>What needs attention</h2><p>Your open tasks and account position</p></div></div>
-            <div class="card__body">
-              @if (profile.value(); as p) {
-                <ul class="lines">
-                  <li><span>Open debt</span><strong class="mono">{{ money(p.openBalance) }}</strong></li>
-                  <li><span>Past due</span><strong class="mono">{{ money(p.overdue) }}</strong></li>
-                  <li><span>Deliveries to acknowledge</span><strong class="mono">{{ number(p.toAcknowledge) }}</strong></li>
-                  <li><span>Payments awaiting verification</span><strong class="mono">{{ money(p.pendingAdvices) }}</strong></li>
-                  <li><span>Advances held for undispatched orders</span><strong class="mono">{{ money(p.advancesHeld) }}</strong></li>
-                  <li><span>Credit owed back to you</span><strong class="mono">{{ money(p.creditHeld) }}</strong></li>
-                </ul>
-              }
-            </div>
-          </div>
-          <div class="card" data-flush>
-            <div class="card__head"><div><h2>Recent orders</h2><p>{{ direct() ? 'Each order goes straight to the manufacturer; you see its answer and progress here' : 'Zingo reviews each one and orders it from the manufacturer' }}</p></div></div>
-            <div class="card__body">
-              <app-data-table [columns]="requestColumns" [rows]="requestRows()" [searchable]="false" [loading]="requests.isLoading()"
-                emptyTitle="No requests yet" emptyText="Use Request stock to ask for more." />
-            </div>
+        <div class="card" data-flush>
+          <div class="card__head"><div><h2>Recent orders</h2><p>{{ direct() ? 'Each order goes straight to the manufacturer; you see its answer and progress here' : 'Zingo reviews each one and orders it from the manufacturer' }}</p></div></div>
+          <div class="card__body">
+            <app-data-table [columns]="requestColumns" [rows]="requestRows()" [actions]="requestActions" [searchable]="false" [loading]="requests.isLoading()"
+              emptyTitle="No orders yet" emptyText="Use Order stock to order." (action)="onRequestRowAction($event)" />
           </div>
         </div>
       </div>
@@ -94,8 +68,8 @@
         <div class="card" data-flush>
           <div class="card__head"><div><h2>Stock orders to the manufacturer</h2><p>{{ direct() ? 'The manufacturer accepts with a date, reports each step and tells you when it is ready' : 'Zingo orders them from the manufacturer or says why not' }}</p></div></div>
           <div class="card__body">
-            <app-data-table [columns]="requestColumns" [rows]="requestRows()" [loading]="requests.isLoading()" searchPlaceholder="Search requests"
-              emptyTitle="No requests yet" emptyText="Use Request stock to ask for more." />
+            <app-data-table [columns]="requestColumns" [rows]="requestRows()" [actions]="requestActions" [loading]="requests.isLoading()" searchPlaceholder="Search orders"
+              emptyTitle="No orders yet" emptyText="Use Order stock to order." (action)="onRequestRowAction($event)" />
           </div>
         </div>
       </div>
@@ -103,25 +77,26 @@
 
     <ng-template appTabPanel="stock">
       <div class="stack">
-        <app-incoming-panel [orders]="incoming.value() ?? []" [loading]="incoming.isLoading()" [error]="incoming.error() ? 'The server did not answer.' : null"
-          [canPickup]="canReceiveDelivery()" (changed)="reload()" />
         <app-shipments-panel mode="distributor" [shipments]="deliveries.value() ?? []" [stock]="consignment.value() ?? null"
           [loading]="deliveries.isLoading()" [error]="deliveries.error() ? 'The server did not answer.' : null"
           [canReceive]="canReceiveDelivery()" (changed)="reload()" />
+        <app-incoming-panel [orders]="incoming.value() ?? []" [loading]="incoming.isLoading()" [error]="incoming.error() ? 'The server did not answer.' : null"
+          [canPickup]="canReceiveDelivery()" [international]="(profile.value()?.distributor?.market ?? 'Local') === 'International'" (changed)="reload()" />
         <app-dispatches-panel [dispatches]="dispatches.value() ?? []" [shipments]="deliveries.value() ?? []" [loading]="dispatches.isLoading()"
           [error]="dispatches.error() ? 'The server did not answer.' : null" [canDispatch]="canReceiveDelivery()" (changed)="reload()" />
         <app-invoices-panel mode="distributor" [invoices]="salesInvoices.value() ?? []" [shipments]="deliveries.value() ?? []"
           [distributorId]="isDistributor() ? null : (dist() ?? null)" [loading]="salesInvoices.isLoading()"
           [error]="salesInvoices.error() ? 'The server did not answer.' : null"
           [canReport]="canReceiveDelivery()" [canManage]="canManageInvoices()" (changed)="reload()" />
-        <app-delivery-claims-panel mode="distributor" [shipments]="deliveries.value() ?? []" [distributorId]="isDistributor() ? null : (dist() ?? null)"
-          [tick]="tick()" [canRaise]="canRaiseClaim()" (changed)="reload()" />
         <app-trail-panel [rows]="trail.value() ?? []" [loading]="trail.isLoading()" [showDistributor]="false" [showCost]="false" />
       </div>
     </ng-template>
 
     <ng-template appTabPanel="cargo">
       <div class="stack">
+        <app-delivery-claims-panel mode="distributor" [shipments]="deliveries.value() ?? []" [distributorId]="isDistributor() ? null : (dist() ?? null)"
+          [tick]="tick()" [canRaise]="canRaiseClaim()" (changed)="reload()" />
+        @if (legacy() || shipped().length || claims().length) {
         <div class="card" data-flush>
           <div class="card__head"><div><h2>Delivery receipts</h2><p>Confirm what arrived. Damaged or missing bundles become a claim.</p></div></div>
           <div class="card__body">
@@ -136,6 +111,7 @@
               emptyTitle="No claims" emptyText="Every delivery arrived complete." (action)="onClaimAction($event)" />
           </div>
         </div>
+        }
       </div>
     </ng-template>
 
@@ -262,6 +238,9 @@
   </app-tabs>
 </div>
 
+<app-order-pay [(open)]="payMoneyOpen" [order]="payingMoney()" [methods]="profile.value()?.paymentMethods ?? ['Bank Transfer']" [distributorId]="dist()" (saved)="reload()" />
+<app-order-ledger [(open)]="ledgerOpen" [orderRef]="ledgerRef()" [distributorId]="dist()" [tick]="tick()"
+  [canOpenProof]="!isDistributor()" [canReverse]="canFinance()" (reverse)="reverseOrderPayment($event)" />
 <app-order-timeline [(open)]="orderViewOpen" [orderId]="viewingOrder()?.id ?? null" [refNo]="viewingOrder()?.refNo ?? null" />
 <app-request-form [(open)]="requestOpen" [rates]="rates.value() ?? []" [distributorId]="dist()" [direct]="direct()" [canAddSku]="isAdmin()"
   [advancePct]="profile.value()?.distributor?.advancePct ?? 0" [methods]="profile.value()?.paymentMethods ?? ['Bank Transfer']"

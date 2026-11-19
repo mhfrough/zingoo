@@ -14,6 +14,12 @@ const today = () => new Date().toISOString().slice(0, 10);
 const KINDS = ['Damaged', 'Missing', 'Quality'] as const;
 const KIND_TEXT: Record<string, string> = { Damaged: 'Damaged bundles', Missing: 'Missing bundles', Quality: 'Poor quality' };
 
+/** the claims raised on one order the same day: one row, a product per claim */
+type ClaimRow = DeliveryClaim & { group: DeliveryClaim[] };
+const claimStatus = (c: DeliveryClaim) =>
+  (c.status === 'Pending' ? 'Waiting' : c.status === 'Hold' ? 'On hold' : c.status === 'Rejected' ? 'Rejected' : c.resolution === 'Credit' ? 'Accepted · credit' : 'Accepted · replacement');
+const claimTone = (c: DeliveryClaim): Tone => (c.status === 'Pending' ? 'warning' : c.status === 'Hold' ? 'info' : c.status === 'Rejected' ? 'danger' : 'success');
+
 /** proof files of a claim (the new list, or the one older attachment) */
 const proofCount = (c: DeliveryClaim) => (c.proofs?.length ?? 0) + (c.hasEvidence ? 1 : 0);
 
@@ -317,7 +323,7 @@ export class DeliveryClaimDecide extends FormModal {
         }
       </div>
       <div class="card__body">
-        <app-data-table [columns]="columns()" [rows]="claims.value() ?? []" [actions]="actions" [loading]="claims.isLoading()"
+        <app-data-table [columns]="columns()" [rows]="rows()" [actions]="actions" [loading]="claims.isLoading()"
           [error]="claims.error() ? 'The server did not answer.' : null" searchPlaceholder="Search claims"
           emptyTitle="No claims" emptyText="Faulty goods reported on a delivery appear here." (retry)="reload()" (action)="onAction($event)" />
       </div>
@@ -358,39 +364,68 @@ export class DeliveryClaimsPanel {
   });
   protected lots = computed(() => this.shipments().filter((s) => s.status === 'Received' && s.destination === 'Distributor' && (s.receivedContainers ?? 0) > 0));
 
-  protected columns = computed<TableColumn<DeliveryClaim>[]>(() => [
+  /** one row per order and day: the products of a combined order are claimed together */
+  protected rows = computed<ClaimRow[]>(() => {
+    const map = new Map<string, DeliveryClaim[]>();
+    for (const c of this.claims.value() ?? []) {
+      const k = `${c.orderRef ?? c.shipmentRef ?? c.id}|${c.date}`;
+      map.set(k, [...(map.get(k) ?? []), c]);
+    }
+    return [...map.values()].map((g) => {
+      const sorted = [...g].sort((a, b) => a.refNo.localeCompare(b.refNo));
+      return { ...sorted[0], group: sorted };
+    });
+  });
+
+  protected columns = computed<TableColumn<ClaimRow>[]>(() => [
     {
-      id: 'what', label: 'Faulty goods', kind: 'title', value: (c) => productLabel({ name: c.productName, sku: c.sku ?? '' }),
-      sub: (c) => subLine(`${fmtNumber(c.bundles)} bundles · ${KIND_TEXT[c.kind] ?? c.kind}`, c.atGate ? 'at the factory gate' : null,
-        proofCount(c) ? `${proofCount(c)} proof file${proofCount(c) === 1 ? '' : 's'}` : 'no proof', c.thread?.length ? `${c.thread.length} message${c.thread.length === 1 ? '' : 's'}` : null),
+      id: 'what', label: 'Faulty goods', kind: 'title',
+      value: (r) => {
+        const products = new Set(r.group.map((c) => c.sku)).size;
+        return products > 1 ? `${products} products` : productLabel({ name: r.productName, sku: r.sku ?? '' });
+      },
+      sub: (r) => subLine(
+        r.group.map((c) => `${r.group.length > 1 ? `${c.sku}: ` : ''}${fmtNumber(c.bundles)} bundles ${(KIND_TEXT[c.kind] ?? c.kind).toLowerCase()}`).join(' · '),
+        r.atGate ? 'at the factory gate' : null,
+        (() => { const n = r.group.reduce((s, c) => s + proofCount(c), 0); return n ? `${n} proof file${n === 1 ? '' : 's'}` : 'no proof'; })()),
     },
-    { id: 'ref', label: 'Claim no.', kind: 'mono', value: (c) => c.refNo, sortValue: (c) => c.date, sub: (c) => subLine(docDate(c), c.shipmentRef, `by ${c.raisedBy}`) },
     {
-      id: 'party', label: this.mode() === 'factory' ? 'Distributor' : this.mode() === 'distributor' ? 'Manufacturer' : 'Distributor / manufacturer', priority: 2,
-      value: (c) => (this.mode() === 'factory' ? c.distributor : this.mode() === 'distributor' ? c.manufacturer : c.distributor) ?? '',
-      sub: (c) => (this.mode() === 'company' ? `from ${c.manufacturer}` : c.note),
+      id: 'ref', label: 'Order / claim no.', kind: 'mono', value: (r) => r.orderRef ?? r.refNo, sortValue: (r) => r.date,
+      sub: (r) => subLine(docDate(r), r.group.map((c) => c.refNo).join(', '), `by ${r.raisedBy}`),
     },
-    ...(this.mode() === 'distributor' ? [] : [{ id: 'value', label: 'Value', kind: 'money', value: (c: DeliveryClaim) => c.value, priority: 2 } as TableColumn<DeliveryClaim>]),
+    {
+      id: 'party', label: this.mode() === 'factory' ? 'Distributor' : this.mode() === 'distributor' ? 'From' : 'Distributor / manufacturer', priority: 2,
+      value: (r) => (this.mode() === 'factory' ? r.distributor : this.mode() === 'distributor' ? r.manufacturer : r.distributor) ?? '',
+      sub: (r) => (this.mode() === 'company' ? `from ${r.manufacturer}` : r.note),
+    },
+    ...(this.mode() === 'distributor' ? [] : [{ id: 'value', label: 'Value', kind: 'money', value: (r: ClaimRow) => r.group.reduce((n, c) => n + Number(c.value), 0), priority: 2 } as TableColumn<ClaimRow>]),
     {
       id: 'status', label: 'Status', kind: 'tag',
-      value: (c) => (c.status === 'Pending' ? 'Waiting' : c.status === 'Hold' ? 'On hold' : c.status === 'Rejected' ? 'Rejected' : c.resolution === 'Credit' ? 'Accepted · credit' : 'Accepted · replacement'),
-      tone: (c): Tone => (c.status === 'Pending' ? 'warning' : c.status === 'Hold' ? 'info' : c.status === 'Rejected' ? 'danger' : 'success'),
-      sub: (c) => (c.decidedBy ? `${c.decidedBy} · ${fmtDate(c.decidedDate)}${c.decisionNote ? ` · ${c.decisionNote}` : ''}` : null),
+      value: (r) => (new Set(r.group.map(claimStatus)).size > 1 ? 'Mixed' : claimStatus(r)),
+      tone: (r): Tone => (new Set(r.group.map(claimStatus)).size > 1 ? 'info' : claimTone(r)),
+      sub: (r) => (r.group.length > 1 && new Set(r.group.map(claimStatus)).size > 1
+        ? r.group.map((c) => `${c.sku}: ${claimStatus(c)}`).join(' · ')
+        : r.decidedBy ? `${r.decidedBy} · ${fmtDate(r.decidedDate)}${r.decisionNote ? ` · ${r.decisionNote}` : ''}` : null),
     },
   ]);
 
-  protected actions = (c: DeliveryClaim): RowAction[] => [
-    ...((c.status === 'Pending' || c.status === 'Hold') && this.canDecide() ? [{ id: 'decide', label: 'Accept, reject or hold', tone: 'success' as const }] : []),
-    { id: 'thread', label: proofCount(c) ? `Proof & messages (${proofCount(c)})` : 'Messages' },
-    ...(c.hasEvidence ? [{ id: 'evidence', label: 'Download old photo / PDF' }] : []),
-  ];
+  /** each product's actions; with several products the action names the SKU */
+  protected actions = (r: ClaimRow): RowAction[] => r.group.flatMap((c) => {
+    const tag = r.group.length > 1 ? ` · ${c.sku}` : '';
+    return [
+      ...((c.status === 'Pending' || c.status === 'Hold') && this.canDecide() ? [{ id: `decide:${c.id}`, label: `Accept, reject or hold${tag}`, tone: 'success' as const }] : []),
+      { id: `thread:${c.id}`, label: `${proofCount(c) ? `Proof & messages (${proofCount(c)})` : 'Messages'}${tag}` },
+      ...(c.hasEvidence ? [{ id: `evidence:${c.id}`, label: `Download old photo / PDF${tag}` }] : []),
+    ];
+  });
 
-  protected onAction(e: RowActionEvent<DeliveryClaim>) {
-    this.currentId.set(e.row.id);
-    if (e.id === 'decide') this.decideOpen.set(true);
-    if (e.id === 'thread') this.threadOpen.set(true);
-    if (e.id === 'evidence') {
-      this.factory.claimEvidence(e.row.id).subscribe({
+  protected onAction(e: RowActionEvent<ClaimRow>) {
+    const [what, id] = e.id.split(':');
+    this.currentId.set(id);
+    if (what === 'decide') this.decideOpen.set(true);
+    if (what === 'thread') this.threadOpen.set(true);
+    if (what === 'evidence') {
+      this.factory.claimEvidence(id).subscribe({
         next: (f) => downloadBase64(f.name, f.mime, f.data),
         error: (err) => this.toast.error(errorText(err)),
       });

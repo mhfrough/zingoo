@@ -13,7 +13,7 @@ import { ManufacturerPayment, ProductionBatch } from '../manufacturing/manufactu
 import { MfrPaymentRequest, MfrRequestPayment } from '../manufacturing/payment-requests.entities';
 import { ProductionShipment } from '../manufacturing/shipments.entities';
 import { DeliveryClaim } from '../manufacturing/delivery-claims.entities';
-import { DistributorInvoice, DistributorInvoicePayment } from '../manufacturing/dist-invoices.entities';
+import { DistOrderPayment, DistributorInvoice, DistributorInvoicePayment } from '../manufacturing/dist-invoices.entities';
 import { Setting } from '../setup/setup.entities';
 import { SettingsService } from '../setup/setup.service';
 import { JournalVoucher } from './ledger.entities';
@@ -212,6 +212,21 @@ export class PostingService implements OnModuleInit {
       ]
       : [];
     await this.ledger.replace(em, 'DIST_INVOICE', id, rows);
+  }
+
+  /** money a distributor paid on an order: Cash & Bank / Customer Advances (nothing once reversed) */
+  async syncDistOrderPayment(em: EntityManager, id: string) {
+    const p = await em.findOne(DistOrderPayment, { where: { id }, relations: ['distributor'] });
+    if (!p) return;
+    await this.ledger.replace(em, 'DIST_ORDER_PAY', id, p.status === 'Active'
+      ? this.pair(p.date, 'Distribution', p.refNo, `${p.kind === 'Advance' ? 'Advance' : 'Payment'} on order ${p.orderRef} · ${p.distributor.name}`, ACC.CASH, ACC.CUSTOMER_ADVANCES, p.amount)
+      : []);
+  }
+
+  /** order payments taking off a verified sales invoice: Customer Advances / Accounts Receivable */
+  async syncDistOrderApply(em: EntityManager, invoiceId: string, refNo: string, date: string, distributor: string, amount: number) {
+    await this.ledger.replace(em, 'DIST_ORDER_APPLY', invoiceId,
+      this.pair(date, 'Distribution', refNo, `Order payments set against ${refNo} · ${distributor}`, ACC.CUSTOMER_ADVANCES, ACC.AR, amount));
   }
 
   /** money received from a distributor: Cash & Bank / Accounts Receivable */

@@ -108,8 +108,8 @@ export class PickupForm extends FormModal {
   template: `
     <div class="card" data-flush>
       <div class="card__head">
-        <div><h2>{{ showDistributor() ? 'Orders on the way to distributors' : 'Coming from the manufacturer' }}</h2>
-          <p>Production orders for {{ showDistributor() ? 'distributors' : 'you' }}: accepted, in production, or ready to collect at the factory</p></div>
+        <div><h2>{{ showDistributor() ? 'Orders on the way to distributors' : 'Manufacturing status' }}</h2>
+          <p>{{ showDistributor() ? 'Production orders for distributors: accepted, in production, or ready at the factory' : 'Your orders being made: acceptance pending, in production, or ready' }}</p></div>
       </div>
       <div class="card__body">
         <app-data-table [columns]="columns()" [rows]="rows()" [actions]="actions" [loading]="loading()" [error]="error()" [searchable]="false"
@@ -127,6 +127,8 @@ export class IncomingPanel {
   /** may collect ready orders (the distributor, or Admin / Distribution for it) */
   readonly canPickup = input(false);
   readonly showDistributor = input(false);
+  /** the distributor sells abroad: a ready order is "Ready to ship", else "Ready to deliver" */
+  readonly international = input(false);
   readonly changed = output<void>();
 
   protected pickupOpen = signal(false);
@@ -143,17 +145,24 @@ export class IncomingPanel {
   protected current = signal<IncomingOrder | null>(null);
 
   private state = (o: IncomingOrder): [string, Tone] => {
-    if (o.status === 'Sent') return ['Waiting', 'warning'];
-    if (o.ready) return [o.shippedContainers ? `Ready · ${o.left} left` : 'Ready to collect', 'success'];
+    if (o.status === 'Sent') return ['Acceptance pending', 'warning'];
+    const ready = this.international() ? 'Ready to ship' : 'Ready to deliver';
+    if (o.ready) return [o.shippedContainers ? `${ready} · ${o.left} left` : ready, 'success'];
     return [o.stage ?? 'Accepted', 'info'];
   };
 
   protected columns = computed<TableColumn<IncomingRow>[]>(() => [
     {
-      id: 'product', label: this.showDistributor() ? 'Order / Distributor' : 'Order / Manufacturer', kind: 'title',
+      id: 'product', label: this.showDistributor() ? 'Order / Distributor' : 'Order', kind: 'title',
       value: (o) => (o.group.length > 1 ? `${o.group.length} products` : productLabel(o.product)),
-      sub: (o) => subLine(o.group.length > 1 ? o.group.map((x) => x.product.name).join(', ') : null, this.showDistributor() ? o.distributor?.name ?? '' : o.manufacturer.name),
+      sub: (o) => subLine(o.group.length > 1 ? o.group.map((x) => x.product.name).join(', ') : null, this.showDistributor() ? o.distributor?.name ?? '' : null),
     },
+    ...(this.showDistributor() ? [] : [{
+      id: 'qty', label: 'Quantity', kind: 'number' as const, align: 'end' as const,
+      value: (o: IncomingRow) => o.group.reduce((n, x) => n + x.containers, 0),
+      valueTone: (): Tone => 'success',
+      sub: (o: IncomingRow) => `${o.containerUnit ?? o.product.containerUnit ?? 'container'}s · ${fmtNumber(o.group.reduce((n, x) => n + x.containers * x.bundlesPerContainer, 0))} bundles`,
+    }]),
     {
       id: 'ref', label: 'Order no. / quantity', kind: 'mono', value: (o) => (o.group.length > 1 ? o.groupRef ?? o.refNo : o.refNo), sortValue: (o) => o.date,
       sub: (o) => subLine(docDate(o),
@@ -161,11 +170,11 @@ export class IncomingPanel {
         o.group.length > 1 ? o.group.map((x) => x.refNo).join(', ') : o.groupRef ? `order ${o.groupRef}` : null,
         o.group.some((x) => x.shippedContainers) ? `${fmtNumber(o.group.reduce((n, x) => n + x.shippedContainers, 0))} sent` : null),
     },
-    {
-      id: 'from', label: this.showDistributor() ? 'Route' : 'Manufacturer', priority: 2,
-      value: (o) => (this.showDistributor() ? o.distributor?.name ?? '' : o.manufacturer.name),
-      sub: (o) => (this.showDistributor() ? `from ${o.manufacturer.name}` : null),
-    },
+    ...(this.showDistributor() ? [{
+      id: 'from', label: 'Route', priority: 2 as const,
+      value: (o: IncomingRow) => o.distributor?.name ?? '',
+      sub: (o: IncomingRow) => `from ${o.manufacturer.name}`,
+    }] : []),
     {
       id: 'ready', label: 'Ready by', kind: 'date', priority: 2, value: (o) => o.readyDate,
       sub: (o) => subLine(o.ready ? 'Ready now' : o.readyDate ? 'Tentative' : null, o.expectedDate ? `Expected ${fmtDate(o.expectedDate)}` : null,

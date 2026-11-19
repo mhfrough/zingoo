@@ -17,7 +17,7 @@ type LatestOrder = Dashboard['latestOrders'][number];
 const latestState = (o: LatestOrder): [string, Tone] => {
   const p = o.productionOrder;
   if (!p) return o.status === 'Requested' ? ['Waiting', 'warning'] : [o.status, o.status === 'Rejected' ? 'danger' : 'neutral'];
-  if (p.status === 'Sent') return ['With the manufacturer', 'warning'];
+  if (p.status === 'Sent') return ['Acceptance pending', 'warning'];
   if (p.status === 'Accepted') {
     if (p.containers && p.received >= p.containers) return ['Delivered', 'success'];
     if (p.received) return [`Part delivered ${p.received}/${p.containers}`, 'info'];

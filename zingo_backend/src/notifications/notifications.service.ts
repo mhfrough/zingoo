@@ -95,6 +95,16 @@ export class NotificationsService {
       if ('distributorId' in n.to) return n.to.distributorId ? [{ ...base, audience: 'distributor' as const, targetId: n.to.distributorId, roles: null }] : [];
       return n.to.manufacturerId ? [{ ...base, audience: 'manufacturer' as const, targetId: n.to.manufacturerId, roles: null }] : [];
     });
+    // a distributor never learns who makes the goods: manufacturer names in its notices read "Zen Foods"
+    if (rows.some((r) => r.audience === 'distributor')) {
+      const names: { name: string }[] = await em.query(`SELECT name FROM manufacturers WHERE length(trim(name)) > 1 ORDER BY length(name) DESC`);
+      const hide = (t: string | null | undefined) => names.reduce((s, m) => (s ? s.split(m.name).join('Zen Foods') : s), t ?? null);
+      for (const r of rows) {
+        if (r.audience !== 'distributor') continue;
+        r.title = hide(r.title) ?? '';
+        r.body = hide(r.body);
+      }
+    }
     if (rows.length) await em.save(rows.map((r) => em.create(Notification, r)));
   }
 

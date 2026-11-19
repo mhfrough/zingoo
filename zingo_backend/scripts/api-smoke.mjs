@@ -2031,7 +2031,7 @@ const k4Renamed = await call(T.owner, 'PATCH', `/production-orders/${k4Auto.json
 ok('a draft can take another free number', k4Renamed.json?.refNo === `K4R-${k4Stamp}`, JSON.stringify(k4Renamed.json?.refNo));
 ok('but not one already used', (await call(T.owner, 'PATCH', `/production-orders/${k4Auto.json?.id}`, { refNo: `K4-${k4Stamp}` })).status === 409);
 for (const o of [k4Mo, k4Auto, k4Late]) if (o.json?.id) await call(T.owner, 'DELETE', `/production-orders/${o.json.id}`);
-const k4DistProd = ((await call(T.dist, 'GET', '/portal/rates')).json ?? []).find((r) => r.manufacturerName) ?? null;
+const k4DistProd = ((await call(T.dist, 'GET', '/portal/rates')).json ?? []).find((r) => r.orderable) ?? null;
 if (k4DistProd) {
   const k4Req = await call(T.dist, 'POST', '/portal/requests', { orderNo: `K4D-${k4Stamp}`, date: kDay, lines: [{ productId: k4DistProd.productId, containers: 1 }] });
   ok('a distributor order keeps the order number typed for it', k4Req.status === 201 && JSON.stringify(k4Req.json ?? '').includes(`K4D-${k4Stamp}`), JSON.stringify(k4Req.json).slice(0, 300));
@@ -2046,13 +2046,62 @@ const k5Line = k4DistProd ? [{ productId: k4DistProd.productId, containers: 1 }]
 const k5Methods = (await call(T.dist, 'GET', '/portal/profile')).json?.paymentMethods ?? ['Bank Transfer'];
 ok('an advance needs its proof', (await call(T.dist, 'POST', '/portal/requests', { date: kDay, lines: k5Line, advance: { amount: 1000, method: k5Methods[0], date: kDay } })).status === 400);
 ok('an advance needs a payment method from Settings', (await call(T.dist, 'POST', '/portal/requests', { date: kDay, lines: k5Line, advance: { amount: 1000, method: 'Gold coins', date: kDay, proofId: k5Proof?.id } })).status === 400);
-const k5Req = await call(T.dist, 'POST', '/portal/requests', { date: kDay, lines: k5Line, advance: { amount: 1500.5, method: k5Methods[0], date: kDay, reference: 'TRX-K5', proofId: k5Proof?.id } });
+const k5Req = await call(T.dist, 'POST', '/portal/requests', { date: kDay, lines: k5Line, advance: { amount: 100.5, method: k5Methods[0], date: kDay, reference: 'TRX-K5', proofId: k5Proof?.id } });
 const k5Rows = k5Req.json?.requests ?? [];
-ok('the order keeps the advance on its lines', k5Req.status === 201 && k5Rows.length > 0 && k5Rows.every((r) => r.advance?.amount === 1500.5), JSON.stringify(k5Req.json).slice(0, 300));
+ok('the order keeps the advance on its lines', k5Req.status === 201 && k5Rows.length > 0 && k5Rows.every((r) => r.advance?.amount === 100.5), JSON.stringify(k5Req.json).slice(0, 300));
 const k5Desk = (await call(T.owner, 'GET', `/portal/requests?distributorId=${k2DistId}`)).json ?? [];
 const k5Mine = (Array.isArray(k5Desk) ? k5Desk : k5Desk.requests ?? []).find((r) => r.groupRef && r.groupRef === k5Req.json?.groupRef);
 ok('staff see the advance with method, reference and proof', k5Mine?.advance?.method === k5Methods[0] && k5Mine?.advance?.reference === 'TRX-K5' && k5Mine?.advance?.proofName === 'k5-bank-slip.pdf', JSON.stringify(k5Mine?.advance));
 ok('the same proof cannot go on a second order', (await call(T.dist, 'POST', '/portal/requests', { date: kDay, lines: k5Line, advance: { amount: 10, method: k5Methods[0], date: kDay, proofId: k5Proof?.id } })).status === 400);
+
+// ---------- K6: money per order (advance and Pay count at once, taken off the sales invoices), hidden manufacturer ----------
+const k6Upload = async (name) => (await (await fetch(`${BASE}/attachments`, { method: 'POST', headers: { Authorization: `Bearer ${T.dist}` },
+  body: (() => { const f = new FormData(); f.append('file', new Blob(['%PDF-1.4\n%%EOF'], { type: 'application/pdf' }), name); return f; })() })).json())?.id;
+// with the approval step on, Zen Foods accepts the order first (it then has its production orders)
+if (k5Rows.length && k5Rows.every((r) => r.status === 'Requested')) await call(T.owner, 'POST', '/portal/requests/group/accept', { ids: k5Rows.map((r) => r.id) });
+const k6Money = (await call(T.dist, 'GET', '/distributor-orders/money')).json ?? [];
+const k6Adv = k6Money.find((o) => o.orderRef === k5Req.json?.groupRef);
+ok('the order with an advance shows it as paid at once', !!k6Adv && k6Adv.paid >= 100.5 && k6Adv.amount > 0, JSON.stringify(k6Adv));
+ok('an advance above the order value -> 400', (await call(T.dist, 'POST', '/portal/requests', { date: kDay, lines: k5Line, advance: { amount: 99999999, method: k5Methods[0], date: kDay, proofId: await k6Upload('k6-too-much.pdf') } })).status === 400);
+ok('a manufacturer cannot read order money -> 403', (await call(k2Maker, 'GET', '/distributor-orders/money')).status === 403);
+ok('staff read one distributor\'s order money', Array.isArray((await call(T.owner, 'GET', `/distributor-orders/money?distributorId=${k2DistId}`)).json));
+ok('a payment needs its proof', (await call(T.dist, 'POST', '/distributor-orders/pay', { orderRef: k6Adv?.orderRef, date: kDay, amount: 10, method: k5Methods[0] })).status === 400);
+const k6Pay = await call(T.dist, 'POST', '/distributor-orders/pay', { orderRef: k6Adv?.orderRef, date: kDay, amount: 100, method: k5Methods[0], reference: 'K6-PAY', proofId: await k6Upload('k6-slip.pdf') });
+ok('the distributor pays on its order and it counts at once', k6Pay.status === 201 && /^DOP-/.test(k6Pay.json?.refNo ?? ''), JSON.stringify(k6Pay.json).slice(0, 200));
+const k6After = ((await call(T.dist, 'GET', '/distributor-orders/money')).json ?? []).find((o) => o.orderRef === k6Adv?.orderRef);
+ok('paid goes up and the balance down', k6After && Math.abs(k6After.paid - k6Adv.paid - 100) < 0.01, JSON.stringify([k6Adv?.paid, k6After?.paid]));
+ok('paying more than is open -> 400', (await call(T.dist, 'POST', '/distributor-orders/pay', { orderRef: k6Adv?.orderRef, date: kDay, amount: 99999999, method: k5Methods[0], proofId: await k6Upload('k6-big.pdf') })).status === 400);
+const k6Ledger = (await call(T.dist, 'GET', `/distributor-orders/money/${encodeURIComponent(k6Adv?.orderRef ?? 'none')}`)).json;
+ok('Details lists the advance and the payment with the balance after each', (k6Ledger?.entries ?? []).some((e) => e.kind === 'Advance with the order') && (k6Ledger?.entries ?? []).some((e) => e.refNo === k6Pay.json?.refNo && e.reference === 'K6-PAY'), JSON.stringify(k6Ledger?.entries?.map((e) => [e.refNo, e.kind, e.amount, e.balance])));
+const k6Journal = (await call(T.finance, 'GET', '/reports/journal?period=all')).json ?? [];
+ok('the payment posts Cash & Bank / Customer Advances', k6Journal.some((l) => l.reference === k6Pay.json?.refNo && l.account === 'Customer Advances' && l.credit === 100), JSON.stringify(k6Journal.filter((l) => l.reference === k6Pay.json?.refNo)));
+ok('a distributor cannot reverse a payment -> 403', (await call(T.dist, 'POST', `/distributor-orders/payments/${k6Pay.json?.id}/reverse`, { reason: 'x' })).status === 403);
+ok('Finance reverses a payment that did not arrive', (await call(T.finance, 'POST', `/distributor-orders/payments/${k6Pay.json?.id}/reverse`, { reason: 'K6 test: not in the bank' })).json?.status === 'Reversed');
+ok('the reversed money no longer counts', Math.abs((((await call(T.dist, 'GET', '/distributor-orders/money')).json ?? []).find((o) => o.orderRef === k6Adv?.orderRef)?.paid ?? 0) - k6Adv.paid) < 0.01);
+// money on a received order is taken off its sales invoice when the invoice is verified
+const k6Lot = ((await call(T.dist, 'GET', '/production-shipments')).json ?? []).find((s) => s.status === 'Received' && (s.onHandContainers ?? 0) > 0 && s.orderId);
+if (k6Lot) {
+  const k6Order = (await call(T.owner, 'GET', `/production-orders/${k6Lot.orderId}`)).json;
+  const k6Ref = k6Order?.groupRef ?? k6Order?.refNo;
+  const k6Pay2 = await call(T.dist, 'POST', '/distributor-orders/pay', { orderRef: k6Ref, date: kDay, amount: 50, method: k5Methods[0], proofId: await k6Upload('k6-slip2.pdf') });
+  ok('a received order can be paid', k6Pay2.status === 201, JSON.stringify(k6Pay2.json));
+  const k6Di = await call(T.dist, 'POST', '/distributor-invoices', { date: kDay, lines: [{ shipmentId: k6Lot.id, containers: 1 }] });
+  const k6Ver = await call(T.owner, 'POST', `/distributor-invoices/${k6Di.json?.id}/verify`, {});
+  ok('the sales invoice is verified', k6Ver.json?.status === 'Verified', JSON.stringify(k6Ver.json).slice(0, 200));
+  // the order's money goes to its invoices, oldest first, never more than each still owes
+  const k6Invs = (await call(T.dist, 'GET', '/distributor-invoices')).json ?? [];
+  ok('order money is taken off the sales invoices', k6Invs.some((i) => i.fromOrders > 0) && k6Invs.every((i) => i.status !== 'Verified' || Math.abs(i.due - (i.amount - i.paid)) < 0.01 && i.due >= -0.01),
+    JSON.stringify(k6Invs.filter((i) => i.fromOrders > 0).map((i) => [i.refNo, i.amount, i.fromOrders, i.due])));
+  const k6J2 = (await call(T.finance, 'GET', '/reports/journal?period=all')).json ?? [];
+  ok('it posts Customer Advances / Accounts Receivable', k6J2.some((l) => l.account === 'Customer Advances' && l.debit > 0 && /Order payments set against/.test(l.description ?? '')));
+}
+ok('the ledger still balances after order payments', (await call(T.owner, 'GET', '/reports/trial-balance')).json?.balanced === true);
+const k6Shp = ((await call(T.dist, 'GET', '/production-shipments')).json ?? []).filter((s) => s.manufacturer);
+ok('a distributor never sees the manufacturer\'s name', k6Shp.length > 0 && k6Shp.every((s) => s.manufacturer.name === 'Zen Foods'), JSON.stringify(k6Shp.slice(0, 2).map((s) => s.manufacturer)));
+const k6Rates = (await call(T.dist, 'GET', '/portal/rates')).json ?? [];
+ok('the price list tells what can be ordered, not who makes it', k6Rates.length > 0 && k6Rates.every((r) => !('manufacturerName' in r) && !('madeBy' in r) && typeof r.orderable === 'boolean'), JSON.stringify(k6Rates[0]));
+const k6Claims = (await call(T.dist, 'GET', '/delivery-claims')).json ?? [];
+ok('claims carry their order number and hide the manufacturer', k6Claims.every((c) => c.manufacturer === 'Zen Foods' || c.manufacturer === null) && k6Claims.some((c) => c.orderRef), JSON.stringify(k6Claims.slice(0, 2).map((c) => [c.refNo, c.orderRef, c.manufacturer])));
 
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

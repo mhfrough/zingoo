@@ -126,6 +126,8 @@ export interface OrderTransport {
 
 export interface PortalRate {
   manufacturerName?: string | null;
+  /** the product has a manufacturer set up, so it can be ordered */
+  orderable?: boolean;
   /** every manufacturer that can make it (names only); an order line may pick one, else the default */
   madeBy?: { id: string; name: string; isDefault: boolean }[];
   productId: string;
@@ -212,3 +214,40 @@ export interface Attachment {
   mime: string;
   data: string;
 }
+
+/** one distributor order (DO- number) and its money: amount owed, paid, balance, days since the goods arrived */
+export interface OrderMoney {
+  orderRef: string;
+  date: string;
+  products: string[];
+  containers: number;
+  receivedContainers: number;
+  orderedValue: number;
+  receivedValue: number;
+  amount: number;
+  paid: number;
+  balance: number;
+  receivedDate: string | null;
+  creditDays: number;
+  dueDate: string | null;
+  daysSince: number | null;
+  overdue: boolean;
+  state: 'Acceptance pending' | 'In production' | 'Part received' | 'Received' | 'Cancelled';
+}
+
+/** one payment on an order, with the balance after it */
+export interface OrderLedgerEntry {
+  id: string | null;
+  date: string;
+  refNo: string;
+  kind: string;
+  method: string;
+  reference: string | null;
+  amount: number;
+  status: 'Active' | 'Reversed';
+  proofId: string | null;
+  proofName: string | null;
+  by: string | null;
+  balance: number;
+}
+

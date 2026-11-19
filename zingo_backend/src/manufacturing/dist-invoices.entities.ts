@@ -137,3 +137,60 @@ export class DistributorInvoicePayment extends AppEntity {
   @Column({ type: 'varchar', length: 500, nullable: true })
   note: string | null;
 }
+
+/**
+ * Money a distributor paid on one of its orders (an advance with the order, or Pay later). It counts at once:
+ * Cash & Bank / Customer Advances, then it pays off the order's sales invoices as they are verified.
+ */
+@Entity('dist_order_payments')
+export class DistOrderPayment extends AppEntity {
+  @Column({ type: 'varchar', length: 30, unique: true })
+  refNo: string;
+
+  @Column({ type: 'date' })
+  date: string;
+
+  @ManyToOne(() => Distributor, { nullable: false })
+  @JoinColumn({ name: 'distributorId' })
+  distributor: Distributor;
+
+  @Column({ type: 'uuid' })
+  distributorId: string;
+
+  /** the order paid on: its DO- number, or the production order number of a single order */
+  @Column({ type: 'varchar', length: 30 })
+  orderRef: string;
+
+  @Column({ type: 'decimal', precision: 16, scale: 2, transformer: numeric })
+  amount: number;
+
+  @Column({ type: 'varchar', length: 40 })
+  method: string;
+
+  @Column({ type: 'varchar', length: 80, nullable: true })
+  reference: string | null;
+
+  /** the uploaded proof (bank slip, transfer screenshot) */
+  @Column({ type: 'uuid', nullable: true })
+  proofId: string | null;
+
+  @Column({ type: 'varchar', length: 250, default: '' })
+  proofName: string;
+
+  /** Advance = paid with the order; Payment = paid later from the order list */
+  @Column({ type: 'varchar', length: 12, default: 'Payment' })
+  kind: 'Advance' | 'Payment';
+
+  /** Active, or Reversed by staff when the money did not arrive */
+  @Column({ type: 'varchar', length: 12, default: 'Active' })
+  status: 'Active' | 'Reversed';
+
+  @Column({ type: 'varchar', length: 120 })
+  recordedBy: string;
+
+  @Column({ type: 'varchar', length: 500, nullable: true })
+  reason: string | null;
+
+  @Column({ type: 'varchar', length: 120, nullable: true })
+  reversedBy: string | null;
+}

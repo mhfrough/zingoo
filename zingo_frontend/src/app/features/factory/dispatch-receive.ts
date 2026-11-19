@@ -176,11 +176,14 @@ const today = () => new Date().toISOString().slice(0, 10);
 
           <section>
             <h4>Quantities
-              <app-help title="Quantities" text="Ordered: what you asked for. Delivered: what the factory loaded. Damaged by the manufacturer: found at the factory and not sent. Damaged on arrival: bundles you found damaged; leave it empty when there are none." />
+              <app-help title="Quantities" text="Ordered: what you asked for. Delivered: what the factory loaded. Damaged by the manufacturer: found at the factory and not sent. Damaged on arrival: what you found damaged, in whole containers, bundles and loose pieces; leave it empty when there is none. The claim counts whole bundles; loose pieces go in its note." />
             </h4>
             <div class="wrap">
               <table class="qty">
-                <thead><tr><th>Product</th><th>Ordered</th><th>Delivered</th><th>Damaged by manufacturer</th><th>Damaged on arrival (bundles)</th></tr></thead>
+                <thead>
+                  <tr><th rowspan="2">Product</th><th rowspan="2">Ordered</th><th rowspan="2">Delivered</th><th rowspan="2">Damaged by manufacturer</th><th colspan="3">Damaged on arrival</th></tr>
+                  <tr><th>{{ unitOf(loads()[0]) }}</th><th>Bundles</th><th>Pieces</th></tr>
+                </thead>
                 <tbody>
                   @for (l of loads(); track l.id) {
                     <tr>
@@ -188,10 +191,13 @@ const today = () => new Date().toISOString().slice(0, 10);
                       <td>{{ num(l.order.containers) }}<small>containers</small></td>
                       <td>{{ num(l.containers) }}<small>{{ num(l.containers * l.bundlesPerContainer) }} bundles</small></td>
                       <td>{{ l.order.productionDamaged ? num(l.order.productionDamaged) : '-' }}</td>
-                      <td>
-                        <input type="number" min="0" step="1" [max]="l.containers * l.bundlesPerContainer" [value]="damaged()[l.id] ?? ''" placeholder="None"
-                          (input)="setDamaged(l.id, $any($event.target).value)" [attr.aria-label]="'Bundles damaged on arrival of ' + l.product.sku" />
-                      </td>
+                      @for (k of parts; track k) {
+                        <td>
+                          <input type="number" min="0" step="1" [value]="damage()[l.id]?.[k] ?? ''" placeholder="0"
+                            (input)="setDamage(l.id, k, $any($event.target).value)" [attr.aria-label]="k + ' damaged on arrival of ' + l.product.sku" />
+                          @if (k === 'pieces' && bundlesOf(l) > 0) { <small class="info-figure">= {{ num(bundlesOf(l)) }} bundles</small> }
+                        </td>
+                      }
                     </tr>
                   }
                 </tbody>
@@ -243,7 +249,25 @@ export class DispatchReceive extends FormModal {
   protected maxDate = today();
   protected accept = ATTACHMENT_ACCEPT;
   readonly form = this.fb.nonNullable.group({ date: [today(), Validators.required], note: [''] });
-  protected damaged = signal<Record<string, number | null>>({});
+  /** damage on arrival per load: whole containers, bundles and loose pieces */
+  protected damage = signal<Record<string, { containers?: number; bundles?: number; pieces?: number }>>({});
+  protected parts = ['containers', 'bundles', 'pieces'] as const;
+  /** Bora / Carton / container: what the first load's containers are called */
+  protected unitOf = (l: Shipment | undefined) => l?.order?.containerUnit || l?.product?.containerUnit || 'Containers';
+  /** the damage of one load in whole bundles (loose pieces count once they make a whole bundle) */
+  protected bundlesOf(l: Shipment): number {
+    const d = this.damage()[l.id] ?? {};
+    const piecesPerBundle = Math.max(1, (l.order?.piecesPerPacket ?? 1) * l.packetsPerBundle);
+    return (d.containers ?? 0) * l.bundlesPerContainer + (d.bundles ?? 0) + Math.floor((d.pieces ?? 0) / piecesPerBundle);
+  }
+  /** what each claim is not counting: loose pieces short of a whole bundle */
+  private damageText(): string {
+    return this.loads().map((l) => {
+      const d = this.damage()[l.id] ?? {};
+      const bits = [d.containers ? `${d.containers} ${this.unitOf(l)}` : '', d.bundles ? `${d.bundles} bundles` : '', d.pieces ? `${d.pieces} pieces` : ''].filter(Boolean);
+      return bits.length ? `${l.product.sku}: ${bits.join(', ')}` : '';
+    }).filter(Boolean).join(' · ');
+  }
   protected proofs = signal<{ id: string; name: string }[]>([]);
   protected uploading = signal(false);
   protected num = fmtNumber;
@@ -254,10 +278,10 @@ export class DispatchReceive extends FormModal {
     const l = this.loads();
     return l.length ? `${l.map((x) => `${x.containers} × ${x.product.sku}`).join(', ')} from ${l[0].manufacturer.name}` : '';
   });
-  protected anyDamage = computed(() => Object.values(this.damaged()).some((v) => (v ?? 0) > 0));
+  protected anyDamage = computed(() => Object.values(this.damage()).some((v) => (v.containers ?? 0) + (v.bundles ?? 0) + (v.pieces ?? 0) > 0));
 
-  protected setDamaged(id: string, v: string) {
-    this.damaged.update((d) => ({ ...d, [id]: v === '' ? null : Math.max(0, Math.floor(Number(v) || 0)) }));
+  protected setDamage(id: string, k: 'containers' | 'bundles' | 'pieces', v: string) {
+    this.damage.update((d) => ({ ...d, [id]: { ...d[id], [k]: v === '' ? 0 : Math.max(0, Math.floor(Number(v) || 0)) } }));
     this.form.markAsDirty();
   }
 
@@ -306,15 +330,16 @@ export class DispatchReceive extends FormModal {
 
   protected reset() {
     this.form.reset({ date: today(), note: '' });
-    this.damaged.set({});
+    this.damage.set({});
     this.proofs.set([]);
   }
 
   protected request() {
     const v = this.form.getRawValue();
+    const note = [richToPlain(v.note).trim(), this.anyDamage() ? `Damaged on arrival: ${this.damageText()}` : ''].filter(Boolean).join(' · ').slice(0, 500);
     return this.factory.receiveDispatch({
-      date: v.date, lines: this.loads().map((l) => ({ shipmentId: l.id, damaged: this.damaged()[l.id] ?? null })),
-      ...(richToPlain(v.note).trim() ? { note: richToPlain(v.note).trim() } : {}), ...(this.proofs().length ? { proofIds: this.proofs().map((p) => p.id) } : {}),
+      date: v.date, lines: this.loads().map((l) => ({ shipmentId: l.id, damaged: this.bundlesOf(l) || null })),
+      ...(note ? { note } : {}), ...(this.proofs().length ? { proofIds: this.proofs().map((p) => p.id) } : {}),
     });
   }
 

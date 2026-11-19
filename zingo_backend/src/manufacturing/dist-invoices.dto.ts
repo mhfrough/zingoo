@@ -17,6 +17,19 @@ export class CreateDistInvoiceDto {
   @IsArray() @ArrayMinSize(1) @ArrayMaxSize(50) @ValidateNested({ each: true }) @Type(() => InvoiceLineDto) lines: InvoiceLineDto[];
 }
 
+/** the distributor pays on one of its orders (counts at once; staff can reverse it) */
+export class DistOrderPayDto {
+  /** staff only; a distributor login always pays for itself */
+  @IsOptional() @IsUUID() distributorId?: string;
+  @IsString() @MaxLength(30) orderRef: string;
+  @IsDateString() date: string;
+  @IsNumber() @Min(0.01) amount: number;
+  @IsString() @MaxLength(40) method: string;
+  @IsOptional() @IsString() @MaxLength(80) reference?: string;
+  /** the uploaded proof of payment */
+  @IsUUID() proofId: string;
+}
+
 /** money received from the distributor against a verified invoice */
 export class DistInvoicePayDto {
   @IsDateString() date: string;

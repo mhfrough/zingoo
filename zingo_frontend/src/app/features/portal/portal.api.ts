@@ -1,7 +1,7 @@
 import { Injectable, inject } from '@angular/core';
 import { ApiService } from '../../core/api.service';
 import {
-  Attachment, Desk, PortalAdvice, PortalOrder, PortalProfile, PortalRate, PortalReceipt, PortalRequest, Statement,
+  Attachment, Desk, OrderLedgerEntry, OrderMoney, PortalAdvice, PortalOrder, PortalProfile, PortalRate, PortalReceipt, PortalRequest, Statement,
 } from './portal.models';
 
 /**
@@ -20,6 +20,12 @@ export class PortalApi {
   rates = (d?: string) => this.api.get<PortalRate[]>('portal/rates', { distributorId: d });
   statement = (d?: string) => this.api.get<Statement>('portal/statement', { distributorId: d });
   desk = () => this.api.get<Desk>('portal/desk');
+  /** every order with its amount, paid, balance and days since received */
+  orderMoney = (d?: string) => this.api.get<OrderMoney[]>('distributor-orders/money', { distributorId: d });
+  orderLedger = (ref: string, d?: string) =>
+    this.api.get<{ order: OrderMoney; entries: OrderLedgerEntry[] }>(`distributor-orders/money/${encodeURIComponent(ref)}`, { distributorId: d });
+  payOrder = (body: unknown) => this.api.post('distributor-orders/pay', body);
+  reverseOrderPayment = (id: string, reason: string) => this.api.post(`distributor-orders/payments/${id}/reverse`, { reason });
   evidence = (id: string) => this.api.get<Attachment>(`portal/receipts/${id}/evidence`);
   proof = (id: string) => this.api.get<Attachment>(`portal/advices/${id}/proof`);
 

@@ -11,6 +11,7 @@ import { PostingService } from '../ledger/posting.service';
 import { Role } from '../common/enums';
 import { ProductionOrder } from '../manufacturing/production-orders.entities';
 import { ProductionOrdersService, cleanTransport } from '../manufacturing/production-orders.service';
+import { DistOrderMoneyService } from '../manufacturing/dist-order-money.service';
 import { LookupsService } from '../setup/lookups.service';
 import { SettingsService } from '../setup/setup.service';
 import { LINK, NotificationsService, TEAM, plural } from '../notifications/notifications.service';
@@ -53,6 +54,7 @@ export class PortalService {
   constructor(
     @InjectDataSource() private readonly db: DataSource,
     private readonly orders: OrdersService,
+    private readonly orderMoney: DistOrderMoneyService,
     private readonly collections: CollectionsService,
     private readonly posting: PostingService,
     private readonly settings: SettingsService,
@@ -235,11 +237,14 @@ export class PortalService {
         productId: p.id, sku: p.sku, name: p.name, mrp: Number(p.mrp), standardRate: Number(p.rate), rate, agreed: !!a,
         /** who makes it: an order goes to this manufacturer (none = it cannot be ordered yet) */
         manufacturerName: p.manufacturer?.name ?? null,
+        /** it has a manufacturer, so it can be ordered (a distributor login gets this, never the names) */
+        orderable: !!p.manufacturerId,
         /** every manufacturer that can make it (names only, never their rates); the order line may pick one */
         madeBy: (p.makers ?? []).map((m) => ({ id: m.manufacturerId, name: mfrName.get(m.manufacturerId) ?? '', isDefault: !!m.isDefault })).filter((m) => m.name),
         /** the saved ways of packing it (the order form picks one; its figures can be changed per order) */
         packagings: (p.packagings ?? []).map((t) => ({
-          name: t.name, packetsPerBundle: t.packetsPerBundle, bundlesPerContainer: t.bundlesPerContainer, containerUnit: t.containerUnit ?? p.containerUnit ?? null, isDefault: !!t.isDefault,
+          name: t.name, piecesPerPacket: t.piecesPerPacket ?? 1, packetsPerBundle: t.packetsPerBundle, bundlesPerContainer: t.bundlesPerContainer,
+          containerUnit: t.containerUnit ?? p.containerUnit ?? null, containersPerTruck: t.containersPerTruck ?? null, transportUnit: t.transportUnit ?? null, isDefault: !!t.isDefault,
         })),
         bundlesPerContainer: p.bundlesPerContainer, containerUnit: p.containerUnit ?? null, packetSize: p.packetSize ?? null,
         packsPerCarton: packs, perCarton: round2(rate * packs), spread: round2(Number(p.mrp) - rate),
@@ -372,6 +377,18 @@ export class PortalService {
         const [f]: { name: string; ownerId: string | null }[] = await em.query(`SELECT name, "ownerId" FROM attachments WHERE id = $1`, [dto.advance.proofId]);
         if (!f) throw new BadRequestException('Upload the proof of the advance again.');
         if (f.ownerId) throw new BadRequestException('That proof is already on another record. Upload it again.');
+        // never more than the order is worth at the distributor's price
+        const agreedRates = await em.find(DistributorRate, { where: { distributorId } });
+        const worth = round2(lines.reduce((n, l) => {
+          const p = products.find((x) => x.id === l.productId)!;
+          const tpl = l.packaging ? (p.packagings ?? []).find((t) => t.name === l.packaging) : (p.packagings ?? []).find((t) => t.isDefault);
+          const bpc = l.bundlesPerContainer ?? tpl?.bundlesPerContainer ?? p.bundlesPerContainer ?? 1;
+          const ppb = l.packetsPerBundle ?? tpl?.packetsPerBundle ?? p.packsPerCarton;
+          const bundles = l.containers ? l.containers * bpc : l.bundles ?? 0;
+          const rate = Number(agreedRates.find((a) => a.productId === p.id)?.rate ?? p.rate);
+          return n + bundles * ppb * rate;
+        }, 0));
+        if (dto.advance.amount > worth + 0.001) throw new BadRequestException(`The advance cannot be more than the order is worth (PKR ${worth.toLocaleString('en-US')}).`);
         advance = {
           amount: round2(dto.advance.amount), method: dto.advance.method, date: dto.advance.date,
           reference: dto.advance.reference?.trim() || null, proofId: dto.advance.proofId, proofName: f.name,
@@ -414,12 +431,8 @@ export class PortalService {
         // the proof belongs to the order (its first line); Finance is told what was paid
         const first = await em.findOne(PortalRequest, { where: { refNo: filed[0].refNo } });
         await em.query(`UPDATE attachments SET "ownerType" = 'DIST_ADVANCE', "ownerId" = $2 WHERE id = $1`, [advance.proofId, first!.id]);
-        const ref = groupRef ?? filed[0].refNo;
-        await this.notes.send(em, user,
-          { to: { staff: TEAM.finance }, kind: 'request.advance', tone: 'warning', refNo: ref, link: LINK.desk,
-            title: `${await this.distName(em, distributorId)} paid an advance of PKR ${advance.amount.toLocaleString('en-US')} on ${ref}`,
-            body: `${advance.method} on ${advance.date}${advance.reference ? ` · ref ${advance.reference}` : ''}. Proof: ${advance.proofName}. Check it against the bank.` },
-        );
+        // the advance is money in at once: an order payment, set against the order's sales invoices later
+        await this.orderMoney.recordAdvance(em, user, distributorId, groupRef ?? filed[0].refNo, advance);
       }
       if (direct && multi) await this.orderSentNotes(em, user, groupRef!, sent);
       if (!direct) {

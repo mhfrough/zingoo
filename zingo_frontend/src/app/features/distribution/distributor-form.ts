@@ -70,17 +70,18 @@ const STATUSES: { value: Distributor['status']; hint: string }[] = [
         <div class="notice" data-tone="danger" role="alert">{{ error() }}</div>
       }
       <form [id]="formId" [formGroup]="form" (ngSubmit)="submit()" class="form-grid" novalidate>
+        <h4 class="form-section">Distributor</h4>
+        <app-field label="Distributor / company" [wide]="true" [required]="true" [error]="invalid('name') ? 'Enter the company name' : null">
+          <input type="text" formControlName="name" />
+        </app-field>
+
+        <h4 class="form-section">Areas</h4>
         <div class="choice" role="radiogroup" aria-label="Where the distributor sells">
           @for (m of markets; track m.value) {
             <label><input type="radio" formControlName="market" [value]="m.value" /> <span><strong>{{ m.value }}</strong> · {{ m.hint }}</span></label>
           }
         </div>
 
-        <app-field label="Distributor / company" [wide]="true" [required]="true" [error]="invalid('name') ? 'Enter the company name' : null">
-          <input type="text" formControlName="name" />
-        </app-field>
-
-        <h4 class="form-section">Areas</h4>
         @if (local()) {
           <app-field label="Provinces" hint="Pick one or more first">
             <app-multi-select formControlName="provinces" [options]="provinceOptions()" placeholder="Add a province" />
@@ -116,6 +117,14 @@ const STATUSES: { value: Distributor['status']; hint: string }[] = [
         <app-field label="Contact or phone"><input type="text" formControlName="contact" /></app-field>
         <app-field label="Tax number"><input type="text" formControlName="taxNo" /></app-field>
         <app-field label="Address"><input type="text" formControlName="address" /></app-field>
+
+        <h4 class="form-section">Point of contact</h4>
+        <app-field label="Point of contact" hint="Who to speak to: name, phone or email" [wide]="true"><input type="text" formControlName="poc" maxlength="150" /></app-field>
+
+        <h4 class="form-section">Contract</h4>
+        <app-field label="Contract" hint="Contract number or title"><input type="text" formControlName="contract" maxlength="150" /></app-field>
+        <app-field label="Terms" [wide]="true"><app-rich-text formControlName="terms" [max]="5000" [storeMax]="5000" placeholder="What was agreed: rates, payment, delivery, exclusivity" /></app-field>
+        <app-field label="Uploads" [wide]="true" hint="Signed contract, licences, pictures. Several files at once"><app-files-input formControlName="files" label="Upload files" /></app-field>
 
         <h4 class="form-section">Trading terms</h4>
         <app-field label="Payment terms" hint="Days after an invoice that payment is due">
@@ -171,12 +180,6 @@ const STATUSES: { value: Distributor['status']; hint: string }[] = [
             <app-field label="Reason" [wide]="true"><input type="text" formControlName="statusNote" maxlength="500" /></app-field>
           }
         }
-
-        <h4 class="form-section">Contract</h4>
-        <app-field label="Point of contact" hint="Who to speak to: name, phone or email"><input type="text" formControlName="poc" maxlength="150" /></app-field>
-        <app-field label="Contract" hint="Contract number or title"><input type="text" formControlName="contract" maxlength="150" /></app-field>
-        <app-field label="Terms" [wide]="true"><app-rich-text formControlName="terms" [max]="5000" [storeMax]="5000" placeholder="What was agreed: rates, payment, delivery, exclusivity" /></app-field>
-        <app-field label="Uploads" [wide]="true" hint="Signed contract, licences, pictures. Several files at once"><app-files-input formControlName="files" label="Upload files" /></app-field>
       </form>
       <ng-container offcanvasFooter>
         <button appBtn type="button" (click)="oc.requestClose()">Cancel</button>

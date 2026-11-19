@@ -485,3 +485,5 @@ Progress (2026-11-19): K2 built.
 - Admin orders list: Margin column (inflow at the distributor's rate, outflow = order value); `saleRate / saleValue / margin` on the staff list, hidden from manufacturers.
 - Price table on the product: per piece, packet, bundle, container and truck.
 - Shared styles: `.formula` (green worked-out price line) and `.info-figure` (bold green figure) in field.css.
+
+Progress (2026-11-19): K3 built. Distributor form sections in the client's order: Distributor (name), Areas (local / international choice, areas, rights, international fields), Contact, Point of contact (own section), Contract (number, terms, uploads; point of contact moved out), then Trading terms and Status.

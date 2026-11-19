@@ -1932,5 +1932,49 @@ const jClaims = ((await call(p3Maker, 'GET', '/delivery-claims')).json ?? []).fi
 ok('the manufacturer gets the dispute with the damaged bundles', jClaims.length === 1 && jClaims[0].bundles === 3 && jClaims[0].status === 'Pending', JSON.stringify(jClaims.map((c) => [c.refNo, c.bundles, c.status])));
 ok('both loads are received in full', ((await call(T.dist, 'GET', '/production-shipments')).json ?? []).filter((s) => s.dispatchRef === jDisp.json?.dispatchRef).every((s) => s.status === 'Received' && s.receivedContainers === s.containers));
 
+// ---------- K1: companies, loan lists, certificate pictures, bank and cash accounts ----------
+const k1Stamp = Date.now().toString(36).slice(-5).toUpperCase();
+const k1Curr = ((await call(T.owner, 'GET', '/currencies')).json ?? []).map((c) => c.code);
+const k1Foreign = k1Curr.find((c) => c !== 'PKR') ?? 'PKR';
+const k1NoCountry = await call(T.owner, 'POST', '/companies', { name: `K1 Intl ${k1Stamp}`, market: 'International', country: '' });
+ok('an international company needs its country', k1NoCountry.status === 400);
+ok('a company currency must be on Settings', (await call(T.owner, 'POST', '/companies', { name: `K1 Bad ${k1Stamp}`, currency: 'ZZZ' })).status === 400);
+const k1Intl = await call(T.owner, 'POST', '/companies', {
+  name: `K1 Intl ${k1Stamp}`, market: 'International', region: 'Middle East', country: 'United Arab Emirates', state: 'Dubai', city: 'Dubai',
+  fiscalMonth: 1, currency: k1Foreign, approvalThreshold: null, signatoryA: 'K Signer',
+});
+ok('an international company keeps region, country, state, financial year and currency', k1Intl.status === 201 && k1Intl.json?.country === 'United Arab Emirates'
+  && k1Intl.json?.region === 'Middle East' && k1Intl.json?.fiscalMonth === 1 && k1Intl.json?.currency === k1Foreign && k1Intl.json?.approvalThreshold === null, JSON.stringify(k1Intl.json));
+const k1Local = await call(T.owner, 'PATCH', `/companies/${k1Intl.json?.id}`, { market: 'Local', region: 'Europe', country: 'France', state: 'Punjab', city: 'Lahore', approvalThreshold: 250000 });
+ok('a local company is in Pakistan with no world region', k1Local.status === 200 && k1Local.json?.country === 'Pakistan' && k1Local.json?.region === '' && k1Local.json?.state === 'Punjab', JSON.stringify(k1Local.json));
+ok('the optional two-signature amount is kept on the company', k1Local.json?.approvalThreshold === 250000);
+if (k1Intl.json?.id) await call(T.owner, 'DELETE', `/companies/${k1Intl.json.id}`);
+
+ok('a tenure needs whole months', (await call(T.owner, 'POST', '/lookups', { list: 'LOAN_TENURE', code: `K1 bad ${k1Stamp}`, meta: { months: 'four' } })).status === 400);
+const k1Ten = await call(T.owner, 'POST', '/lookups', { list: 'LOAN_TENURE', code: `K1 four ${k1Stamp}`, notes: '<p>Four months, <strong>paid</strong> in full</p>', meta: { months: '4' } });
+ok('a tenure keeps its months and its rich description', k1Ten.status === 201 && k1Ten.json?.meta?.months === '4' && k1Ten.json?.notes?.includes('<strong>') && k1Ten.json?.description === 'Four months, paid in full', JSON.stringify(k1Ten.json));
+const k1Lk = (await call(T.owner, 'GET', '/lookups')).json ?? [];
+ok('the standard repayment frequencies know their months', k1Lk.find((l) => l.list === 'REPAY_FREQUENCY' && l.code === 'Quarterly')?.meta?.months === '3');
+ok('the existing bank and cash accounts are the company\'s own', k1Lk.filter((l) => l.list === 'BANK_ACCOUNT').every((l) => l.meta?.ownerType));
+
+const k1DistId = ((await call(T.owner, 'GET', '/distributors')).json ?? [])[0]?.id;
+const k1Bank = k1Lk.find((l) => l.list === 'BANK' && l.active)?.code ?? 'HBL';
+ok('a distributor account names the distributor', (await call(T.owner, 'POST', '/lookups', { list: 'BANK_ACCOUNT', code: `K1 D ${k1Stamp}`, meta: { kind: 'Bank', ownerType: 'Distributor', bank: k1Bank, account: '123' } })).status === 400);
+ok('a bank account needs the account number', (await call(T.owner, 'POST', '/lookups', { list: 'BANK_ACCOUNT', code: `K1 N ${k1Stamp}`, meta: { kind: 'Bank', ownerType: 'Company', bank: k1Bank } })).status === 400);
+const k1Acc = await call(T.owner, 'POST', '/lookups', {
+  list: 'BANK_ACCOUNT', code: `K1 Dist ${k1Stamp}`, description: 'Collections', meta: { kind: 'Bank', ownerType: 'Distributor', ownerId: k1DistId, bank: k1Bank, title: 'K Traders', account: 'PK00K1', branch: 'Main' },
+});
+ok('a distributor bank account keeps the owner and bank details', k1Acc.status === 201 && k1Acc.json?.meta?.ownerType === 'Distributor' && !!k1Acc.json?.meta?.ownerName && k1Acc.json?.meta?.account === 'PK00K1', JSON.stringify(k1Acc.json));
+const k1Cash = await call(T.owner, 'POST', '/lookups', { list: 'BANK_ACCOUNT', code: `K1 Cash ${k1Stamp}`, meta: { kind: 'Cash', ownerType: 'Company', bank: k1Bank, account: 'x' } });
+ok('a cash counter has no bank details', k1Cash.status === 201 && k1Cash.json?.meta?.bank === '' && k1Cash.json?.meta?.account === '', JSON.stringify(k1Cash.json));
+
+const k1NotPic = await (await fetch(`${BASE}/attachments`, { method: 'POST', headers: { Authorization: `Bearer ${T.owner}` }, body: (() => { const f = new FormData(); f.append('file', new Blob(['%PDF-1.4\n%%EOF'], { type: 'application/pdf' }), 'k1.pdf'); return f; })() })).json();
+ok('a certificate picture must be an image', (await call(T.owner, 'POST', '/lookups', { list: 'CERT_TYPE', code: `K1 PDF ${k1Stamp}`, meta: { pictureId: k1NotPic?.id } })).status === 400);
+const k1PngBytes = Uint8Array.from(atob('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg=='), (c) => c.charCodeAt(0));
+const k1Pic = await (await fetch(`${BASE}/attachments`, { method: 'POST', headers: { Authorization: `Bearer ${T.owner}` }, body: (() => { const f = new FormData(); f.append('file', new Blob([k1PngBytes], { type: 'image/png' }), 'halal-sample.png'); return f; })() })).json();
+const k1Cert = await call(T.owner, 'POST', '/lookups', { list: 'CERT_TYPE', code: `K1 Cert ${k1Stamp}`, notes: '<p>Issued by the board</p>', meta: { pictureId: k1Pic?.id } });
+ok('a certificate type keeps its picture and description', k1Cert.status === 201 && k1Cert.json?.meta?.pictureName === 'halal-sample.png' && k1Cert.json?.description === 'Issued by the board', JSON.stringify(k1Cert.json));
+for (const r of [k1Ten, k1Acc, k1Cash, k1Cert]) if (r.json?.id) await call(T.owner, 'PATCH', `/lookups/${r.json.id}`, { active: false });
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

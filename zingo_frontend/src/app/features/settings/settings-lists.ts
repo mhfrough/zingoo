@@ -8,7 +8,7 @@ import { ContainerType } from '../exports/models';
 import { Currency } from '../finance/models';
 import { ContainerForm } from './container-form';
 import { CurrencyForm } from './currency-form';
-import { LookupForm } from './lookup-form';
+import { LookupForm, monthsText } from './lookup-form';
 import { SettingsApi } from './settings.api';
 
 const LINES = ['origin', 'ocean', 'insurance', 'destination', 'duty'];
@@ -27,7 +27,7 @@ const LINES = ['origin', 'ocean', 'insurance', 'destination', 'duty'];
       <div class="two-col">
         <div class="card" data-flush>
           <div class="card__head">
-            <div><h2>Payment methods</h2><p>Offered when money is collected or paid</p></div>
+            <div><h2>Local payment methods</h2><p>Offered when money is collected or paid in Pakistan</p></div>
             @if (canEdit()) {
               <button appBtn size="sm" icon="plus" (click)="openLookup('PAY_METHOD')">Add method</button>
             }
@@ -41,16 +41,29 @@ const LINES = ['origin', 'ocean', 'insurance', 'destination', 'duty'];
 
         <div class="card" data-flush>
           <div class="card__head">
-            <div><h2>Container types</h2><p>Planning bundles per container</p></div>
+            <div><h2>International remittance methods</h2><p>How international distributors may pay</p></div>
             @if (canEdit()) {
-              <button appBtn size="sm" icon="plus" (click)="openContainer()">Add type</button>
+              <button appBtn size="sm" icon="plus" (click)="openLookup('REMITTANCE_METHOD')">Add method</button>
             }
           </div>
           <div class="card__body">
-            <app-data-table keepOrder [columns]="containerColumns" [rows]="store.containers()" [actions]="containerActions" [searchable]="false"
-              [loading]="store.containersRes.isLoading()" emptyTitle="No container types" emptyText="Add the first one."
-              (action)="onContainerAction($event)" />
+            <app-data-table keepOrder [columns]="methodColumns" [rows]="remittances()" [actions]="lookupActions" [searchable]="false"
+              [loading]="store.lookupsRes.isLoading()" emptyTitle="No remittance methods" emptyText="Add the first one."
+              (action)="onLookupAction($event)" />
           </div>
+        </div>
+      </div>
+
+      <div class="card" data-flush>
+        <div class="card__head">
+          <div><h2>Bank and cash accounts</h2><p>Accounts of the company, investors, distributors and manufacturers. Only the company's own are offered when money moves</p></div>
+          @if (canEdit()) {
+            <button appBtn size="sm" icon="plus" (click)="openLookup('BANK_ACCOUNT')">Add account</button>
+          }
+        </div>
+        <div class="card__body">
+          <app-data-table keepOrder [columns]="accountColumns" [rows]="accounts()" [actions]="lookupActions" [searchable]="false"
+            [loading]="store.lookupsRes.isLoading()" emptyTitle="No accounts" emptyText="Add the first one." (action)="onLookupAction($event)" />
         </div>
       </div>
 
@@ -85,6 +98,19 @@ const LINES = ['origin', 'ocean', 'insurance', 'destination', 'duty'];
       </div>
 
       <div class="two-col">
+        <div class="card" data-flush>
+          <div class="card__head">
+            <div><h2>Container types</h2><p>Planning bundles per container</p></div>
+            @if (canEdit()) {
+              <button appBtn size="sm" icon="plus" (click)="openContainer()">Add type</button>
+            }
+          </div>
+          <div class="card__body">
+            <app-data-table keepOrder [columns]="containerColumns" [rows]="store.containers()" [actions]="containerActions" [searchable]="false"
+              [loading]="store.containersRes.isLoading()" emptyTitle="No container types" emptyText="Add the first one."
+              (action)="onContainerAction($event)" />
+          </div>
+        </div>
         @for (s of simpleLists; track s.list) {
           <div class="card" data-flush>
             <div class="card__head">
@@ -178,22 +204,37 @@ export class SettingsLists {
   protected sources = computed(() => this.store.lookups().filter((l) => l.list === 'CAPITAL_SOURCE'));
   protected streamTypes = computed(() => this.store.lookups().filter((l) => l.list === 'STREAM_TYPE'));
   protected people = computed(() => this.store.lookups().filter((l) => l.list === 'PERSON'));
+  protected remittances = computed(() => this.store.lookups().filter((l) => l.list === 'REMITTANCE_METHOD'));
+  protected accounts = computed(() => this.store.lookups().filter((l) => l.list === 'BANK_ACCOUNT'));
+
+  protected accountColumns: TableColumn<Lookup>[] = [
+    { id: 'code', label: 'Account', value: (l) => l.code, sub: (l) => (l.meta?.['kind'] === 'Cash' ? 'Cash counter' : 'Bank account') },
+    {
+      id: 'owner', label: 'Belongs to', priority: 2,
+      value: (l) => (l.meta?.['ownerType'] && l.meta['ownerType'] !== 'Company' ? l.meta['ownerName'] || '—' : 'Company'),
+      sub: (l) => (l.meta?.['ownerType'] && l.meta['ownerType'] !== 'Company' ? l.meta['ownerType'] : null),
+    },
+    {
+      id: 'bank', label: 'Bank details', priority: 2,
+      value: (l) => (l.meta?.['kind'] === 'Cash' ? '—' : [l.meta?.['bank'], l.meta?.['account']].filter(Boolean).join(' · ') || '—'),
+      sub: (l) => [l.meta?.['title'], l.meta?.['branch'], l.description].filter(Boolean).join(' · ') || null,
+    },
+    { id: 'status', label: 'Status', kind: 'tag', value: (l) => (l.active ? 'Active' : 'Switched off'), tone: (l): Tone => (l.active ? 'success' : 'neutral') },
+  ];
 
   /** the small lists behind the loan and advance forms and the bank accounts: a name and a status each */
   protected simpleLists: { list: LookupList; title: string; sub: string; add: string }[] = [
-    { list: 'LOAN_TENURE', title: 'Loan tenure', sub: 'How long a loan runs', add: 'Add tenure' },
+    { list: 'LOAN_TENURE', title: 'Loan tenure', sub: 'How long a loan runs: 3, 4 ... months or custom', add: 'Add tenure' },
     { list: 'REPAY_PLAN', title: 'Repayment plan', sub: 'How a loan is paid back', add: 'Add plan' },
-    { list: 'REPAY_FREQUENCY', title: 'Repayment frequency', sub: 'For a loan paid in installments', add: 'Add frequency' },
+    { list: 'REPAY_FREQUENCY', title: 'Repayment frequency', sub: 'How often an instalment is due: monthly, quarterly, half-yearly', add: 'Add frequency' },
     { list: 'ADVANCE_PURPOSE', title: 'Advance purpose', sub: 'Why a partner advances money', add: 'Add purpose' },
     { list: 'SETTLEMENT_METHOD', title: 'Settlement method', sub: 'How an advance is expected to be settled', add: 'Add method' },
     { list: 'DIST_CLASSIFICATION', title: 'Distributor classifications', sub: 'What kind of business an international distributor is', add: 'Add classification' },
-    { list: 'CERT_TYPE', title: 'Certificate types', sub: 'Certificates a market can ask for on a product', add: 'Add certificate type' },
+    { list: 'CERT_TYPE', title: 'Certificate types', sub: 'Certificates a market can ask for on a product, with a sample picture', add: 'Add certificate type' },
     { list: 'EXPORT_DOC_TYPE', title: 'Export document types', sub: 'Documents kept on an export shipment', add: 'Add document type' },
-    { list: 'REMITTANCE_METHOD', title: 'Remittance methods', sub: 'How international distributors may pay', add: 'Add method' },
     { list: 'KYC_DOC_TYPE', title: 'KYC document types', sub: 'Documents an international distributor gives; required ones are checked on submission', add: 'Add document type' },
     { list: 'ORDER_STAGE', title: 'Production stages', sub: 'Steps a manufacturer reports on an order, in order', add: 'Add stage' },
     { list: 'BANK', title: 'Banks', sub: 'Banks a manufacturer can be paid at', add: 'Add bank' },
-    { list: 'BANK_ACCOUNT', title: 'Bank and cash accounts', sub: 'Which account took or paid the money. A label on each entry', add: 'Add account' },
     { list: 'DELIVERY_STATUS', title: 'Delivery statuses', sub: 'Dispatch and acceptance of an income invoice', add: 'Add status' },
     { list: 'BILL_TYPE', title: 'Bill types', sub: 'The first choice on every bill / expense', add: 'Add bill type' },
     { list: 'BILL_TREATMENT', title: 'Accounting treatments', sub: 'How a bill is treated. A label for now: bills post as expenses', add: 'Add treatment' },
@@ -208,7 +249,10 @@ export class SettingsLists {
     return out;
   });
   protected simpleColumns: TableColumn<Lookup>[] = [
-    { id: 'code', label: 'Name', value: (l) => l.code, sub: (l) => [l.flags?.['required'] ? 'Required' : null, l.description || null].filter(Boolean).join(' · ') || null },
+    {
+      id: 'code', label: 'Name', value: (l) => l.code,
+      sub: (l) => [monthsText(l), l.flags?.['required'] ? 'Required' : null, l.meta?.['pictureId'] ? 'Picture' : null, l.description || null].filter(Boolean).join(' · ') || null,
+    },
     { id: 'status', label: 'Status', kind: 'tag', value: (l) => (l.active ? 'Active' : 'Switched off'), tone: (l): Tone => (l.active ? 'success' : 'neutral') },
   ];
 

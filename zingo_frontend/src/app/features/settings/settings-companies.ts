@@ -7,6 +7,8 @@ import { Btn, ConfirmService, DataTable, RowAction, RowActionEvent, TableColumn,
 import { CompanyForm } from './company-form';
 import { Company, SettingsApi } from './settings.api';
 
+const MONTH_SHORT = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
 /** The companies of the group: add, edit, make primary, delete. */
 @Component({
   selector: 'app-settings-companies',
@@ -42,6 +44,12 @@ export class SettingsCompanies {
   protected columns: TableColumn<Company>[] = [
     { id: 'name', label: 'Company', value: (c) => c.name, sub: (c) => c.legalName || null },
     { id: 'contact', label: 'Contact', priority: 2, value: (c) => c.poc || c.phone || c.email || null, sub: (c) => (c.taxNo ? `NTN ${c.taxNo}` : null) },
+    {
+      id: 'place', label: 'Location', priority: 2,
+      value: (c) => [c.city, c.state, c.market === 'International' ? c.country : null].filter(Boolean).join(', ') || (c.market === 'International' ? c.country : 'Pakistan'),
+      sub: (c) => [c.market ?? 'Local', c.market === 'International' ? c.region || null : null].filter(Boolean).join(' · '),
+    },
+    { id: 'money', label: 'Currency', priority: 3, value: (c) => c.currency || 'PKR', sub: (c) => `Year from ${MONTH_SHORT[(c.fiscalMonth || 7) - 1]}` },
     { id: 'status', label: 'Status', kind: 'tag', value: (c) => (c.primary ? 'Primary' : c.active ? 'Active' : 'Switched off') },
   ];
   protected actions = (c: Company): RowAction[] => !this.canEdit() ? [] : [

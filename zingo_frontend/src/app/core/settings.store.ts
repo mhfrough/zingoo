@@ -13,11 +13,16 @@ export type LookupList =
   | 'LOAN_TENURE' | 'REPAY_PLAN' | 'REPAY_FREQUENCY' | 'ADVANCE_PURPOSE' | 'SETTLEMENT_METHOD' | 'BANK_ACCOUNT' | 'DELIVERY_STATUS' | 'BILL_TYPE' | 'BILL_TREATMENT' | 'APPROVER' | 'FLAVOUR' | 'PACKET_SIZE' | 'BANK' | 'ORDER_STAGE' | 'DIST_CLASSIFICATION' | 'KYC_DOC_TYPE' | 'REMITTANCE_METHOD' | 'CERT_TYPE' | 'EXPORT_DOC_TYPE' | 'CONTAINER_UNIT';
 
 /** One entry of an editable pick-list (payment methods, Incoterms, capital sources, stream types, people). */
+/** a bank or cash account of the company itself (accounts of investors and partners are kept for reference) */
+export const isCompanyAccount = (l: Lookup) => !l.meta?.['ownerType'] || l.meta['ownerType'] === 'Company';
+
 export interface Lookup {
   id: string;
   list: LookupList;
   code: string;
   description: string;
+  /** the rich-text description of the loan lists and certificate types */
+  notes?: string;
   /** Incoterm cost lines, capital source { liability }, stream type { depreciable } */
   flags: Record<string, boolean>;
   /** an investor account: { company, poc } */
@@ -64,7 +69,12 @@ export class SettingsStore {
   readonly streamTypes = computed(() => this.lookups().filter((l) => l.list === 'STREAM_TYPE' && l.active));
   /** the active choices of a simple list (loan tenure, repayment plan, advance purpose, bank account ...) */
   options(list: LookupList) {
-    return this.lookups().filter((l) => l.list === list && l.active).map((l) => l.code);
+    return this.lookups().filter((l) => l.list === list && l.active && (list !== 'BANK_ACCOUNT' || isCompanyAccount(l))).map((l) => l.code);
+  }
+  /** the months set on an entry of a list (loan tenure length, months between instalments); null = not fixed */
+  monthsOf(list: 'LOAN_TENURE' | 'REPAY_FREQUENCY', code: string | null | undefined): number | null {
+    const m = Number(this.lookups().find((l) => l.list === list && l.code === code)?.meta?.['months']);
+    return m > 0 ? m : null;
   }
   readonly loanTenures = computed(() => this.options('LOAN_TENURE'));
   readonly repayPlans = computed(() => this.options('REPAY_PLAN'));

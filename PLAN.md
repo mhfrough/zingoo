@@ -458,3 +458,21 @@ Progress (2026-11-18): J1-J5 built, API checks 939/939 (18 new J checks), not ye
 - J4: `POST production-shipments/receive-dispatch` (receives every load, damaged bundles become claims with the photos, note required for a dispute); "Receive delivery" panel (delivery facts, voucher, Ordered / Delivered / Damaged by manufacturer / Damaged on arrival, dispute with photos, Accept delivery or Receive and open dispute).
 - J5: order panel shows Ready and Damaged in production; money and before/after damage on the ready containers.
 
+
+## 18. Client meeting (2026-11-19, handwritten sheet + notes)
+Full cleaned notes and answers: `instruction and plans/client-meeting-2026-11-19-plan.md`. Answers: company form = company fields + optional Money and approvals (Operations and Document numbers stay global); unit chain Piece -> Packet -> Bundle -> Bora / Bag / Carton, Truck / Container on top; packaging and printing fees per product; a distributor payment counts straight away (admin can reverse).
+
+| Phase | Scope |
+| --- | --- |
+| K1 Settings | Company: Local / International, region, country, state, city, financial year, currency, optional two signatures / signatories / capital target. Lists: "Description" everywhere, rich text on loan lists and certificate types; loan tenure length (3, 4 ... months, custom, open); repayment frequency period (monthly, quarterly, half-yearly, yearly, every N months, agreed per loan) and the instalment count on the loan form; certificate picture; local payment methods beside international remittance methods; bank and cash accounts with kind (bank / cash counter), owner (company, investor, distributor, manufacturer) and bank details. |
+| K2 Products | Piece level, truck level, rate table per unit, manufacturer vs distributor rate audit, packaging + printing formula on product and order. |
+| K3 Distributor form | Section order, point of contact as its own section. |
+| K4 Auto numbers | Order / product / invoice numbers prefilled, editable, duplicate check. |
+| K5 Order stock | Read-only bag / truck, half load, no planned transport, compact, advance proof section. |
+| K6 Distributor portal | Hide manufacturer name and advance, status renames, invoices table with Pay / Details modals, damage columns, one claim per order. |
+| K7 Manufacturer portal | Report progress redesign, no production damage, counter cards, payment request on the row, one accept / proof panel, voucher modal. |
+| K8 | Checks, browser test, deploy. |
+
+Progress (2026-11-19): K1 built.
+- Backend: `Company.fiscalMonth / market / region / country / state / city / currency / approvalThreshold / signatoryA / signatoryB / capitalTarget` (local forces Pakistan, currency must exist). `Lookup.notes` (text; rich lists store the HTML there and its plain start in `description`; a new column because changing the old column's type would make the schema sync drop it). List meta: LOAN_TENURE / REPAY_FREQUENCY `months`, CERT_TYPE `pictureId / pictureName` (image only, attached to the entry), BANK_ACCOUNT `kind / ownerType / ownerId / ownerName / bank / title / account / branch`. Old accounts become the company's; standard frequencies get their months. Money can only move through a company-owned account.
+- Frontend: company form sections (Company, Location and money, Money and approvals optional, Status), companies table Location and Currency columns, lookup form fields per list, Settings lists layout, loan form shows "N instalments · T months ÷ every F months".

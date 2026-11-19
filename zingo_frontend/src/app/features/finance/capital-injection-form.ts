@@ -437,6 +437,11 @@ type StreamForm = ReturnType<typeof streamGroup>;
               </select>
             </app-field>
           }
+          @if (instalments(); as n) {
+            <div class="notice field--wide" data-tone="info">
+              <strong>{{ n.count }} instalments</strong> · {{ n.tenure }} months ÷ every {{ n.every }} {{ n.every === 1 ? 'month' : 'months' }}
+            </div>
+          }
           <app-field label="Annual markup %" hint="0 for an interest-free loan. Markup is booked when it is paid">
             <app-money-input formControlName="markupPct" currency="" [decimals]="2" [max]="100" />
           </app-field>
@@ -555,6 +560,14 @@ export class CapitalInjectionForm extends FormModal {
   protected paidOut = computed(() => this.kind() === 'advance' && this.value().direction === 'out');
   /** a loan repaid in installments has a frequency */
   protected showFrequency = computed(() => /install/i.test(this.value().repaymentPlan ?? ''));
+  /** tenure months ÷ months between instalments, when both are fixed in Settings */
+  protected instalments = computed(() => {
+    const v = this.value();
+    if (!this.showFrequency()) return null;
+    const tenure = this.store.monthsOf('LOAN_TENURE', v.tenure);
+    const every = this.store.monthsOf('REPAY_FREQUENCY', v.repaymentFrequency);
+    return tenure && every ? { tenure, every, count: Math.ceil(tenure / every) } : null;
+  });
   protected summary = computed(() => {
     const v = this.value();
     const allocated = round2((v.investors ?? []).reduce((n, i) => n + (Number(i?.amount) || 0), 0));

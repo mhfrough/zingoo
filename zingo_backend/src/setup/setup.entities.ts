@@ -198,6 +198,10 @@ export class Lookup extends AppEntity {
   @Column({ type: 'varchar', length: 250, default: '' })
   description: string;
 
+  /** a longer description in the rich-text editor (loan lists, certificate types); description keeps its plain start */
+  @Column({ type: 'text', default: '' })
+  notes: string;
+
   /** switches of the list: Incoterm cost lines, capital source { liability }, stream type { depreciable } */
   @Column({ type: 'jsonb', default: () => "'{}'" })
   flags: Record<string, boolean>;

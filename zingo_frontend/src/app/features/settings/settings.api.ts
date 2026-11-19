@@ -12,6 +12,17 @@ export interface Company {
   phone: string;
   email: string;
   poc: string;
+  fiscalMonth: number;
+  market: 'Local' | 'International';
+  region: string;
+  country: string;
+  state: string;
+  city: string;
+  currency: string;
+  approvalThreshold: number | null;
+  signatoryA: string;
+  signatoryB: string;
+  capitalTarget: number | null;
   primary: boolean;
   active: boolean;
 }

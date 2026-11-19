@@ -2,6 +2,7 @@ import { BadRequestException, Injectable, OnApplicationBootstrap } from '@nestjs
 import { InjectRepository } from '@nestjs/typeorm';
 import { DeepPartial, Not, Repository } from 'typeorm';
 import { CrudService } from '../common/crud.service';
+import { Currency } from '../setup/setup.entities';
 import { SettingsService } from '../setup/setup.service';
 import { Company } from './company.entity';
 
@@ -30,7 +31,28 @@ export class CompaniesService extends CrudService<Company> implements OnApplicat
     if (primary && primary.name !== s.companyName) await this.repo.update({ id: primary.id }, { name: s.companyName });
   }
 
+  /** a local company is in Pakistan; an international one names its country; the currency must be on Settings */
+  private async clean(dto: DeepPartial<Company>, before?: Company) {
+    const market = dto.market ?? before?.market ?? 'Local';
+    if (market === 'Local') {
+      dto.country = 'Pakistan';
+      dto.region = '';
+    } else if (dto.market !== undefined || dto.country !== undefined) {
+      const country = String(dto.country ?? before?.country ?? '').trim();
+      if (!country || country === 'Pakistan') throw new BadRequestException('Choose the country of an international company.');
+      dto.country = country;
+    }
+    if (dto.currency !== undefined) {
+      dto.currency = String(dto.currency).toUpperCase();
+      if (!(await this.repo.manager.findOne(Currency, { where: { code: dto.currency } }))) {
+        throw new BadRequestException(`Currency ${dto.currency} is not on Settings & Data. Add it there first.`);
+      }
+    }
+    return dto;
+  }
+
   async create(dto: DeepPartial<Company>) {
+    await this.clean(dto);
     const first = !(await this.repo.count());
     const row = await super.create({ ...dto, primary: first || !!dto.primary, active: first || dto.primary ? true : dto.active ?? true });
     if (row.primary) await this.makePrimary(row);
@@ -41,6 +63,7 @@ export class CompaniesService extends CrudService<Company> implements OnApplicat
     const before = await this.findOne(id);
     if (before.primary && dto.primary === false) throw new BadRequestException('Make another company primary first.');
     if ((before.primary || dto.primary) && dto.active === false) throw new BadRequestException('The primary company stays active.');
+    await this.clean(dto, before);
     const row = await super.update(id, dto);
     if (row.primary) await this.makePrimary(row);
     return row;

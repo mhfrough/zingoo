@@ -61,7 +61,12 @@ export class ProductsService extends CrudService<Product> {
   private settle(dto: DeepPartial<Product>, before: Product | null) {
     if (dto.sku) dto.sku = String(dto.sku).trim();
     if (dto.packagings) {
-      const list = (dto.packagings as PackagingTemplate[]).map((t) => ({ ...t, name: t.name.trim(), containerUnit: t.containerUnit?.trim() || null }));
+      const list = (dto.packagings as PackagingTemplate[]).map((t) => ({
+        ...t, name: t.name.trim(), containerUnit: t.containerUnit?.trim() || null,
+        piecesPerPacket: Math.max(1, Number(t.piecesPerPacket) || 1),
+        containersPerTruck: t.containersPerTruck ? Number(t.containersPerTruck) : null,
+        transportUnit: t.transportUnit?.trim() || null,
+      }));
       const names = new Set(list.map((t) => t.name.toLowerCase()));
       if (names.size !== list.length) throw new BadRequestException('Give each packaging template its own name.');
       const defaults = list.filter((t) => t.isDefault).length;
@@ -83,7 +88,9 @@ export class ProductsService extends CrudService<Product> {
       dto.packagings = list;
     }
     if (dto.makers) {
-      const list = (dto.makers as ProductMaker[]).map((m) => ({ manufacturerId: m.manufacturerId, rate: Number(m.rate), isDefault: !!m.isDefault }));
+      const list = (dto.makers as ProductMaker[]).map((m) => ({
+        manufacturerId: m.manufacturerId, rate: Number(m.rate), packagingFee: Number(m.packagingFee ?? 0), printingFee: Number(m.printingFee ?? 0), isDefault: !!m.isDefault,
+      }));
       if (new Set(list.map((m) => m.manufacturerId)).size !== list.length) throw new BadRequestException('A manufacturer is on the list twice.');
       const defaults = list.filter((m) => m.isDefault).length;
       if (defaults > 1) throw new BadRequestException('Only one manufacturer can be the default.');
@@ -137,6 +144,8 @@ export class ProductsService extends CrudService<Product> {
     for (const t of (dto.packagings ?? []) as PackagingTemplate[]) {
       const old = before?.packagings?.find((x) => x.name === t.name)?.containerUnit;
       if (t.containerUnit && t.containerUnit !== old) await this.lookups.assertActive('CONTAINER_UNIT', t.containerUnit);
+      const oldTruck = before?.packagings?.find((x) => x.name === t.name)?.transportUnit;
+      if (t.transportUnit && t.transportUnit !== oldTruck) await this.lookups.assertActive('TRANSPORT_UNIT', t.transportUnit);
     }
     const em = this.repo.manager;
     for (const m of (dto.makers ?? []) as { manufacturerId: string }[]) {

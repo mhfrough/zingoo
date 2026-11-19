@@ -15,12 +15,12 @@ import { Observable, map } from 'rxjs';
 /** fields a distributor login never receives, wherever they are */
 const HIDE_FROM_DISTRIBUTOR = new Set([
   'manufacturerRate', 'packagingRate', 'printingRate', 'inboundRate', 'outboundRate', 'unitCost', 'costRate', 'cost', 'margin',
-  'minMarginPct', 'profitAllocationPerPack', 'valueInProduction', 'makers',
+  'minMarginPct', 'profitAllocationPerPack', 'valueInProduction', 'makers', 'baseRate', 'packagingFee', 'printingFee',
 ]);
 /** fields a manufacturer login never receives, wherever they are */
 const HIDE_FROM_MANUFACTURER = new Set([
   'saleRate', 'standardRate', 'minMarginPct', 'unitCost', 'costRate', 'margin', 'packagingRate', 'printingRate', 'inboundRate',
-  'outboundRate', 'profitAllocationPerPack', 'spread', 'spreadPct', 'makers',
+  'outboundRate', 'profitAllocationPerPack', 'spread', 'spreadPct', 'makers', 'saleValue',
 ]);
 
 type Obj = Record<string, unknown>;

@@ -27,16 +27,22 @@ export class PartnerBankAccountDto {
 /** one saved way of packing a product */
 export class PackagingTemplateDto {
   @IsString() @IsNotEmpty() @MaxLength(60) name: string;
+  @IsOptional() @IsInt() @Min(1) @Max(100000) piecesPerPacket?: number;
   @IsInt() @Min(1) @Max(100000) packetsPerBundle: number;
   @IsInt() @Min(1) @Max(100000) bundlesPerContainer: number;
   /** Carton, Bora (Settings list CONTAINER_UNIT) */
   @IsOptional() @IsString() @MaxLength(40) containerUnit?: string | null;
+  @IsOptional() @IsInt() @Min(1) @Max(100000) containersPerTruck?: number | null;
+  /** Truck, Container 20 ft (Settings list TRANSPORT_UNIT) */
+  @IsOptional() @IsString() @MaxLength(40) transportUnit?: string | null;
   @IsBoolean() isDefault: boolean;
 }
 
 export class ProductMakerDto {
   @IsUUID() manufacturerId: string;
   @IsNumber() @Min(0) rate: number;
+  @IsOptional() @IsNumber() @Min(0) packagingFee?: number;
+  @IsOptional() @IsNumber() @Min(0) printingFee?: number;
   @IsBoolean() isDefault: boolean;
 }
 

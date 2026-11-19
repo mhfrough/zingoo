@@ -1,6 +1,6 @@
 import { ChangeDetectionStrategy, Component, computed, inject, input, output, signal } from '@angular/core';
 import { errorText } from '../../shared/errors';
-import { docDate, subLine, fmtDate, fmtMoney, fmtNumber, productLabel, qtyLabel } from '../../shared/format';
+import { Tone, docDate, subLine, fmtDate, fmtMoney, fmtNumber, productLabel, qtyLabel } from '../../shared/format';
 import { Btn, ConfirmService, DataTable, RowAction, RowActionEvent, TableColumn, ToastService } from '../../ui';
 import { Distributor, Manufacturer, Product } from '../ops/models';
 import { AcceptOrderForm, OrderReasonForm, OrderStageForm, OrderTimeline } from './answer-forms';
@@ -103,6 +103,16 @@ export class OrdersPanel {
       ? { id: 'who', label: 'Manufacturer', priority: 2, value: (o) => o.manufacturer.name, sub: (o) => (o.dueDate ? `due ${fmtDate(o.dueDate)}` : null) }
       : { id: 'who', label: 'Due date', priority: 2, value: (o) => (o.dueDate ? fmtDate(o.dueDate) : 'No date'), sortValue: (o) => o.dueDate ?? '' },
     { id: 'value', label: 'Order value', kind: 'money', value: (o) => groupTotals(o).value, sub: (o) => `Advance ${o.advancePct}% · ${fmtMoney(groupTotals(o).advance)}`, priority: 2 },
+    ...(this.mode() === 'company' ? [{
+      id: 'margin', label: 'Margin', kind: 'money' as const, priority: 2 as const,
+      value: (o: OrderRow) => groupTotals(o).margin,
+      valueTone: (o: OrderRow): Tone => ((groupTotals(o).margin ?? 0) < 0 ? 'danger' : 'success'),
+      sub: (o: OrderRow) => {
+        const t = groupTotals(o);
+        return t.inflow === null ? null : `In ${fmtMoney(t.inflow)} · Out ${fmtMoney(t.value)}`;
+      },
+      tip: () => 'Inflow: what the distributor pays for these goods (its agreed rate, else the distributor price). Outflow: what the manufacturer is paid. Margin = inflow − outflow.',
+    }] : []),
     {
       id: 'status', label: 'Status', kind: 'tag', value: (o) => orderState(o), tone: (o) => (o.overdue ? 'danger' : ORDER_TONE[o.status]),
       sub: (o) => (o.overdue ? `Late · due ${fmtDate(o.dueDate!)}` : o.readyDate ? `Ready by ${fmtDate(o.readyDate)}` : null),

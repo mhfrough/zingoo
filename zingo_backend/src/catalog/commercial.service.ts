@@ -2,7 +2,7 @@ import { BadRequestException, ConflictException, ForbiddenException, Injectable,
 import { InjectDataSource } from '@nestjs/typeorm';
 import { DataSource, EntityManager, In } from 'typeorm';
 import { Currency } from '../setup/setup.entities';
-import { Distributor, DistributorPrice, PriceUnit, Product } from './catalog.entities';
+import { Distributor, DistributorPrice, PriceUnit, Product, defaultMakerFees } from './catalog.entities';
 import { CreateDistributorPriceDto, DistributorCreditDto } from './catalog.dto';
 import { RegistrationUser } from './registration.service';
 
@@ -14,9 +14,9 @@ const dayBefore = (iso: string) => {
 };
 const round = (n: number, dp = 2) => Math.round(n * 10 ** dp) / 10 ** dp;
 
-/** what one pack costs Zen Foods, in PKR, before any distributor margin */
+/** what one pack costs Zen Foods, in PKR, before any distributor margin (the default maker's packaging and printing included) */
 export const costPerPack = (p: Product) =>
-  Number(p.manufacturerRate) + Number(p.packagingRate) + Number(p.printingRate) + Number(p.inboundRate) + Number(p.outboundRate);
+  Number(p.manufacturerRate) + defaultMakerFees(p) + Number(p.packagingRate) + Number(p.printingRate) + Number(p.inboundRate) + Number(p.outboundRate);
 
 /**
  * The commercial side of an international distributor (spec sections 3 and 4): Finance-approved credit, verified

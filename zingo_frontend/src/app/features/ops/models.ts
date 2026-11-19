@@ -4,10 +4,25 @@ import { AttachmentMeta } from '../../core/attachments.api';
 /** one saved way of packing a product */
 export interface PackagingTemplate {
   name: string;
+  /** pieces inside one packet (1 = the packet is the piece) */
+  piecesPerPacket?: number;
   packetsPerBundle: number;
   bundlesPerContainer: number;
   /** what one container of this packing is called (Settings list CONTAINER_UNIT): Carton, Bora */
   containerUnit?: string | null;
+  /** containers in one full truck / shipping container */
+  containersPerTruck?: number | null;
+  /** Truck, Container 20 ft (Settings list TRANSPORT_UNIT) */
+  transportUnit?: string | null;
+  isDefault: boolean;
+}
+
+/** one manufacturer of a SKU: its rate and the packaging and printing it charges, per packet */
+export interface ProductMaker {
+  manufacturerId: string;
+  rate: number;
+  packagingFee?: number;
+  printingFee?: number;
   isDefault: boolean;
 }
 
@@ -37,7 +52,7 @@ export interface Product {
   flavour: string | null;
   packetSize: string | null;
   /** every manufacturer that can make it, each at its own rate; the default is also manufacturerId / manufacturerRate */
-  makers?: { manufacturerId: string; rate: number; isDefault: boolean }[];
+  makers?: ProductMaker[];
   /** what a container of this SKU is called (Settings list CONTAINER_UNIT): Carton, Bora */
   containerUnit?: string | null;
   description: string | null;

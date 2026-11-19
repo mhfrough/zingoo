@@ -32,6 +32,11 @@
       text-transform: uppercase;
       color: var(--text-3);
     }
+
+    /* a worked-out price line inside a form: its own full row */
+    & > .formula {
+      grid-column: 1 / -1;
+    }
   }
 
   .field {
@@ -1520,5 +1525,40 @@
     & a {
       color: var(--accent-text);
     }
+  }
+
+  /* a worked-out price: "Rate 4.25 + Packaging 0.30 + Printing 0.20 = 4.75 per packet" */
+  .formula {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: var(--space-1) var(--space-3);
+    padding: var(--space-2) var(--space-3);
+    border: 1px solid var(--tone-success-line);
+    border-radius: var(--radius);
+    background: var(--tone-success-bg);
+    font-size: var(--text-sm);
+    color: var(--text-2);
+    font-variant-numeric: tabular-nums;
+
+    & strong {
+      color: var(--text);
+    }
+
+    & .formula__total {
+      margin-inline-start: auto;
+      color: var(--tone-success-fg);
+
+      & strong {
+        font-size: var(--text-lg);
+        color: var(--tone-success-fg);
+      }
+    }
+  }
+
+  /* an important figure called out in bold green */
+  .info-figure {
+    font-weight: var(--weight-semibold);
+    color: var(--tone-success-fg);
   }
 }

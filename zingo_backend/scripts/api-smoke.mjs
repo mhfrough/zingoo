@@ -1976,5 +1976,36 @@ const k1Cert = await call(T.owner, 'POST', '/lookups', { list: 'CERT_TYPE', code
 ok('a certificate type keeps its picture and description', k1Cert.status === 201 && k1Cert.json?.meta?.pictureName === 'halal-sample.png' && k1Cert.json?.description === 'Issued by the board', JSON.stringify(k1Cert.json));
 for (const r of [k1Ten, k1Acc, k1Cash, k1Cert]) if (r.json?.id) await call(T.owner, 'PATCH', `/lookups/${r.json.id}`, { active: false });
 
+// ---------- K2: piece and truck levels, manufacturer packaging + printing, inflow / outflow / margin ----------
+const k2Stamp = Date.now().toString(36).slice(-5).toUpperCase();
+const k2Maker = await login('manufacturer@demo.local');
+const k2MakerId = (await call(k2Maker, 'GET', '/auth/me')).json?.manufacturerId;
+const k2DistId = (await call(T.dist, 'GET', '/auth/me')).json?.distributorId;
+const k2Tpl = { name: 'K2 Bora', piecesPerPacket: 12, packetsPerBundle: 6, bundlesPerContainer: 8, containerUnit: 'Bora', containersPerTruck: 100, transportUnit: 'Truck', isDefault: true };
+const k2Base = {
+  sku: `K2-${k2Stamp}`, name: `K2 Test ${k2Stamp}`, pack: 10, mrp: 10, rate: 5, packsPerCarton: 6, bundlesPerContainer: 8, distributorIds: [k2DistId], packagings: [k2Tpl],
+  makers: [{ manufacturerId: k2MakerId, rate: 4, packagingFee: 0.3, printingFee: 0.2, isDefault: true }],
+};
+ok('a full load must be a transport unit from Settings', (await call(T.owner, 'POST', '/products', { ...k2Base, sku: `K2X-${k2Stamp}`, packagings: [{ ...k2Tpl, transportUnit: 'Camel' }] })).status === 400);
+const k2P = await call(T.owner, 'POST', '/products', k2Base);
+const k2T = k2P.json?.packagings?.[0];
+ok('a packaging template keeps pieces per packet and containers per truck', k2P.status === 201 && k2T?.piecesPerPacket === 12 && k2T?.containersPerTruck === 100 && k2T?.transportUnit === 'Truck', JSON.stringify(k2P.json?.packagings));
+ok('a maker keeps its packaging and printing; the default rate stays the base rate', k2P.json?.makers?.[0]?.packagingFee === 0.3 && k2P.json?.makers?.[0]?.printingFee === 0.2 && k2P.json?.manufacturerRate === 4, JSON.stringify(k2P.json?.makers));
+const k2O = await call(T.owner, 'POST', '/production-orders', { date: kDay, productId: k2P.json?.id, containers: 2 });
+const k2o = k2O.json;
+ok('an order is priced at rate + packaging + printing', k2O.status === 201 && k2o?.rate === 4.5 && k2o?.baseRate === 4 && k2o?.packagingFee === 0.3 && k2o?.printingFee === 0.2, JSON.stringify(k2o && [k2o.rate, k2o.baseRate, k2o.packagingFee, k2o.printingFee]));
+ok('the order keeps the piece and truck figures of its packing', k2o?.piecesPerPacket === 12 && k2o?.containersPerTruck === 100 && k2o?.transportUnit === 'Truck' && k2o?.packets === 2 * 8 * 6);
+const k2Edit = await call(T.owner, 'PATCH', `/production-orders/${k2o?.id}`, { rate: 4.1 });
+ok('a changed rate keeps the packaging and printing on top', k2Edit.json?.rate === 4.6 && k2Edit.json?.baseRate === 4.1, JSON.stringify(k2Edit.json && [k2Edit.json.rate, k2Edit.json.baseRate]));
+ok('the draft is sent to the manufacturer', (await call(T.owner, 'POST', `/production-orders/${k2o?.id}/send`)).status === 201);
+const k2Row = ((await call(T.owner, 'GET', '/production-orders')).json ?? []).find((o) => o.id === k2o?.id);
+ok('staff see inflow at the distributor price and the margin over the manufacturer', k2Row?.saleRate === 5 && k2Row?.saleValue === 480 && k2Row?.margin === Math.round((480 - k2Row.value) * 100) / 100, JSON.stringify(k2Row && [k2Row.saleRate, k2Row.saleValue, k2Row.value, k2Row.margin]));
+const k2Mine = ((await call(k2Maker, 'GET', '/production-orders')).json ?? []).find((o) => o.id === k2o?.id);
+ok('the manufacturer sees its formula but not the inflow or margin', k2Mine && k2Mine.baseRate === 4.1 && k2Mine.packagingFee === 0.3 && !('saleValue' in k2Mine) && !('margin' in k2Mine) && !('saleRate' in k2Mine), JSON.stringify(k2Mine && Object.keys(k2Mine)));
+const k2Theirs = (await call(T.dist, 'GET', `/production-orders/${k2o?.id}/detail`)).json?.order;
+ok('the distributor never sees the manufacturer\'s formula', k2Theirs && !('baseRate' in k2Theirs) && !('packagingFee' in k2Theirs) && !('rate' in k2Theirs) && !('margin' in k2Theirs), JSON.stringify(k2Theirs && Object.keys(k2Theirs)));
+if (k2o?.id) await call(T.owner, 'POST', `/production-orders/${k2o.id}/cancel`, { reason: 'K2 test' });
+if (k2P.json?.id) await call(T.owner, 'PATCH', `/products/${k2P.json.id}`, { active: false });
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

@@ -1,7 +1,7 @@
 import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectDataSource } from '@nestjs/typeorm';
 import { DataSource, EntityManager, In } from 'typeorm';
-import { Distributor, Manufacturer, Product } from '../catalog/catalog.entities';
+import { Distributor, Manufacturer, Product, makerTotal } from '../catalog/catalog.entities';
 import { round2 } from '../common/numeric.transformer';
 import { nextRef } from '../common/ref';
 import { Role } from '../common/enums';
@@ -72,7 +72,22 @@ export class ProductionOrdersService {
     if (scope) qb.andWhere('o.manufacturerId = :scope', { scope });
     if (this.isManufacturer(user)) qb.andWhere(`o.status <> 'Draft'`);
     const moved = await this.movedMap(this.db.manager);
-    return (await qb.getMany()).map((o) => this.shape(o, moved[o.id]));
+    const rows = await qb.getMany();
+    // staff also see what the distributor pays for the goods (inflow) against the manufacturer's price (outflow)
+    const sale = this.isManufacturer(user) ? {} : await this.saleRates(this.db.manager);
+    return rows.map((o) => this.shape(o, moved[o.id], sale));
+  }
+
+  /** the distributor's price per packet for every distributor and SKU: its agreed rate, else the product's */
+  private async saleRates(em: EntityManager): Promise<Record<string, number>> {
+    const [agreed, products]: [{ distributorId: string; productId: string; rate: number }[], { id: string; rate: number }[]] = await Promise.all([
+      em.query(`SELECT "distributorId", "productId", rate::float8 AS rate FROM distributor_rates`),
+      em.query(`SELECT id, rate::float8 AS rate FROM products`),
+    ]);
+    return {
+      ...Object.fromEntries(products.map((p) => [`*|${p.id}`, Number(p.rate)])),
+      ...Object.fromEntries(agreed.map((a) => [`${a.distributorId}|${a.productId}`, Number(a.rate)])),
+    };
   }
 
   async findOne(user: OrderUser, id: string) {
@@ -510,6 +525,14 @@ export class ProductionOrdersService {
     const repack = productChanged || dto.packaging !== undefined;
     const bundlesPerContainer = dto.bundlesPerContainer
       ?? (repack ? tpl?.bundlesPerContainer ?? product.bundlesPerContainer : before!.bundlesPerContainer);
+    // the maker's own rate, packaging and printing (each maker of the SKU has its own); a new maker or SKU starts from them
+    const maker = (product.makers ?? []).find((m) => m.manufacturerId === manufacturer.id);
+    const repriced = productChanged || manufacturer.id !== before?.manufacturerId;
+    const packagingFee = repriced ? Number(maker?.packagingFee ?? 0) : Number(before!.packagingFee ?? 0);
+    const printingFee = repriced ? Number(maker?.printingFee ?? 0) : Number(before!.printingFee ?? 0);
+    const baseRate = dto.rate ?? (repriced
+      ? Number(maker?.rate ?? product.manufacturerRate)
+      : Number(before!.baseRate ?? round2(Number(before!.rate) - packagingFee - printingFee)));
     const packetsPerBundle = dto.packetsPerBundle
       ?? (repack ? tpl?.packetsPerBundle ?? product.packsPerCarton : before!.packetsPerBundle);
 
@@ -523,10 +546,14 @@ export class ProductionOrdersService {
       containers: dto.containers ?? before!.containers,
       bundlesPerContainer,
       packetsPerBundle,
-      // the rate of the manufacturer picked (each maker of the SKU has its own); another manufacturer: the default rate
-      rate: dto.rate ?? (productChanged || manufacturer.id !== before?.manufacturerId
-        ? Number((product.makers ?? []).find((m) => m.manufacturerId === manufacturer.id)?.rate ?? product.manufacturerRate)
-        : before!.rate),
+      // the manufacturer's total per packet: its rate + packaging + printing
+      rate: makerTotal({ rate: baseRate, packagingFee, printingFee }),
+      baseRate,
+      packagingFee,
+      printingFee,
+      piecesPerPacket: repack ? Math.max(1, Number(tpl?.piecesPerPacket) || 1) : before!.piecesPerPacket ?? 1,
+      containersPerTruck: repack ? tpl?.containersPerTruck ?? null : before!.containersPerTruck ?? null,
+      transportUnit: repack ? tpl?.transportUnit ?? null : before!.transportUnit ?? null,
       advancePct: !before || manufacturer.id !== before.manufacturerId ? Number(manufacturer.advancePct ?? 0) : before.advancePct,
       dueDate,
       notes: dto.notes !== undefined ? dto.notes?.trim() || null : before?.notes ?? null,
@@ -544,12 +571,15 @@ export class ProductionOrdersService {
   }
 
   /** the order with its worked-out quantities and money */
-  private shape(o: ProductionOrder, moved?: { shipped: number; received: number }) {
+  private shape(o: ProductionOrder, moved?: { shipped: number; received: number }, sale?: Record<string, number>) {
     const bundles = o.containers * o.bundlesPerContainer;
     const packets = bundles * o.packetsPerBundle;
     const value = round2(packets * Number(o.rate));
+    const saleRate = sale && o.distributorId ? sale[`${o.distributorId}|${o.productId}`] ?? sale[`*|${o.productId}`] ?? null : null;
     return {
       ...o,
+      // inflow (what the distributor pays) and the margin over the manufacturer's price; staff only
+      ...(saleRate !== null ? { saleRate, saleValue: round2(packets * saleRate), margin: round2(packets * saleRate - value) } : {}),
       bundles,
       packets,
       value,

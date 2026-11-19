@@ -77,9 +77,33 @@ export class ProductionOrder extends AppEntity {
   @Column({ type: 'int' })
   packetsPerBundle: number;
 
-  /** agreed price per packet, PKR */
+  /** agreed price per packet, PKR: baseRate + packagingFee + printingFee */
   @Column({ type: 'decimal', precision: 12, scale: 4, transformer: numeric })
   rate: number;
+
+  /** the manufacturer's own rate per packet before packaging and printing (null on orders made before these were split) */
+  @Column({ type: 'decimal', precision: 12, scale: 4, nullable: true, transformer: numeric })
+  baseRate: number | null;
+
+  /** packaging the manufacturer charges per packet */
+  @Column({ type: 'decimal', precision: 12, scale: 4, default: 0, transformer: numeric })
+  packagingFee: number;
+
+  /** printing the manufacturer charges per packet */
+  @Column({ type: 'decimal', precision: 12, scale: 4, default: 0, transformer: numeric })
+  printingFee: number;
+
+  /** pieces in one packet of the packing used */
+  @Column({ type: 'int', default: 1 })
+  piecesPerPacket: number;
+
+  /** containers in one full truck of the packing used (null = not set) */
+  @Column({ type: 'int', nullable: true })
+  containersPerTruck: number | null;
+
+  /** Truck, Container 20 ft ... of the packing used */
+  @Column({ type: 'varchar', length: 40, nullable: true })
+  transportUnit: string | null;
 
   /** advance % agreed with the manufacturer at the time of the order */
   @Column({ type: 'decimal', precision: 5, scale: 2, default: 0, transformer: numeric })

@@ -1,7 +1,7 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectDataSource } from '@nestjs/typeorm';
 import { DataSource, EntityManager } from 'typeorm';
-import { Distributor, DistributorPrice, Product } from '../catalog/catalog.entities';
+import { Distributor, DistributorPrice, Product, defaultMakerFees } from '../catalog/catalog.entities';
 import { effectiveAgreement } from '../catalog/registration.service';
 import { checkMarket } from './market-check';
 import { StockService } from '../catalog/stock.service';
@@ -67,7 +67,7 @@ export class ExportsService {
   private async planningUnitCost(em: EntityManager, p: Product, packs: number): Promise<number> {
     const avg = await this.stock.unitCostFor(p.id, em);
     if (avg > 0) return avg;
-    const variable = Number(p.manufacturerRate) + Number(p.packagingRate) + Number(p.printingRate) + Number(p.inboundRate);
+    const variable = Number(p.manufacturerRate) + defaultMakerFees(p) + Number(p.packagingRate) + Number(p.printingRate) + Number(p.inboundRate);
     return round2(variable * packs);
   }
 

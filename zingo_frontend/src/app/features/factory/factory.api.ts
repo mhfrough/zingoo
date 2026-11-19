@@ -36,8 +36,19 @@ export interface ProductionOrder {
   packaging?: string | null;
   bundlesPerContainer: number;
   packetsPerBundle: number;
-  /** PKR per packet */
+  /** PKR per packet: baseRate + packagingFee + printingFee */
   rate: number;
+  /** the manufacturer's own rate before packaging and printing (empty on older orders) */
+  baseRate?: number | null;
+  packagingFee?: number;
+  printingFee?: number;
+  piecesPerPacket?: number;
+  containersPerTruck?: number | null;
+  transportUnit?: string | null;
+  /** staff only: what the distributor pays per packet, in total, and the margin over the manufacturer's price */
+  saleRate?: number;
+  saleValue?: number;
+  margin?: number;
   advancePct: number;
   dueDate: string | null;
   readyDate: string | null;
@@ -581,6 +592,9 @@ export function groupTotals(row: OrderRow) {
   return {
     containers: sum((o) => o.containers), bundles: sum((o) => o.bundles), packets: sum((o) => o.packets),
     value: sum((o) => o.value), advance: sum((o) => o.advanceAmount), shipped: sum((o) => o.shippedContainers), received: sum((o) => o.receivedContainers),
+    // staff only: what the distributor pays (inflow) and the margin over the manufacturer's price (outflow = value)
+    inflow: row.group.some((o) => typeof o.saleValue === 'number') ? sum((o) => o.saleValue ?? 0) : null,
+    margin: row.group.some((o) => typeof o.margin === 'number') ? sum((o) => o.margin ?? 0) : null,
   };
 }
 

@@ -1,7 +1,7 @@
 import { ChangeDetectionStrategy, Component, computed, inject, input, signal } from '@angular/core';
 import { takeUntilDestroyed, toSignal } from '@angular/core/rxjs-interop';
 import { ReactiveFormsModule, Validators } from '@angular/forms';
-import { fmtMoney, fmtNumber } from '../../shared/format';
+import { fmtAmount2, fmtMoney, fmtNumber } from '../../shared/format';
 import { Btn, Field, MoneyInput, Offcanvas, RichText, Select, SelectOption } from '../../ui';
 import { FormModal } from '../ops/form-modal';
 import { Distributor, Manufacturer, Product } from '../ops/models';
@@ -87,9 +87,15 @@ const today = () => new Date().toISOString().slice(0, 10);
             <app-select formControlName="distributorId" [options]="distributorOptions()" placeholder="Choose a distributor" [clearable]="false" />
           </app-field>
         }
-        <app-field label="Rate per packet (PKR)" hint="The manufacturer's price" [required]="true">
+        <app-field label="Manufacturer rate per packet (PKR)" hint="Before packaging and printing" [required]="true">
           <app-money-input formControlName="rate" />
         </app-field>
+        <div class="formula field--wide" aria-live="polite">
+          <span>Rate <strong>{{ amount(value().rate) }}</strong></span>
+          <span>+ Packaging <strong>{{ amount(fees().packaging) }}</strong></span>
+          <span>+ Printing <strong>{{ amount(fees().printing) }}</strong></span>
+          <span class="formula__total">= <strong>{{ amount(total()) }}</strong> per packet</span>
+        </div>
         <app-field label="Notes" [wide]="true">
           <app-rich-text formControlName="notes" [max]="2000" [storeMax]="2000" placeholder="Anything the manufacturer should know" />
         </app-field>
@@ -171,7 +177,17 @@ export class ProductionOrderForm extends FormModal {
     const per = same ? o!.packetsPerBundle : this.template()?.packetsPerBundle ?? this.product()?.packsPerCarton ?? 0;
     return this.bundles() * per;
   });
-  protected orderValue = computed(() => Math.round(this.packets() * Number(this.value().rate || 0) * 100) / 100);
+  /** the packaging and printing the chosen manufacturer charges: the order's own while it keeps its product and maker */
+  protected fees = computed(() => {
+    const o = this.order();
+    const v = this.value();
+    if (o && o.productId === v.productId && o.manufacturerId === v.manufacturerId) return { packaging: Number(o.packagingFee ?? 0), printing: Number(o.printingFee ?? 0) };
+    const m = (this.product()?.makers ?? []).find((x) => x.manufacturerId === v.manufacturerId);
+    return { packaging: Number(m?.packagingFee ?? 0), printing: Number(m?.printingFee ?? 0) };
+  });
+  /** what the manufacturer is paid per packet */
+  protected total = computed(() => Math.round((Number(this.value().rate || 0) + this.fees().packaging + this.fees().printing) * 10000) / 10000);
+  protected orderValue = computed(() => Math.round(this.packets() * this.total() * 100) / 100);
   protected advancePct = computed(() => {
     const o = this.order();
     if (o && o.manufacturerId === this.value().manufacturerId) return Number(o.advancePct);
@@ -181,6 +197,7 @@ export class ProductionOrderForm extends FormModal {
 
   protected num = fmtNumber;
   protected money = fmtMoney;
+  protected amount = fmtAmount2;
 
   constructor() {
     super();
@@ -201,6 +218,14 @@ export class ProductionOrderForm extends FormModal {
         rate: Number(p.manufacturerRate ?? 0),
       });
     });
+    // another manufacturer: its own rate for this SKU
+    this.form.controls.manufacturerId.valueChanges.pipe(takeUntilDestroyed()).subscribe((id) => {
+      const o = this.order();
+      const p = this.product();
+      if (!p || !id || (o && o.productId === p.id && o.manufacturerId === id)) return;
+      const m = (p.makers ?? []).find((x) => x.manufacturerId === id);
+      if (m) this.form.controls.rate.setValue(Number(m.rate));
+    });
   }
 
   protected reset() {
@@ -209,7 +234,7 @@ export class ProductionOrderForm extends FormModal {
     this.form.reset(o
       ? {
         productId: o.productId, date: o.date, containers: o.containers, packaging: o.packaging ?? '', dueDate: o.dueDate, manufacturerId: o.manufacturerId,
-        destination: o.destination, distributorId: o.distributorId, rate: Number(o.rate), notes: o.notes ?? '',
+        destination: o.destination, distributorId: o.distributorId, rate: Number(o.baseRate ?? o.rate), notes: o.notes ?? '',
       }
       : {
         productId: null, date: today(), containers: 1, packaging: '', dueDate: null, manufacturerId: null,

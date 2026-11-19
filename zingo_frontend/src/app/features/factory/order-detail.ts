@@ -2,7 +2,7 @@ import { ChangeDetectionStrategy, Component, computed, inject, input, signal } f
 import { rxResource } from '@angular/core/rxjs-interop';
 import { of } from 'rxjs';
 import { errorText } from '../../shared/errors';
-import { Tone, containersLabel, dueCountdown, fmtDate, fmtDateTime, fmtMoney, fmtNumber } from '../../shared/format';
+import { Tone, containersLabel, dueCountdown, fmtDate, fmtAmount2, fmtDateTime, fmtMoney, fmtNumber } from '../../shared/format';
 import { printVoucher } from '../../shared/print';
 import { Btn, ConfirmService, Help, IconComponent, PlainPipe, RichPipe, SkeletonText, Tag, ToastService } from '../../ui';
 import { AuthService } from '../../core/auth.service';
@@ -31,6 +31,16 @@ type StepState = 'done' | 'now' | 'next';
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [Btn, Help, IconComponent, PlainPipe, RichPipe, SkeletonText, Tag, OrderInvoiceForm],
   styles: `
+    .formula + .formula,
+    .formula + .facts {
+      margin-block-start: var(--space-2);
+    }
+
+    .formula__sku {
+      font-weight: var(--weight-semibold);
+      color: var(--text);
+    }
+
     :host {
       display: flex;
       flex-direction: column;
@@ -450,10 +460,19 @@ type StepState = 'done' | 'now' | 'next';
       @if (hasMoney(o)) {
         <section>
           <h4>Money
-            <app-help title="Money" text="Rate is the manufacturer's price per packet. The advance is the share of the order value paid before production; the rest follows its payment terms." />
+            <app-help title="Money" text="The manufacturer's price per packet is its rate plus the packaging and printing it charges. The advance is the share of the order value paid before production; the rest follows its payment terms." />
           </h4>
+          @for (l of d.lines?.length ? d.lines : [o]; track l.id) {
+            <div class="formula">
+              @if (multi(d)) { <span class="formula__sku">{{ l.product.sku }}</span> }
+              <span>Rate <strong>{{ amount(l.baseRate ?? l.rate) }}</strong></span>
+              <span>+ Packaging <strong>{{ amount(l.packagingFee ?? 0) }}</strong></span>
+              <span>+ Printing <strong>{{ amount(l.printingFee ?? 0) }}</strong></span>
+              <span>= <strong>{{ amount(l.rate) }}</strong> / packet × {{ num(l.packets) }}</span>
+              <span class="formula__total">= <strong>{{ money(l.value) }}</strong></span>
+            </div>
+          }
           <dl class="facts">
-            @if (!multi(d)) { <div><dt>Rate / packet</dt><dd>{{ money(o.rate) }}</dd></div> }
             <div><dt>Order value</dt><dd>{{ money(sumOf(d, 'value')) }}@if (dispatched(d)) { <small>{{ money(payableValue(d)) }} on the ready containers</small> }</dd></div>
             <div><dt>Advance {{ o.advancePct }}%</dt><dd>{{ money(sumOf(d, 'advanceAmount')) }}</dd></div>
           </dl>
@@ -719,6 +738,7 @@ export class OrderDetail {
   protected num = fmtNumber;
   protected unitLabel = containersLabel;
   protected money = fmtMoney;
+  protected amount = fmtAmount2;
   protected date = fmtDate;
   protected when = fmtDateTime;
 

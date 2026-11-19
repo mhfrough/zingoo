@@ -5,19 +5,41 @@ import { numeric } from '../common/numeric.transformer';
 /** one saved way of packing a product */
 export interface PackagingTemplate {
   name: string;
+  /** pieces inside one packet (1 = the packet is the piece) */
+  piecesPerPacket?: number;
   packetsPerBundle: number;
   bundlesPerContainer: number;
   /** what one container of this packing is called (Settings list CONTAINER_UNIT): Carton, Bora */
   containerUnit?: string | null;
+  /** containers (bags / cartons) in one full truck or shipping container; empty = not set */
+  containersPerTruck?: number | null;
+  /** what the full load is called (Settings list TRANSPORT_UNIT): Truck, Container 20 ft */
+  transportUnit?: string | null;
   isDefault: boolean;
 }
 
-/** one manufacturer that can make a SKU, at its own price per packet; one is the default for new orders */
+/**
+ * One manufacturer that can make a SKU, at its own price per packet; one is the default for new orders.
+ * The manufacturer may also charge for packaging and printing: its total per packet is rate + packaging + printing,
+ * and that total is what an order with it is priced at.
+ */
 export interface ProductMaker {
   manufacturerId: string;
   rate: number;
+  packagingFee?: number;
+  printingFee?: number;
   isDefault: boolean;
 }
+
+/** a maker's total per packet: its rate plus the packaging and printing it charges */
+export const makerTotal = (m: Pick<ProductMaker, 'rate' | 'packagingFee' | 'printingFee'>) =>
+  Math.round((Number(m.rate) + Number(m.packagingFee ?? 0) + Number(m.printingFee ?? 0)) * 10000) / 10000;
+
+/** the packaging and printing the default manufacturer charges per packet (on top of manufacturerRate) */
+export const defaultMakerFees = (p: Pick<Product, 'makers' | 'manufacturerId'>) => {
+  const d = (p.makers ?? []).find((m) => m.isDefault) ?? (p.makers ?? []).find((m) => m.manufacturerId === p.manufacturerId);
+  return Number(d?.packagingFee ?? 0) + Number(d?.printingFee ?? 0);
+};
 
 /** an uploaded file kept on a manufacturer or a distributor */
 export interface PartnerFile {

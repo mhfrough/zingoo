@@ -522,3 +522,5 @@ Progress (2026-11-19): K7 built (frontend only).
 
 Progress (2026-11-19): K8 checks. Fresh reseed: all 13 parity checks pass. Full API run 1006/1006 (one old check updated: a distributor no longer sees who makes a product). API and web production builds pass (web only size warnings).
 
+K8 done (2026-11-19): pushed main (cd32556: J1-J5 and K1-K8) and deployed on Render, zingo-api then zingo-web (Manual Deploy, latest commit; render.yaml unchanged so no Blueprint sync). Live API answers the new endpoints (refs, distributor-orders/money); live web bundle has the new screens.
+

@@ -6,7 +6,7 @@ import { AuthService } from '../../core/auth.service';
 import { LookupList, SettingsStore } from '../../core/settings.store';
 import { errorText } from '../../shared/errors';
 import { fmtAmount2, fmtNumber } from '../../shared/format';
-import { Btn, Field, MoneyInput, MultiSelect, Offcanvas, RichText, Select, SelectOption, ToastService } from '../../ui';
+import { Btn, Field, MoneyInput, MultiSelect, Offcanvas, RefInput, RichText, Select, SelectOption, ToastService } from '../../ui';
 import { FormModal } from '../ops/form-modal';
 import { Distributor, Manufacturer, PackagingTemplate, Product, ProductMaker } from '../ops/models';
 import { PricingApi } from '../pricing/pricing.api';
@@ -28,7 +28,7 @@ const r4 = (n: number) => Math.round(n * 10000) / 10000;
 @Component({
   selector: 'app-product-form',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [MoneyInput, ReactiveFormsModule, Offcanvas, Field, Btn, Select, MultiSelect, RichText],
+  imports: [MoneyInput, ReactiveFormsModule, Offcanvas, Field, Btn, Select, MultiSelect, RichText, RefInput],
   template: `
     <app-offcanvas #oc [(open)]="open" [title]="product() ? 'Edit product / SKU' : copyOf() ? 'Duplicate ' + copyOf()!.sku : 'Add product / SKU'"
                subtitle="Rates are per packet, in PKR." size="xl" [dirty]="form.dirty">
@@ -39,8 +39,8 @@ const r4 = (n: number) => Math.round(n * 10000) / 10000;
         <section class="block">
           <header><h3>Product</h3><p>What it is. Flavours and packet sizes are lists in Settings &amp; Data.</p></header>
           <div class="form-grid">
-            <app-field label="SKU code" [required]="true" [error]="invalid('sku') ? 'Enter the SKU code' : null" hint="Unique; letter case does not matter">
-              <input type="text" formControlName="sku" placeholder="Z10-MAS" />
+            <app-field label="SKU code" [required]="true" [error]="invalid('sku') ? 'Enter the SKU code' : null">
+              <app-ref-input formControlName="sku" kind="product" [except]="product()?.id" />
             </app-field>
             <app-field label="Product name" [required]="true" [error]="invalid('name') ? 'Enter the name' : null">
               <input type="text" formControlName="name" placeholder="Masala Masti" />

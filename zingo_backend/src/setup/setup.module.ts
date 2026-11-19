@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { LookupsService } from './lookups.service';
+import { RefsController } from './refs.controller';
 import { SetupController } from './setup.controller';
 import { Account, Category, ContainerType, Currency, CurrencyRate, Lookup, Setting } from './setup.entities';
 import { AccountsService, CatalogListsService, CategoriesService, SettingsService } from './setup.service';
@@ -8,7 +9,7 @@ import { AccountsService, CatalogListsService, CategoriesService, SettingsServic
 /** Everything the client controls from Settings & Data: assumptions, currencies, containers, lists and categories. */
 @Module({
   imports: [TypeOrmModule.forFeature([Setting, Currency, CurrencyRate, Account, Category, ContainerType, Lookup])],
-  controllers: [SetupController],
+  controllers: [SetupController, RefsController],
   providers: [SettingsService, AccountsService, CategoriesService, CatalogListsService, LookupsService],
   exports: [SettingsService, AccountsService, CategoriesService, LookupsService],
 })

@@ -15,7 +15,10 @@ const LOCALES = [
 ] as const;
 const PREFIXES = [
   ['sales', 'Sales orders'], ['batch', 'Production batches'], ['finance', 'Finance entries'], ['accounting', 'Income and expense documents'], ['export', 'Export containers'],
+  ['production', 'Production orders'], ['distOrder', 'Distributor orders'], ['product', 'Product SKU codes'], ['mfrRequest', 'Manufacturer invoices'],
 ] as const;
+/** the prefix each one starts with when Settings has none saved yet */
+const PREFIX_DEFAULTS: Record<string, string> = { production: 'MO', distOrder: 'DO', product: 'SKU', mfrRequest: 'PR' };
 
 /** "15, 30, 45" -> [15, 30, 45] */
 const numbers = (text: string) => text.split(/[,\s]+/).filter(Boolean).map(Number);
@@ -185,7 +188,9 @@ export class SettingsGeneral {
     docPrefixes: this.fb.nonNullable.group({
       sales: ['', Validators.pattern(/^[A-Za-z]{1,6}$/)], batch: ['', Validators.pattern(/^[A-Za-z]{1,6}$/)],
       finance: ['', Validators.pattern(/^[A-Za-z]{1,6}$/)], accounting: ['', Validators.pattern(/^[A-Za-z]{1,6}$/)],
-      export: ['', Validators.pattern(/^[A-Za-z]{1,6}$/)],
+      export: ['', Validators.pattern(/^[A-Za-z]{1,6}$/)], production: ['', Validators.pattern(/^[A-Za-z]{1,6}$/)],
+      distOrder: ['', Validators.pattern(/^[A-Za-z]{1,6}$/)], product: ['', Validators.pattern(/^[A-Za-z]{1,6}$/)],
+      mfrRequest: ['', Validators.pattern(/^[A-Za-z]{1,6}$/)],
     }),
   });
 
@@ -210,7 +215,7 @@ export class SettingsGeneral {
       capitalTarget: Number(s.capitalTarget), profitAllocationPerPack: Number(s.profitAllocationPerPack), salesTaxRate: Number(s.salesTaxRate),
       packsPerCarton: s.packsPerCarton, bundlesPerContainer: s.bundlesPerContainer ?? 10, defaultSelloutDays: s.defaultSelloutDays ?? 30, transitDays: s.transitDays ?? 2, defaultAdvancePct: Number(s.defaultAdvancePct ?? 30), salesOrdersEnabled: String(!!s.salesOrdersEnabled), requestsNeedApproval: String(!!s.requestsNeedApproval), lowStockCartons: s.lowStockCartons, containerSize: s.containerSize, defaultIncoterm: s.defaultIncoterm,
       paymentCycles: s.paymentCycles.join(', '), defaultPaymentCycle: s.defaultPaymentCycle, agingBuckets: (s.agingBuckets ?? [30, 60, 90]).join(', '),
-      docPrefixes: { sales: s.docPrefixes['sales'] ?? '', batch: s.docPrefixes['batch'] ?? '', finance: s.docPrefixes['finance'] ?? '', accounting: s.docPrefixes['accounting'] ?? '', export: s.docPrefixes['export'] ?? '' },
+      docPrefixes: Object.fromEntries(PREFIXES.map(([k]) => [k, s.docPrefixes[k] ?? PREFIX_DEFAULTS[k] ?? ''])) as Record<(typeof PREFIXES)[number][0], string>,
     });
     if (!this.canEdit()) this.form.disable({ emitEvent: false });
   }

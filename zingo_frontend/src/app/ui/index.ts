@@ -31,3 +31,4 @@ export type { TabItem } from './tabs';
 export { TABLE_DEFAULTS } from './table-state';
 export { Tag } from './tag';
 export { ToastHost, ToastService } from './toast';
+export { RefInput, RefsApi, type RefKind } from './ref-input';

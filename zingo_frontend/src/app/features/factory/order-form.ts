@@ -2,7 +2,7 @@ import { ChangeDetectionStrategy, Component, computed, inject, input, signal } f
 import { takeUntilDestroyed, toSignal } from '@angular/core/rxjs-interop';
 import { ReactiveFormsModule, Validators } from '@angular/forms';
 import { fmtAmount2, fmtMoney, fmtNumber } from '../../shared/format';
-import { Btn, Field, MoneyInput, Offcanvas, RichText, Select, SelectOption } from '../../ui';
+import { Btn, Field, MoneyInput, Offcanvas, RefInput, RichText, Select, SelectOption } from '../../ui';
 import { FormModal } from '../ops/form-modal';
 import { Distributor, Manufacturer, Product } from '../ops/models';
 import { FactoryApi, ProductionOrder } from './factory.api';
@@ -17,7 +17,7 @@ const today = () => new Date().toISOString().slice(0, 10);
 @Component({
   selector: 'app-production-order-form',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [ReactiveFormsModule, Offcanvas, Field, Btn, Select, MoneyInput, RichText],
+  imports: [ReactiveFormsModule, Offcanvas, Field, Btn, Select, MoneyInput, RichText, RefInput],
   styles: `
     .sum {
       grid-column: 1 / -1;
@@ -54,6 +54,9 @@ const today = () => new Date().toISOString().slice(0, 10);
       <form [id]="formId" [formGroup]="form" (ngSubmit)="submit()" class="form-grid" novalidate>
         <app-field label="Product" [required]="true" [wide]="true" [error]="invalid('productId') ? 'Choose a product' : null">
           <app-select formControlName="productId" [options]="productOptions()" placeholder="Choose a SKU" [clearable]="false" />
+        </app-field>
+        <app-field label="Order no." [required]="true">
+          <app-ref-input formControlName="refNo" kind="production" [except]="order()?.id" />
         </app-field>
         <app-field label="Order date" [required]="true">
           <input type="date" formControlName="date" />
@@ -130,6 +133,7 @@ export class ProductionOrderForm extends FormModal {
   protected sendNow = signal(false);
 
   readonly form = this.fb.group({
+    refNo: this.fb.nonNullable.control(''),
     productId: this.fb.control<string | null>(null, Validators.required),
     date: this.fb.nonNullable.control(today(), Validators.required),
     containers: this.fb.nonNullable.control(1, [Validators.required, Validators.min(1)]),
@@ -233,11 +237,11 @@ export class ProductionOrderForm extends FormModal {
     this.sendNow.set(false);
     this.form.reset(o
       ? {
-        productId: o.productId, date: o.date, containers: o.containers, packaging: o.packaging ?? '', dueDate: o.dueDate, manufacturerId: o.manufacturerId,
+        refNo: o.refNo, productId: o.productId, date: o.date, containers: o.containers, packaging: o.packaging ?? '', dueDate: o.dueDate, manufacturerId: o.manufacturerId,
         destination: o.destination, distributorId: o.distributorId, rate: Number(o.baseRate ?? o.rate), notes: o.notes ?? '',
       }
       : {
-        productId: null, date: today(), containers: 1, packaging: '', dueDate: null, manufacturerId: null,
+        refNo: '', productId: null, date: today(), containers: 1, packaging: '', dueDate: null, manufacturerId: null,
         destination: 'Distributor', distributorId: null, rate: 0, notes: '',
       }, { emitEvent: true });
     this.form.controls.distributorId.setValidators(this.form.controls.destination.value === 'Distributor' ? Validators.required : null);
@@ -247,7 +251,7 @@ export class ProductionOrderForm extends FormModal {
   protected request() {
     const v = this.form.getRawValue();
     return this.factory.save(this.order()?.id ?? null, {
-      productId: v.productId, date: v.date, containers: Number(v.containers), packaging: v.packaging || null, dueDate: v.dueDate || null,
+      refNo: v.refNo.trim() || undefined, productId: v.productId, date: v.date, containers: Number(v.containers), packaging: v.packaging || null, dueDate: v.dueDate || null,
       manufacturerId: v.manufacturerId, destination: v.destination,
       distributorId: v.destination === 'Distributor' ? v.distributorId : null,
       rate: Number(v.rate), notes: v.notes.trim() || null, send: this.sendNow(),

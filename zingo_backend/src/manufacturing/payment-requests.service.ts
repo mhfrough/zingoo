@@ -3,7 +3,7 @@ import { InjectDataSource } from '@nestjs/typeorm';
 import { DataSource, EntityManager, In } from 'typeorm';
 import { Manufacturer } from '../catalog/catalog.entities';
 import { round2 } from '../common/numeric.transformer';
-import { nextRef } from '../common/ref';
+import { claimRef, nextRef } from '../common/ref';
 import { Approval } from '../finance/finance.entities';
 import { Signer, canSign } from '../finance/finance.service';
 import { PostingService } from '../ledger/posting.service';
@@ -182,7 +182,8 @@ export class PaymentRequestsService {
       }
 
       const s = await this.settings.get(em);
-      const refNo = await nextRef(em, MfrPaymentRequest, s.docPrefixes['mfrRequest'] ?? 'PR', 3);
+      const autoPr = () => nextRef(em, MfrPaymentRequest, s.docPrefixes['mfrRequest'] ?? 'PR', 3);
+      const refNo = dto.refNo?.trim() ? await claimRef(em, 'mfrInvoice', dto.refNo, null, { prefixes: s.docPrefixes, make: autoPr }) : await autoPr();
       const r = await em.save(em.create(MfrPaymentRequest, {
         refNo, date, orderId: order.id, manufacturerId: order.manufacturerId, kind: dto.kind, amount,
         invoiceNo: dto.invoiceNo?.trim() || null, note: dto.note?.trim() || null, status: 'Submitted',

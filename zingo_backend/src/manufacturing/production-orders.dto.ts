@@ -14,6 +14,8 @@ export class OrderTransportDto {
 
 /** A new production order. Manufacturer, distributor and rate default to what the product is set up with. */
 export class CreateProductionOrderDto {
+  /** the order number; empty = the next one (MO-027) */
+  @IsOptional() @IsString() @MaxLength(30) refNo?: string;
   @IsDateString() date: string;
   @IsUUID() productId: string;
   @IsOptional() @IsUUID() manufacturerId?: string;

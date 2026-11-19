@@ -3,7 +3,7 @@ import { InjectDataSource } from '@nestjs/typeorm';
 import { DataSource, EntityManager, In } from 'typeorm';
 import { Distributor, Manufacturer, Product, makerTotal } from '../catalog/catalog.entities';
 import { round2 } from '../common/numeric.transformer';
-import { nextRef } from '../common/ref';
+import { claimRef, nextRef } from '../common/ref';
 import { Role } from '../common/enums';
 import { Lookup } from '../setup/setup.entities';
 import { SettingsService } from '../setup/setup.service';
@@ -252,7 +252,8 @@ export class ProductionOrdersService {
   async createIn(em: EntityManager, user: OrderUser, dto: CreateProductionOrderDto, origin: string | null = null, groupRef: string | null = null) {
     const fields = await this.resolve(em, dto, null);
     const s = await this.settings.get(em);
-    const refNo = await nextRef(em, ProductionOrder, s.docPrefixes['production'] ?? 'MO', 3, 1);
+    const auto = () => nextRef(em, ProductionOrder, s.docPrefixes['production'] ?? 'MO', 3, 1);
+    const refNo = dto.refNo?.trim() ? await claimRef(em, 'production', dto.refNo, null, { prefixes: s.docPrefixes, make: auto }) : await auto();
     const o = await em.save(em.create(ProductionOrder, { ...fields, refNo, groupRef, status: 'Draft' }));
     await this.event(em, o.id, user, 'Created', origin);
     if (dto.send) await this.markSent(em, o, user);
@@ -264,6 +265,8 @@ export class ProductionOrdersService {
       const o = await this.load(em, id);
       if (o.status !== 'Draft') throw new BadRequestException('Only a draft order can be changed. Cancel it and place a new one.');
       Object.assign(o, await this.resolve(em, dto, o));
+      // a draft may take another order number (checked against every other order)
+      if (dto.refNo?.trim() && dto.refNo.trim().toLowerCase() !== o.refNo.toLowerCase()) o.refNo = await claimRef(em, 'production', dto.refNo, o.id);
       await em.save(o);
       if (dto.send) await this.markSent(em, o, user);
       return this.shape(await this.load(em, id), (await this.movedMap(em))[id]);

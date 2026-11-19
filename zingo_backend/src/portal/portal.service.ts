@@ -4,7 +4,7 @@ import { InjectDataSource } from '@nestjs/typeorm';
 import { DataSource, EntityManager, In, Not } from 'typeorm';
 import { Distributor, DistributorRate, Manufacturer, Product } from '../catalog/catalog.entities';
 import { round2 } from '../common/numeric.transformer';
-import { nextRef } from '../common/ref';
+import { claimRef, nextRef } from '../common/ref';
 import { CollectionsService, OrdersService } from '../distribution/distribution.service';
 import { Collection, SalesOrder } from '../distribution/distribution.entities';
 import { PostingService } from '../ledger/posting.service';
@@ -364,7 +364,8 @@ export class PortalService {
         }
         if (l.packaging && !(p.packagings ?? []).some((t) => t.name === l.packaging)) throw new BadRequestException(`${p.sku} has no packaging template "${l.packaging}".`);
       }
-      const groupRef = multi ? await nextGroupRef(em, s.docPrefixes['distOrder'] ?? 'DO') : null;
+      const autoDo = () => nextGroupRef(em, s.docPrefixes['distOrder'] ?? 'DO');
+      const groupRef = !multi ? null : dto.orderNo?.trim() ? await claimRef(em, 'distOrder', dto.orderNo, null, { prefixes: s.docPrefixes, make: autoDo }) : await autoDo();
       const transport = cleanTransport(dto.transport);
       const made: unknown[] = [];
       const filed: { refNo: string; what: string }[] = [];

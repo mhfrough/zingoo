@@ -2007,5 +2007,36 @@ ok('the distributor never sees the manufacturer\'s formula', k2Theirs && !('base
 if (k2o?.id) await call(T.owner, 'POST', `/production-orders/${k2o.id}/cancel`, { reason: 'K2 test' });
 if (k2P.json?.id) await call(T.owner, 'PATCH', `/products/${k2P.json.id}`, { active: false });
 
+// ---------- K4: suggested document numbers, typed numbers, duplicate checks ----------
+const k4Stamp = Date.now().toString(36).slice(-5).toUpperCase();
+const k4Next = (await call(T.owner, 'GET', '/refs/next/production')).json?.next;
+ok('the next production order number is suggested', /^[A-Z]+-\d{3,}$/.test(k4Next ?? ''), k4Next);
+ok('a distributor may ask only for its order numbers', (await call(T.dist, 'GET', '/refs/next/production')).status === 403 && /^[A-Z]+-\d{3,}$/.test((await call(T.dist, 'GET', '/refs/next/distOrder')).json?.next ?? ''));
+ok('a manufacturer may ask only for its invoice numbers', (await call(k2Maker, 'GET', '/refs/next/product')).status === 403 && /^[A-Z]+-\d{3,}$/.test((await call(k2Maker, 'GET', '/refs/next/mfrInvoice')).json?.next ?? ''));
+const k4AnyMo = ((await call(T.owner, 'GET', '/production-orders')).json ?? [])[0];
+ok('a used order number is reported as taken (any letter case)', (await call(T.owner, 'GET', `/refs/check/production?value=${encodeURIComponent((k4AnyMo?.refNo ?? '').toLowerCase())}`)).json?.taken === true);
+ok('its own number is not taken for the order itself', (await call(T.owner, 'GET', `/refs/check/production?value=${encodeURIComponent(k4AnyMo?.refNo ?? '')}&except=${k4AnyMo?.id}`)).json?.taken === false);
+ok('a used SKU code is reported as taken', (await call(T.owner, 'GET', '/refs/check/product?value=Z10-MAS')).json?.taken === true);
+const k4Prod = ((await call(T.owner, 'GET', '/products')).json ?? []).find((p) => p.active && p.manufacturerId);
+const k4Mo = await call(T.owner, 'POST', '/production-orders', { refNo: `K4-${k4Stamp}`, date: kDay, productId: k4Prod?.id, containers: 1 });
+ok('an order keeps the number typed for it', k4Mo.status === 201 && k4Mo.json?.refNo === `K4-${k4Stamp}`, JSON.stringify(k4Mo.json?.refNo ?? k4Mo.json));
+const k4Dup = await call(T.owner, 'POST', '/production-orders', { refNo: `k4-${k4Stamp.toLowerCase()}`, date: kDay, productId: k4Prod?.id, containers: 1 });
+ok('the same number twice -> 409', k4Dup.status === 409, JSON.stringify(k4Dup.json));
+ok('a number with spaces or signs -> 400', (await call(T.owner, 'POST', '/production-orders', { refNo: 'MO 1!', date: kDay, productId: k4Prod?.id, containers: 1 })).status === 400);
+const k4Auto = await call(T.owner, 'POST', '/production-orders', { date: kDay, productId: k4Prod?.id, containers: 1 });
+ok('no number typed: the next one is used', k4Auto.status === 201 && /^[A-Z]+-\d{3,}$/.test(k4Auto.json?.refNo ?? ''), k4Auto.json?.refNo);
+const k4Late = await call(T.owner, 'POST', '/production-orders', { refNo: k4Auto.json?.refNo, date: kDay, productId: k4Prod?.id, containers: 1 });
+ok('a suggested number taken meanwhile gives way to the next free one', k4Late.status === 201 && k4Late.json?.refNo !== k4Auto.json?.refNo, JSON.stringify(k4Late.json?.refNo ?? k4Late.json));
+const k4Renamed = await call(T.owner, 'PATCH', `/production-orders/${k4Auto.json?.id}`, { refNo: `K4R-${k4Stamp}` });
+ok('a draft can take another free number', k4Renamed.json?.refNo === `K4R-${k4Stamp}`, JSON.stringify(k4Renamed.json?.refNo));
+ok('but not one already used', (await call(T.owner, 'PATCH', `/production-orders/${k4Auto.json?.id}`, { refNo: `K4-${k4Stamp}` })).status === 409);
+for (const o of [k4Mo, k4Auto, k4Late]) if (o.json?.id) await call(T.owner, 'DELETE', `/production-orders/${o.json.id}`);
+const k4DistProd = ((await call(T.dist, 'GET', '/portal/rates')).json ?? []).find((r) => r.manufacturerName) ?? null;
+if (k4DistProd) {
+  const k4Req = await call(T.dist, 'POST', '/portal/requests', { orderNo: `K4D-${k4Stamp}`, date: kDay, lines: [{ productId: k4DistProd.productId, containers: 1 }] });
+  ok('a distributor order keeps the order number typed for it', k4Req.status === 201 && JSON.stringify(k4Req.json ?? '').includes(`K4D-${k4Stamp}`), JSON.stringify(k4Req.json).slice(0, 300));
+  ok('the same distributor order number twice -> 409', (await call(T.dist, 'POST', '/portal/requests', { orderNo: `K4D-${k4Stamp}`, date: kDay, lines: [{ productId: k4DistProd.productId, containers: 1 }] })).status === 409);
+}
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

@@ -487,3 +487,11 @@ Progress (2026-11-19): K2 built.
 - Shared styles: `.formula` (green worked-out price line) and `.info-figure` (bold green figure) in field.css.
 
 Progress (2026-11-19): K3 built. Distributor form sections in the client's order: Distributor (name), Areas (local / international choice, areas, rights, international fields), Contact, Point of contact (own section), Contract (number, terms, uploads; point of contact moved out), then Trading terms and Status.
+
+Progress (2026-11-19): K4 built.
+- `GET refs/next/:kind` and `GET refs/check/:kind?value=&except=` for production (MO-), distOrder (DO-), product (SKU-), mfrInvoice (PR-); a distributor may ask only for distOrder, a manufacturer only for mfrInvoice. `common/ref.ts` REF_KINDS / nextNumber / refTaken / claimRef.
+- A typed number is kept: production order `refNo` (also changeable on a draft), distributor order `orderNo` -> DO number, manufacturer invoice `refNo` (the invoice number is the request number). Duplicates -> 409 (letter case ignored), bad characters -> 400. An untouched suggestion that someone else took meanwhile gives way to the next free number.
+- `app-ref-input` (ui/ref-input.ts): fills in the next number without making the form dirty, checks a changed number as it is typed ("Already used: type another" / "Free to use"). Used on the production order form, product SKU, the distributor's order stock form and both manufacturer invoice forms.
+- Settings > Document numbers: prefixes for production orders, distributor orders, product SKU codes, manufacturer invoices.
+- Not browser-checked: the distributor order form and the manufacturer invoice forms (API checks cover them).
+

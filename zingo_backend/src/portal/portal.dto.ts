@@ -28,6 +28,8 @@ export class RequestLineDto {
 
 export class CreateRequestDto {
   @IsOptional() @IsUUID() distributorId?: string;
+  /** the order number for all the product lines; empty = the next one (DO-012) */
+  @IsOptional() @IsString() @MaxLength(30) orderNo?: string;
   @IsDateString() date: string;
   /** several products in one order (each becomes its own production order, grouped under one order number) */
   @IsOptional() @IsArray() @ArrayMinSize(1) @ArrayMaxSize(30) @ValidateNested({ each: true }) @Type(() => RequestLineDto) lines?: RequestLineDto[];

@@ -3,7 +3,7 @@ import { takeUntilDestroyed, toSignal } from '@angular/core/rxjs-interop';
 import { ReactiveFormsModule, Validators } from '@angular/forms';
 import { SettingsStore } from '../../core/settings.store';
 import { fmtMoney } from '../../shared/format';
-import { Btn, Field, MoneyInput, Offcanvas, RichText, Select, SelectOption } from '../../ui';
+import { Btn, Field, RefInput, MoneyInput, Offcanvas, RichText, Select, SelectOption } from '../../ui';
 import { FormModal } from '../ops/form-modal';
 import { Manufacturer } from '../ops/models';
 import { FactoryApi, PaymentRequest, PositionRow } from './factory.api';
@@ -17,7 +17,7 @@ const today = () => new Date().toISOString().slice(0, 10);
 @Component({
   selector: 'app-payment-request-form',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [ReactiveFormsModule, Offcanvas, Field, Btn, Select, MoneyInput, RichText],
+  imports: [ReactiveFormsModule, Offcanvas, Field, Btn, Select, MoneyInput, RichText, RefInput],
   template: `
     <app-offcanvas #oc [(open)]="open" title="Request payment" subtitle="Advance or balance of an accepted order." size="lg" [dirty]="form.dirty">
       @if (error()) {
@@ -42,7 +42,9 @@ const today = () => new Date().toISOString().slice(0, 10);
         <app-field label="Pay into" [wide]="true" [required]="true" [error]="invalid('bankAccount') ? 'Choose a bank account' : null">
           <app-select formControlName="bankAccount" [options]="bankOptions()" placeholder="Choose a bank account" [clearable]="false" />
         </app-field>
-        <app-field label="Your invoice no."><input type="text" formControlName="invoiceNo" maxlength="60" /></app-field>
+        <app-field label="Invoice no." [required]="true" help="Filled in with the next invoice number. Type your own if you have one; it must not be used already.">
+          <app-ref-input formControlName="invoiceNo" kind="mfrInvoice" />
+        </app-field>
         <app-field label="Note" [wide]="true"><app-rich-text formControlName="note" [max]="500" [storeMax]="500" /></app-field>
       </form>
       <ng-container offcanvasFooter>
@@ -112,7 +114,7 @@ export class PaymentRequestForm extends FormModal {
     const v = this.form.getRawValue();
     return this.factory.request({
       orderId: v.orderId, kind: v.kind, amount: Number(v.amount), date: v.date, bankAccount: v.bankAccount,
-      ...(v.invoiceNo.trim() ? { invoiceNo: v.invoiceNo.trim() } : {}), ...(v.note.trim() ? { note: v.note.trim() } : {}),
+      ...(v.invoiceNo.trim() ? { invoiceNo: v.invoiceNo.trim(), refNo: v.invoiceNo.trim() } : {}), ...(v.note.trim() ? { note: v.note.trim() } : {}),
     });
   }
 

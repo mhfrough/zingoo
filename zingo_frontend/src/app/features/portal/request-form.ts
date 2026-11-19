@@ -3,7 +3,7 @@ import { toSignal } from '@angular/core/rxjs-interop';
 import { FormArray, FormGroup, ReactiveFormsModule, Validators } from '@angular/forms';
 import { startWith } from 'rxjs';
 import { containersLabel, fmtAmount2, fmtMoney, fmtNumber } from '../../shared/format';
-import { Btn, Field, Help, Offcanvas, RichText, Select, SelectOption } from '../../ui';
+import { Btn, Field, Help, Offcanvas, RefInput, RichText, Select, SelectOption } from '../../ui';
 import { ProductForm } from '../manufacturing/product-form';
 import { Distributor, Manufacturer } from '../ops/models';
 import { FormModal } from '../ops/form-modal';
@@ -33,7 +33,7 @@ interface LineValue {
 @Component({
   selector: 'app-request-form',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [ReactiveFormsModule, Offcanvas, Field, Btn, RichText, Select, Help, ProductForm],
+  imports: [ReactiveFormsModule, Offcanvas, Field, Btn, RichText, Select, Help, ProductForm, RefInput],
   styles: `
     .block {
       display: flex;
@@ -140,6 +140,9 @@ interface LineValue {
       }
       <form [id]="formId" [formGroup]="form" (ngSubmit)="send()" novalidate>
         <div class="form-grid">
+          <app-field label="Order no." [required]="true" help="Filled in with the next order number. Change it if you keep your own numbers; it must not be used already.">
+            <app-ref-input formControlName="orderNo" kind="distOrder" />
+          </app-field>
           <app-field label="Order date" [required]="true"><input type="date" formControlName="date" /></app-field>
           <app-field label="Delivery wanted by" help="The date you need the goods. The manufacturer answers with its own ready date.">
             <input type="date" formControlName="requestedDate" [min]="form.controls.date.value" />
@@ -300,6 +303,7 @@ export class RequestForm extends FormModal {
     date: [today(), Validators.required],
     requestedDate: [inDays(5)],
     poRef: [''],
+    orderNo: [''],
     notes: [''],
     lines: this.fb.array<FormGroup>([]),
     transport: this.fb.nonNullable.group({ transporter: [''], vehicleNo: [''], driverName: [''], driverPhone: [''], driverCnic: [''] }),
@@ -456,7 +460,7 @@ export class RequestForm extends FormModal {
     this.lines.clear();
     const first = this.rates().find((r) => !this.direct() || r.manufacturerName);
     this.form.reset({
-      date: today(), requestedDate: inDays(5), poRef: '', notes: '',
+      date: today(), requestedDate: inDays(5), poRef: '', orderNo: '', notes: '',
       transport: { transporter: '', vehicleNo: '', driverName: '', driverPhone: '', driverCnic: '' },
     });
     this.lines.push(this.lineGroup(first?.productId ?? ''));
@@ -472,7 +476,7 @@ export class RequestForm extends FormModal {
     const t = v.transport;
     const transport = Object.values(t).some((x) => x.trim()) ? t : undefined;
     return this.portal.createRequest({
-      date: v.date, requestedDate: v.requestedDate || undefined, poRef: v.poRef.trim() || undefined, notes: v.notes.trim() || undefined,
+      date: v.date, orderNo: v.orderNo.trim() || undefined, requestedDate: v.requestedDate || undefined, poRef: v.poRef.trim() || undefined, notes: v.notes.trim() || undefined,
       lines, transport, distributorId: this.distributorId(),
     });
   }

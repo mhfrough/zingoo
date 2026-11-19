@@ -4,7 +4,7 @@ import { ReactiveFormsModule, Validators } from '@angular/forms';
 import { Observable, of, switchMap } from 'rxjs';
 import { ATTACHMENT_ACCEPT, ATTACHMENT_MAX_BYTES } from '../../core/attachments.api';
 import { fmtMoney } from '../../shared/format';
-import { Btn, Field, MoneyInput, MultiSelect, Offcanvas, RichText, SelectOption } from '../../ui';
+import { Btn, Field, RefInput, MoneyInput, MultiSelect, Offcanvas, RichText, SelectOption } from '../../ui';
 import { FormModal } from '../ops/form-modal';
 import { Manufacturer } from '../ops/models';
 import { FactoryApi, OrderDetailData, OrderDoc } from './factory.api';
@@ -24,7 +24,7 @@ const addDays = (iso: string, n: number) => {
 @Component({
   selector: 'app-order-invoice-form',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [ReactiveFormsModule, Offcanvas, Field, Btn, MoneyInput, MultiSelect, RichText],
+  imports: [ReactiveFormsModule, Offcanvas, Field, Btn, MoneyInput, MultiSelect, RichText, RefInput],
   template: `
     <app-offcanvas #oc [(open)]="open" [title]="'Invoice ' + (detail()?.order?.refNo ?? '')" size="lg" [dirty]="form.dirty"
       [subtitle]="detail() ? detail()!.order.manufacturer.name + ' to Zen Foods' : ''"
@@ -46,7 +46,9 @@ const addDays = (iso: string, n: number) => {
         <app-field label="Amount (PKR)" [required]="true" [hint]="'Still open: ' + money(openAmount())" [error]="invalid('amount') ? 'Enter an amount' : null">
           <app-money-input formControlName="amount" />
         </app-field>
-        <app-field label="Your invoice no."><input type="text" formControlName="invoiceNo" maxlength="60" /></app-field>
+        <app-field label="Invoice no." [required]="true" help="Filled in with the next invoice number. Type your own if you have one; it must not be used already.">
+          <app-ref-input formControlName="invoiceNo" kind="mfrInvoice" />
+        </app-field>
         <app-field label="Invoice date" [required]="true"><input type="date" formControlName="date" [max]="maxDate" /></app-field>
         <app-field label="Due date" [required]="true" [hint]="dueHint()"
           help="When Zen Foods should pay. An advance is due at once; a balance after your credit days with Zen Foods.">
@@ -163,7 +165,7 @@ export class OrderInvoiceForm extends FormModal {
     const upload: Observable<OrderDoc | null> = file ? this.factory.addOrderDoc(d.order.id, file, 'INVOICE') : of(null);
     return upload.pipe(switchMap((doc) => this.factory.request({
       orderId: d.order.id, kind: v.kind, amount: Number(v.amount), date: v.date, dueDate: v.dueDate, bankAccounts: v.banks,
-      ...(v.invoiceNo.trim() ? { invoiceNo: v.invoiceNo.trim() } : {}), ...(v.note.trim() ? { note: v.note.trim() } : {}),
+      ...(v.invoiceNo.trim() ? { invoiceNo: v.invoiceNo.trim(), refNo: v.invoiceNo.trim() } : {}), ...(v.note.trim() ? { note: v.note.trim() } : {}),
       ...(doc ? { invoiceFileId: doc.id } : {}),
     })));
   }

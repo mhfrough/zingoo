@@ -1823,10 +1823,12 @@ const sDesk = (await call(T.sales, 'GET', '/portal/desk')).json;
 ok('the desk lists it to watch, not to accept', sDesk?.needsApproval === false && !sDesk?.requests?.some((r) => r.id === sReq.json?.id)
   && sDesk?.recent?.some((r) => r.id === sReq.json?.id && r.productionOrder?.refNo === sMo?.refNo && r.productionOrder?.manufacturer?.name && r.distributor?.name));
 const sMine = ((await call(T.dist, 'GET', '/portal/requests')).json ?? []).find((r) => r.id === sReq.json?.id);
+const sRates = (await call(T.dist, 'GET', '/portal/rates')).json ?? [];
 ok('the distributor sees the order with its manufacturer and status', sMine?.productionOrder?.status === 'Sent' && !!sMine?.productionOrder?.manufacturer?.name && sMine?.product?.name);
 ok('the distributor never sees the manufacturer\'s rate or the product cost lines', sMine && !('rate' in sMine.productionOrder) && !('advancePct' in sMine.productionOrder)
   && !('manufacturerRate' in sMine.product) && !('packagingRate' in sMine.product), JSON.stringify(sMine).slice(0, 300));
-ok('the order form shows who makes each product', ((await call(T.dist, 'GET', '/portal/rates')).json ?? []).find((r) => r.productId === p5Mo.productId)?.manufacturerName?.length > 0);
+// client 2026-11-19 (K6): a distributor never learns who makes the goods; the order form only says a product can be ordered
+ok('the order form says a product can be ordered, not who makes it', (() => { const r = ((rates) => rates.find((x) => x.productId === p5Mo.productId))(sRates); return r?.orderable === true && !('manufacturerName' in r); })());
 const sAcc = await call(p3Maker, 'POST', `/production-orders/${sMo?.id}/accept`, { readyDate: kDay, note: 'Tentative' });
 ok('the manufacturer accepts with a tentative date; the distributor is told and sees the date', sAcc.status === 201
   && await nHas(T.dist, 'order.accepted', sMo?.refNo)

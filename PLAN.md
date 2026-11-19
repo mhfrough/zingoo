@@ -520,3 +520,5 @@ Progress (2026-11-19): K7 built (frontend only).
 - Vouchers everywhere open in a pop-up with the voucher and Download PDF (the print dialog) / Close.
 - Tabs (every page): a contained strip with a raised card that slides behind the active tab.
 
+Progress (2026-11-19): K8 checks. Fresh reseed: all 13 parity checks pass. Full API run 1006/1006 (one old check updated: a distributor no longer sees who makes a product). API and web production builds pass (web only size warnings).
+

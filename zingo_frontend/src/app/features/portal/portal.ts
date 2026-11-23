@@ -66,7 +66,7 @@ const orderState = (r: PortalRequest): { label: string; tone: Tone } => {
 const orderLine = (r: PortalRequest) => {
   const o = r.productionOrder;
   if (!o) return r.order ? `Order ${r.order.refNo}` : r.reviewNote;
-  return [o.refNo, o.readyDate ? `ready ${fmtDate(o.readyDate)}` : null,
+  return [o.readyDate ? `ready ${fmtDate(o.readyDate)}` : null,
     o.expectedDate && o.status === 'Accepted' && (o.received ?? 0) < (o.containers ?? 1) ? `expected ${fmtDate(o.expectedDate)}` : null, o.reason].filter(Boolean).join(' · ');
 };
 /** "Masala Masti · Z10-MAS" */
@@ -210,6 +210,12 @@ export class Portal {
 
   // ───────────── order money: upcoming and overdue, Pay, Details ─────────────
   /** received orders with money still open: overdue first, then the oldest arrival */
+  /** what the distributor owes on received orders, what is overdue, and what it paid on its orders */
+  protected orderBalance = computed(() => (this.orderMoney.value() ?? []).filter((o) => o.receivedContainers > 0).reduce((n, o) => n + o.balance, 0));
+  protected orderOverdue = computed(() => (this.orderMoney.value() ?? []).filter((o) => o.overdue).reduce((n, o) => n + o.balance, 0));
+  protected orderPaid = computed(() => (this.orderMoney.value() ?? []).reduce((n, o) => n + o.paid, 0));
+  /** deliveries from Zen Foods on the way (not received yet) */
+  protected inTransit = computed(() => (this.deliveries.value() ?? []).filter((s) => s.status === 'In transit').length);
   protected upcomingMoney = computed(() => (this.orderMoney.value() ?? [])
     .filter((o) => o.receivedContainers > 0 && o.balance > 0.01)
     .sort((a, b) => Number(b.overdue) - Number(a.overdue) || (b.daysSince ?? 0) - (a.daysSince ?? 0)));

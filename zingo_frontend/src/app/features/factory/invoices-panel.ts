@@ -284,7 +284,7 @@ export class InvoicesPanel {
       id: 'ref', label: 'Invoice no.', kind: 'mono', value: (i) => i.refNo, sortValue: (i) => i.date,
       sub: (i) => subLine(docDate(i), i.invoiceNo, this.mode() === 'company' ? `${fmtNumber(i.containers)} container${i.containers === 1 ? '' : 's'}` : null),
     },
-    { id: 'amount', label: 'Amount', kind: 'money', value: (i) => i.amount, sub: (i) => (i.paid > 0 ? `Paid ${fmtAmount(i.paid)}` : null) },
+    { id: 'amount', label: 'Amount', kind: 'money', value: (i) => i.amount, sub: (i) => (i.paid > 0 ? `Paid ${fmtAmount(i.paid)}${(i.fromOrders ?? 0) > 0 ? ` · ${fmtAmount(i.fromOrders!)} from order payments` : ''}` : null) },
     {
       id: 'due', label: 'Still due', kind: 'money', priority: 2, value: (i) => i.due,
       valueTone: (i) => (i.status === 'Verified' && i.due > 0.01 ? dueTone(i.dueDate) : null),

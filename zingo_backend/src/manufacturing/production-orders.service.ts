@@ -231,8 +231,8 @@ export class ProductionOrdersService {
       : (await em.find(Manufacturer, { order: { name: 'ASC' }, take: 1 }))[0];
     if (!m) throw new NotFoundException('Create a manufacturer first.');
     const orders = await this.list(user, m.id);
-    // in production: accepted and not everything has arrived yet
-    const open = orders.filter((o) => o.status === 'Accepted' && o.receivedContainers < o.containers);
+    // in production: accepted and still at the factory (not dispatched at Ready to dispatch, not everything shipped)
+    const open = orders.filter((o) => o.status === 'Accepted' && o.readyContainers == null && o.shippedContainers < o.containers);
     return {
       manufacturer: m,
       waiting: orders.filter((o) => o.status === 'Sent').length,

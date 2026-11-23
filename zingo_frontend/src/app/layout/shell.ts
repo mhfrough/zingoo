@@ -116,6 +116,9 @@ export class Shell {
     const id = select.value;
     select.value = '';
     if (!id) return;
+    // remember where the Admin was, so Back to my account returns there
+    // a switch from one viewed account to another keeps the Admin's first page
+    try { if (!sessionStorage.getItem('zg-back-to')) sessionStorage.setItem('zg-back-to', location.pathname + location.search); } catch { /* storage blocked: back goes to Settings */ }
     this.auth.viewAs(id).subscribe({
       // a full reload so every page and store reads with the new login
       next: (res) => location.assign(homePath(res.user.pages)),
@@ -125,7 +128,9 @@ export class Shell {
 
   protected backToOwn() {
     this.auth.backToOwn();
-    location.assign('/admin/settings');
+    let back: string | null = null;
+    try { back = sessionStorage.getItem('zg-back-to'); sessionStorage.removeItem('zg-back-to'); } catch { /* storage blocked */ }
+    location.assign(back && back.startsWith('/admin/') ? back : '/admin/settings');
   }
 
   protected toTop() {

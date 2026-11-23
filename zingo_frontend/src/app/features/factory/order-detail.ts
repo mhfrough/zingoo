@@ -404,7 +404,7 @@ type StepState = 'done' | 'now' | 'next';
             </div>
           }
           }
-          <div><dt>Manufacturer</dt><dd>{{ o.manufacturer.name }}</dd></div>
+          @if (role() !== 'Distributor') { <div><dt>Manufacturer</dt><dd>{{ o.manufacturer.name }}</dd></div> }
           <div><dt>Deliver to</dt><dd>{{ o.destination === 'Warehouse' ? 'Zen Foods warehouse' : (o.distributor?.name ?? '-') }}</dd></div>
           @if (o.groupRef) {
             <div>
@@ -684,7 +684,7 @@ export class OrderDetail {
   protected docError = signal('');
   protected accept = ATTACHMENT_ACCEPT;
 
-  private role = computed(() => this.auth.user()?.role ?? '');
+  protected role = computed(() => this.auth.user()?.role ?? '');
   /** both partners and the staff who run orders may attach the signed voucher */
   protected canUpload = computed(() => ['Admin', 'Manufacturing', 'Distribution', 'Manufacturer', 'Distributor'].includes(this.role()));
   /** the manufacturer (or staff for it) raises its invoices */

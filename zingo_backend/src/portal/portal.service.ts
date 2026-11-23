@@ -540,7 +540,7 @@ export class PortalService {
     const dueDate = dto.dueDate !== undefined ? dto.dueDate : r.requestedDate && r.requestedDate >= date ? r.requestedDate : null;
     const send = dto.send ?? true;
     // the distributor's own notes (route, delivery instruction) reach the manufacturer with the order
-    const note = [r.groupRef && `Order ${r.groupRef}`, `From stock request ${r.refNo}`, r.poRef && `PO ${r.poRef}`, dto.note?.trim(), r.notes?.trim()].filter(Boolean).join(' · ');
+    const note = [r.groupRef ? `Order ${r.groupRef}` : `Stock request ${r.refNo}`, r.poRef && `PO ${r.poRef}`, dto.note?.trim(), r.notes?.trim()].filter(Boolean).join(' · ');
     const o = await this.production.createIn(em, { id: user.id, name: user.name, role: user.role as Role }, {
       date, productId: r.productId, destination: 'Distributor', distributorId: r.distributorId, containers,
       packaging: tpl?.name ?? null, dueDate, notes: note, send,

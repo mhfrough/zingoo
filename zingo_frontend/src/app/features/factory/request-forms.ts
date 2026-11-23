@@ -61,6 +61,8 @@ export class PaymentRequestForm extends FormModal {
   readonly manufacturer = input<Manufacturer | null>(null);
   /** start with this order picked */
   readonly orderId = input<string | null>(null);
+  /** start with this kind: Balance once the goods left the factory (opened from the order row) */
+  readonly kind = input<'Advance' | 'Balance'>('Advance');
   readonly formId = 'form-payment-request';
   protected maxDate = today();
 
@@ -106,7 +108,7 @@ export class PaymentRequestForm extends FormModal {
   protected reset() {
     const def = this.manufacturer()?.bankAccounts?.find((b) => b.isDefault) ?? this.manufacturer()?.bankAccounts?.[0];
     const first = this.orderId() ?? this.orderOptions()[0]?.value ?? '';
-    this.form.reset({ orderId: first, kind: 'Advance', amount: 0, date: today(), bankAccount: def?.account ?? '', invoiceNo: '', note: '' });
+    this.form.reset({ orderId: first, kind: this.kind(), amount: 0, date: today(), bankAccount: def?.account ?? '', invoiceNo: '', note: '' });
     this.fillAmount();
   }
 

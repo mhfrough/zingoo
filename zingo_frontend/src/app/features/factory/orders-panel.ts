@@ -50,7 +50,7 @@ import { orderVoucher } from './vouchers';
       [hint]="reason().hint" [run]="reason().run" [done]="reason().done" (saved)="changed.emit()" />
     <app-order-timeline [(open)]="timelineOpen" [order]="current()" />
     @if (mode() === 'factory') {
-      <app-payment-request-form [(open)]="invoiceOpen" [rows]="position()?.rows ?? []" [manufacturer]="manufacturer()" [orderId]="invoiceFor()" (saved)="changed.emit()" />
+      <app-payment-request-form [(open)]="invoiceOpen" [rows]="position()?.rows ?? []" [manufacturer]="manufacturer()" [orderId]="invoiceFor()" kind="Balance" (saved)="changed.emit()" />
     }
   `,
 })
@@ -144,7 +144,8 @@ export class OrdersPanel {
       list.push({ id: 'accept', label: company ? 'Accept for manufacturer' : 'Accept order', tone: 'success' }, { id: 'reject', label: company ? 'Reject for manufacturer' : 'Reject order', tone: 'danger' });
     }
     // until it is dispatched: the last step opens the Ready to Dispatch form
-    if (this.canAnswer() && o.group.every((x) => x.status === 'Accepted') && o.group.some((x) => x.readyContainers == null)) {
+    // (an order whose goods already left the factory, e.g. shipped before Ready to dispatch existed, is done)
+    if (this.canAnswer() && o.group.every((x) => x.status === 'Accepted') && o.group.some((x) => x.readyContainers == null && x.shippedContainers < x.containers)) {
       const last = this.stages()[this.stages().length - 1];
       list.push({ id: 'stage', label: o.stage === last ? 'Ready to dispatch' : 'Report progress', tone: o.stage === last ? 'success' : undefined });
     }

@@ -102,8 +102,42 @@ const today = () => new Date().toISOString().slice(0, 10);
       }
 
       & input {
-        inline-size: 6rem;
+        inline-size: 4.5rem;
       }
+
+      & tr.damage-row td {
+        padding-block-start: 0;
+        text-align: start;
+      }
+
+      & tr:first-child td {
+        border-block-end: 0;
+      }
+    }
+
+    /* damage on arrival: containers, bundles and loose pieces in one line under the product */
+    .damage {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: var(--space-2) var(--space-3);
+      padding: var(--space-2);
+      border-radius: var(--radius-md);
+      background: var(--surface-sunken);
+
+      & label {
+        display: inline-flex;
+        align-items: center;
+        gap: var(--space-1);
+        font-size: var(--text-xs);
+        color: var(--text-2);
+      }
+    }
+
+    .damage__label {
+      font-size: var(--text-xs);
+      font-weight: var(--weight-semibold);
+      color: var(--text-2);
     }
 
     .files {
@@ -181,26 +215,33 @@ const today = () => new Date().toISOString().slice(0, 10);
             <div class="wrap">
               <table class="qty">
                 <thead>
-                  <tr><th rowspan="2">Product</th><th rowspan="2">Ordered</th><th rowspan="2">Delivered</th><th rowspan="2">Damaged by manufacturer</th><th colspan="3">Damaged on arrival</th></tr>
-                  <tr><th>{{ unitOf(loads()[0]) }}</th><th>Bundles</th><th>Pieces</th></tr>
+                  <tr><th>Product</th><th>Ordered</th><th>Delivered</th><th>Damaged by manufacturer</th></tr>
                 </thead>
-                <tbody>
-                  @for (l of loads(); track l.id) {
+                @for (l of loads(); track l.id) {
+                  <tbody>
                     <tr>
                       <td><strong>{{ l.product.name }}</strong><small>{{ l.product.sku }} · {{ l.refNo }}</small></td>
-                      <td>{{ num(l.order.containers) }}<small>containers</small></td>
+                      <td>{{ num(l.order.containers) }}<small>{{ unitOf(l) }}</small></td>
                       <td>{{ num(l.containers) }}<small>{{ num(l.containers * l.bundlesPerContainer) }} bundles</small></td>
                       <td>{{ l.order.productionDamaged ? num(l.order.productionDamaged) : '-' }}</td>
-                      @for (k of parts; track k) {
-                        <td>
-                          <input type="number" min="0" step="1" [value]="damage()[l.id]?.[k] ?? ''" placeholder="0"
-                            (input)="setDamage(l.id, k, $any($event.target).value)" [attr.aria-label]="k + ' damaged on arrival of ' + l.product.sku" />
-                          @if (k === 'pieces' && bundlesOf(l) > 0) { <small class="info-figure">= {{ num(bundlesOf(l)) }} bundles</small> }
-                        </td>
-                      }
                     </tr>
-                  }
-                </tbody>
+                    <tr class="damage-row">
+                      <td colspan="4">
+                        <div class="damage">
+                          <span class="damage__label">Damaged on arrival</span>
+                          @for (k of parts; track k) {
+                            <label>
+                              <input type="number" min="0" step="1" [value]="damage()[l.id]?.[k] ?? ''" placeholder="0"
+                                (input)="setDamage(l.id, k, $any($event.target).value)" [attr.aria-label]="partLabel(l, k) + ' damaged on arrival of ' + l.product.sku" />
+                              <span>{{ partLabel(l, k) }}</span>
+                            </label>
+                          }
+                          @if (bundlesOf(l) > 0) { <strong class="info-figure">= {{ num(bundlesOf(l)) }} bundles claimed</strong> }
+                        </div>
+                      </td>
+                    </tr>
+                  </tbody>
+                }
               </table>
             </div>
           </section>
@@ -252,6 +293,7 @@ export class DispatchReceive extends FormModal {
   /** damage on arrival per load: whole containers, bundles and loose pieces */
   protected damage = signal<Record<string, { containers?: number; bundles?: number; pieces?: number }>>({});
   protected parts = ['containers', 'bundles', 'pieces'] as const;
+  protected partLabel = (l: Shipment, k: 'containers' | 'bundles' | 'pieces') => (k === 'containers' ? this.unitOf(l) : k === 'bundles' ? 'Bundles' : 'Pieces');
   /** Bora / Carton / container: what the first load's containers are called */
   protected unitOf = (l: Shipment | undefined) => l?.order?.containerUnit || l?.product?.containerUnit || 'Containers';
   /** the damage of one load in whole bundles (loose pieces count once they make a whole bundle) */

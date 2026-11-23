@@ -9,6 +9,13 @@ import { OpsApi } from '../ops/ops.api';
 
 /** packets in one container of a product */
 const perContainer = (p: Product) => p.packetsPerContainer ?? p.packsPerCarton * (p.bundlesPerContainer || 1);
+/** the default packaging template (pieces, container unit, full load) */
+const defaultTpl = (p: Product) => (p.packagings ?? []).find((t) => t.isDefault) ?? p.packagings?.[0] ?? null;
+/** what the default manufacturer is paid per packet: its rate plus the packaging and printing it charges */
+const makerTotal = (p: Product) => {
+  const m = (p.makers ?? []).find((x) => x.isDefault) ?? (p.makers ?? []).find((x) => x.manufacturerId === p.manufacturerId);
+  return Number(p.manufacturerRate) + Number(m?.packagingFee ?? 0) + Number(m?.printingFee ?? 0);
+};
 
 /**
  * The product list with its own data and the add / edit form: each SKU with its packaging (packet -> bundle ->
@@ -24,7 +31,7 @@ const perContainer = (p: Product) => p.packetsPerContainer ?? p.packsPerCarton *
       <div class="card__head">
         <div>
           <h2>Products</h2>
-          <p>Packet → bundle → container, the price of each, and the manufacturer and distributor each SKU is assigned to
+          <p>Piece → packet → bundle → container (bag / carton / bora) → truck, the price of a container, and the manufacturer and distributor of each SKU
             @if (unassigned()) { · <strong>{{ unassigned() }} not fully assigned</strong> }
           </p>
         </div>
@@ -70,7 +77,15 @@ export class ProductsPanel {
     { id: 'name', label: 'Product name', value: (p) => p.name, sub: (p) => [p.flavour !== p.name ? p.flavour : null, p.packetSize].filter(Boolean).join(' · ') || null },
     {
       id: 'packaging', label: 'Packets per container', kind: 'number', value: (p) => perContainer(p),
-      sub: (p) => `${fmtNumber(p.packsPerCarton)} per bundle × ${fmtNumber(p.bundlesPerContainer)} bundles${(p.packagings?.length ?? 0) > 1 ? ` · ${p.packagings!.length} templates` : ''}`, priority: 3,
+      sub: (p) => {
+        const t = defaultTpl(p);
+        const unit = t?.containerUnit || p.containerUnit || 'container';
+        return [
+          `${(t?.piecesPerPacket ?? 1) > 1 ? `${t!.piecesPerPacket} pcs × ` : ''}${fmtNumber(p.packsPerCarton)} per bundle × ${fmtNumber(p.bundlesPerContainer)} bundles per ${unit}`,
+          t?.containersPerTruck ? `${fmtNumber(t.containersPerTruck)} per ${t.transportUnit || 'full load'}` : null,
+          (p.packagings?.length ?? 0) > 1 ? `${p.packagings!.length} templates` : null,
+        ].filter(Boolean).join(' · ');
+      }, priority: 3,
     },
     { id: 'manufacturer', label: 'Manufacturer', value: (p) => p.manufacturer?.name ?? 'Not assigned', priority: 2 },
     {
@@ -82,7 +97,7 @@ export class ProductsPanel {
     },
     {
       id: 'container', label: 'Container price', kind: 'money', priority: 2, value: (p) => p.rate * perContainer(p),
-      sub: (p) => `Cost ${fmtAmount(p.manufacturerRate * perContainer(p))}`,
+      sub: (p) => `Manufacturer ${fmtAmount(makerTotal(p) * perContainer(p))}`,
     },
     { id: 'rate', label: 'Packet price', align: 'end', value: (p) => fmtAmount2(p.rate), sub: (p) => `MRP ${fmtAmount2(p.mrp)}`, priority: 3 },
     { id: 'status', label: 'Status', kind: 'tag', value: (p) => (p.active ? 'Active' : 'Inactive'), tone: (p) => (p.active ? 'success' : 'neutral'), priority: 3 },

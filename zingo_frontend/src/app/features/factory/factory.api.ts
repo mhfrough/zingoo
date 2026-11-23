@@ -300,6 +300,8 @@ export interface DistInvoice {
   lines: DistInvoiceLine[];
   payments: { id: string; refNo: string; date: string; amount: number; method: string }[];
   paid: number;
+  /** part of `paid` that came from the distributor's order payments (advance and Pay) */
+  fromOrders?: number;
   due: number;
   containers: number;
   packets: number;

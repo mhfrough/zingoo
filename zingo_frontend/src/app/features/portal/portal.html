@@ -12,11 +12,13 @@
   }
   @if (profile.value(); as p) {
     <div class="grid-auto">
-      <app-kpi label="Account outstanding" [value]="money(p.openBalance)" icon="wallet" tone="accent"
-        [foot]="p.overdue > 0 ? money(p.overdue) + ' overdue' : 'Nothing overdue'" />
+      <app-kpi label="Account outstanding" [value]="money(p.openBalance + orderBalance())" icon="wallet" tone="accent"
+        [foot]="p.overdue + orderOverdue() > 0 ? money(p.overdue + orderOverdue()) + ' overdue' : 'Nothing overdue'" />
       <app-kpi label="Available credit" [value]="money(p.availableCredit)" icon="shield-check" tone="success" [foot]="'Credit limit ' + money(p.creditLimit)" />
-      <app-kpi label="Payments awaiting Zingo" [value]="money(p.pendingAdvices)" icon="clock" tone="warning" [foot]="number(p.pendingAdviceCount) + ' not yet verified'" />
-      <app-kpi label="Deliveries to acknowledge" [value]="number(p.toAcknowledge)" icon="truck" tone="info" [foot]="number(p.acknowledged) + ' acknowledged'" />
+      <app-kpi label="Paid on orders" [value]="money(orderPaid())" icon="banknote" tone="success"
+        [foot]="p.pendingAdvices > 0 ? money(p.pendingAdvices) + ' reported, being checked' : 'Counts as soon as you pay'" />
+      <app-kpi label="Deliveries to acknowledge" [value]="number(p.toAcknowledge + inTransit())" icon="truck" tone="info"
+        [foot]="inTransit() ? number(inTransit()) + ' on the way from Zen Foods' : number(p.acknowledged) + ' acknowledged'" />
     </div>
   }
 

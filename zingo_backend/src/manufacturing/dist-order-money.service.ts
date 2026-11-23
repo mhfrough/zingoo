@@ -81,14 +81,17 @@ export class DistOrderMoneyService {
     if (!d) throw new NotFoundException('Distributor not found');
     const rows: {
       ref: string; date: string; status: string; sku: string; name: string; containers: number; packets: number; rate: number;
-      receivedContainers: number; receivedPackets: number; receivedDate: string | null;
+      receivedContainers: number; receivedPackets: number; receivedDate: string | null; creditedPackets: number;
     }[] = await em.query(
       `SELECT COALESCE(o."groupRef", o."refNo") AS ref, o.date::text AS date, o.status, p.sku, p.name,
               o.containers, o.containers * o."bundlesPerContainer" * o."packetsPerBundle" AS packets,
               COALESCE(r.rate, p.rate)::float8 AS rate,
               COALESCE(SUM(s."receivedContainers") FILTER (WHERE s.status = 'Received'), 0)::int AS "receivedContainers",
               COALESCE(SUM(s."receivedContainers" * s."bundlesPerContainer" * s."packetsPerBundle") FILTER (WHERE s.status = 'Received'), 0)::float8 AS "receivedPackets",
-              MIN(s."receivedDate") FILTER (WHERE s.status = 'Received')::text AS "receivedDate"
+              MIN(s."receivedDate") FILTER (WHERE s.status = 'Received')::text AS "receivedDate",
+              -- goods that arrived damaged and were credited by the manufacturer: the distributor does not pay for them
+              (SELECT COALESCE(SUM(c.bundles), 0) FROM delivery_claims c
+                WHERE c."orderId" = o.id AND c.status = 'Accepted' AND c.resolution = 'Credit')::float8 * o."packetsPerBundle" AS "creditedPackets"
          FROM production_orders o
          JOIN products p ON p.id = o."productId"
          LEFT JOIN distributor_rates r ON r."distributorId" = o."distributorId" AND r."productId" = o."productId"
@@ -103,7 +106,7 @@ export class DistOrderMoneyService {
     for (const [ref, lines] of byRef) {
       const live = lines.filter((l) => l.status !== 'Cancelled');
       const orderedValue = round2(live.reduce((n, l) => n + Number(l.packets) * Number(l.rate), 0));
-      const receivedValue = round2(lines.reduce((n, l) => n + Number(l.receivedPackets) * Number(l.rate), 0));
+      const receivedValue = round2(lines.reduce((n, l) => n + Math.max(0, Number(l.receivedPackets) - Number(l.creditedPackets)) * Number(l.rate), 0));
       const containers = live.reduce((n, l) => n + Number(l.containers), 0);
       const receivedContainers = lines.reduce((n, l) => n + Number(l.receivedContainers), 0);
       const receivedDate = lines.map((l) => l.receivedDate).filter((x): x is string => !!x).sort()[0] ?? null;

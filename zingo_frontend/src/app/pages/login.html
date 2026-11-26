@@ -35,7 +35,10 @@
         Sign in
       </button>
 
-      <p class="auth__foot muted">{{ platform.footer() }}</p>
+      <p class="auth__foot muted">
+        {{ platform.footer() }}<a class="auth__credit" [href]="creditUrl" target="_blank" rel="noopener author"
+          [attr.aria-label]="'Designed and developed by ' + author.name">&nbsp;·</a>
+      </p>
     </form>
   </section>
 

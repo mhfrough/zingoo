@@ -52,6 +52,22 @@ export class AuthService {
 
   readonly user = signal<AuthUser | null>(this.loadUser());
 
+  constructor() {
+    // the stored login may be out of date (a new role, the super admin moved): read it fresh once per visit
+    // (deferred: the auth interceptor needs this service, which is still being built here)
+    if (this.isLoggedIn) setTimeout(() => {
+      if (!this.isLoggedIn) return;
+      this.http.get<AuthUser>(`${environment.apiUrl}/auth/me`).subscribe({
+        next: (me) => {
+          const merged = { ...this.user(), ...me, viewAs: this.user()?.viewAs };
+          localStorage.setItem(USER_KEY, JSON.stringify(merged));
+          this.user.set(merged);
+        },
+        error: () => {},
+      });
+    });
+  }
+
   get token(): string | null {
     return localStorage.getItem(TOKEN_KEY);
   }

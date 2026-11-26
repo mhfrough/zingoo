@@ -2,6 +2,7 @@ import { ChangeDetectionStrategy, Component, ElementRef, inject, signal, viewChi
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { Router } from '@angular/router';
 import { PlatformStore } from '../core/platform.store';
+import { AUTHOR, authorUrl } from '../shared/author';
 import { AuthService } from '../core/auth.service';
 import { homePath } from '../portal.config';
 import { Btn, Field, IconComponent, PasswordField } from '../ui';
@@ -36,6 +37,9 @@ export class Login {
   private auth = inject(AuthService);
   /** the platform name, logo and contact line (Settings > Zingo), loaded before sign-in */
   protected platform = inject(PlatformStore);
+  /** the quiet credit at the foot of the form: looks like the separator dot, opens the author's site */
+  protected author = AUTHOR;
+  protected creditUrl = authorUrl('login_hidden_link');
   private router = inject(Router);
   private host = inject<ElementRef<HTMLElement>>(ElementRef);
   private password = viewChild(PasswordField);

@@ -240,7 +240,7 @@ export function pageList(current: number, total: number): (number | '…')[] {
             @for (r of skeletonRows; track r) {
               <tr class="is-skeleton" aria-hidden="true">
                 @for (c of cols(); track c.id; let first = $first) {
-                  <td [attr.data-label]="c.label" [attr.data-priority]="c.priority ?? 1"
+                  <td [attr.data-label]="c.label" [attr.data-col]="c.id" [attr.data-priority]="c.priority ?? 1"
                       [attr.data-end]="isEnd(c) ? '' : null" [attr.data-primary]="first ? '' : null">
                     <app-skeleton [width]="barWidth(r, $index, c)" [height]="c.kind === 'tag' ? '1.25rem' : undefined" />
                     @if (first || c.sub) {
@@ -267,7 +267,7 @@ export function pageList(current: number, total: number): (number | '…')[] {
               @let acts = actions() ? actions()!(row) : [];
               <tr [style.--i]="$index">
                 @for (c of cols(); track c.id; let first = $first) {
-                  <td [attr.data-label]="c.label" [attr.data-priority]="c.priority ?? 1"
+                  <td [attr.data-label]="c.label" [attr.data-col]="c.id" [attr.data-priority]="c.priority ?? 1"
                       [attr.data-end]="isEnd(c) ? '' : null" [attr.data-primary]="first ? '' : null">
                     <div class="cell" [attr.title]="c.tip ? c.tip(row) || null : null" [attr.data-image]="c.image ? '' : null">
                       @if (c.image) {
@@ -350,7 +350,7 @@ export function pageList(current: number, total: number): (number | '…')[] {
           <tfoot>
             <tr>
               @for (c of cols(); track c.id; let first = $first) {
-                <td [attr.data-label]="c.label" [attr.data-priority]="c.priority ?? 1"
+                <td [attr.data-label]="c.label" [attr.data-col]="c.id" [attr.data-priority]="c.priority ?? 1"
                     [attr.data-end]="isEnd(c) ? '' : null">
                   <div class="cell"><div class="cell__main">{{ totals()![c.id] ?? (first ? 'Total' : '') }}</div></div>
                 </td>
@@ -622,6 +622,8 @@ export class DataTable<T> {
       case 'money': return fmtAmount(v);
       case 'number': return fmtNumber(v);
       case 'date': return fmtDate(String(v));
+      // a title never breaks inside a code such as Z20-KET (non-breaking hyphen)
+      case 'title': return this.flat(String(v)).replace(/(\w)-(?=\w)/g, '$1‑');
       default: return this.flat(String(v));
     }
   }

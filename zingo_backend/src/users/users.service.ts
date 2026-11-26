@@ -34,7 +34,20 @@ export class UsersService implements OnApplicationBootstrap {
       return;
     }
     const existing = await this.repo.findOne({ where: { email } });
-    if (existing) return;
+    if (existing?.isRoot) return;
+    if (existing) {
+      // ROOT_EMAIL now names a login that already exists: it becomes the super admin (with ROOT_PASSWORD, once);
+      // the old super admin stays as a normal Admin
+      await this.repo.update({ isRoot: true }, { isRoot: false });
+      existing.isRoot = true;
+      existing.password = await bcrypt.hash(password, 10);
+      existing.role = 'Admin';
+      existing.seat = 'Both';
+      existing.status = 'Active';
+      await this.repo.save(existing);
+      this.log.log('An existing login became the super admin (ROOT_EMAIL).');
+      return;
+    }
     // ROOT_EMAIL changed: the super admin account moves to the new email and takes ROOT_PASSWORD (once, at the move)
     const oldRoot = await this.repo.findOne({ where: { isRoot: true }, order: { createdAt: 'ASC' } });
     if (oldRoot) {

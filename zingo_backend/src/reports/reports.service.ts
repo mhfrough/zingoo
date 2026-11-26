@@ -211,6 +211,20 @@ export class ReportsService {
           WHEN l."refType" = 'EXPORT_COST'    THEN 'Export costs paid'
           WHEN l."refType" = 'VOUCHER'        THEN 'Journal vouchers'
           WHEN l."refType" = 'FUNDING_REPAY'  THEN 'Loan and advance repayments'
+          WHEN l."refType" = 'DIST_RECEIPT'   THEN 'Distributor payments on invoices'
+          WHEN l."refType" = 'DIST_ORDER_PAY' THEN 'Distributor payments on orders'
+          WHEN l."refType" = 'MFR_REQ_PAY'    THEN 'Manufacturer invoices paid'
+          WHEN l."refType" = 'REMITTANCE'     THEN 'International remittances'
+          WHEN l."refType" = 'SHIPMENT'       THEN 'Shipments'
+          WHEN l."refType" = 'DELIVERY_CLAIM' THEN 'Delivery claims'
+          WHEN l."refType" = 'EXPORT_CLAIM'   THEN 'Export claims'
+          WHEN l."refType" = 'CREDIT_NOTE'    THEN 'Credit notes'
+          WHEN l."refType" = 'MFR_ADV_APPLY'  THEN 'Manufacturer advances applied'
+          WHEN l."refType" = 'DIST_INVOICE'   THEN 'Distributor invoices'
+          WHEN l."refType" = 'DIST_ORDER_APPLY' THEN 'Order payments set against invoices'
+          WHEN l."refType" = 'ORDER'          THEN 'Sales orders'
+          WHEN l."refType" = 'BATCH'          THEN 'Production batches'
+          WHEN l."refType" = 'EXPORT'         THEN 'Export containers'
           WHEN l."refType" = 'FINANCE' THEN
             CASE f.type
               WHEN 'Capital Injection'  THEN CASE f.direction WHEN 'out' THEN 'Advances paid to partners' ELSE 'Capital and partner loans' END

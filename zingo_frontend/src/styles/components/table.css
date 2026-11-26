@@ -146,6 +146,17 @@
     }
   }
 
+  /* desktop: column headings stay on one line, and the record time never breaks */
+  @container dt (min-width: 900px) {
+    .table th {
+      white-space: nowrap;
+    }
+
+    .table td[data-col='stamp'] :is(.cell__main, .cell__sub) {
+      white-space: nowrap;
+    }
+  }
+
   /* tablet: fold priority-3 columns */
   @container dt (max-width: 899px) {
     .table [data-priority='3'] {
@@ -158,7 +169,7 @@
   }
 
   /* phone: one card per row */
-  @container dt (max-width: 639px) {
+  @container dt (max-width: 479px) {
     .table,
     .table tbody,
     .table tfoot,
@@ -452,7 +463,7 @@
   }
 
   /* phone: the number buttons give way to Previous / Next and "Page x of y" */
-  @container dt (max-width: 639px) {
+  @container dt (max-width: 479px) {
     .dt__page--num,
     .dt__gap {
       display: none;

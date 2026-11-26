@@ -2,7 +2,7 @@
 Developer: Mohammad Hamza
 Role: Design, build and development
 GitHub: https://github.com/mhfrough
-Site: https://mhfrough.dev/?utm_source=zingoo&utm_medium=referral&utm_campaign=built_by&utm_content=humans_txt
+Site: https://mhfrough.github.io/?utm_source=zingoo&utm_medium=referral&utm_campaign=built_by&utm_content=humans_txt
 
 /* OWNER */
 Owner: Mudassir Jokhio

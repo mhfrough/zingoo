@@ -336,16 +336,22 @@
     text-align: center;
   }
 
-  /* the author credit: reads as part of the footer text (no colour, underline or pointer change) */
+  /* the author credit: a dot in the bottom-right corner of the brand panel, fully transparent (still clickable) */
   .auth__credit {
+    position: absolute;
+    inset-block-end: 0.5rem;
+    inset-inline-end: 0.5rem;
+    z-index: 1;
+    display: grid;
+    place-items: center;
+    inline-size: 1rem;
+    block-size: 1rem;
     color: inherit;
+    font-size: var(--text-xs);
+    line-height: 1;
     text-decoration: none;
     cursor: default;
-
-    &:focus-visible {
-      outline: 1px dotted currentColor;
-      outline-offset: 2px;
-    }
+    opacity: 0;
   }
 
   .auth__row {

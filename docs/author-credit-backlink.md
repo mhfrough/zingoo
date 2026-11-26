@@ -15,8 +15,8 @@ values in the table.
 
 1. **Credits in the page head** (not shown on screen; read by search engines, browser tools and anyone viewing the source).
 2. **`humans.txt`** at the site root, linked from the head.
-3. **One hidden clickable credit on the sign-in page**: it looks like ordinary footer text (a separator dot), with no
-   colour, underline or pointer change. Clicking it opens the author's site in a new tab.
+3. **One invisible clickable credit on the sign-in page**: a dot in the bottom-right corner of the brand panel with
+   `opacity: 0`, so nobody sees it. Clicking that corner opens the author's site in a new tab.
 4. **UTM parameters on every link**, so the author's analytics (Google Analytics, Plausible, Umami ...) show
    which project, which placement and which deployment a visit came from.
 
@@ -100,12 +100,12 @@ export function authorUrl(placement: string): string {
 }
 ```
 
-## 4. The hidden credit on the sign-in page
+## 4. The invisible credit on the sign-in page
 
-Place it at the end of a line of footer text that is already there (company name, address, copyright). It renders
-as ` ·` so it reads as a separator.
+A small link in the bottom-right corner of the sign-in page's brand / image panel (any panel with
+`position: relative`), with `opacity: 0`. It stays clickable: a click on that corner opens the author's site.
 
-**Angular** (component + template):
+**Angular** (component + template, inside the panel element):
 
 ```ts
 import { AUTHOR, authorUrl } from '../shared/author';
@@ -117,10 +117,11 @@ export class Login {
 ```
 
 ```html
-<p class="auth__foot muted">
-  {{ footerText }}<a class="auth__credit" [href]="creditUrl" target="_blank" rel="noopener author"
-    [attr.aria-label]="'Designed and developed by ' + author.name">&nbsp;·</a>
-</p>
+<aside class="auth__brand">
+  ...
+  <a class="auth__credit" [href]="creditUrl" target="_blank" rel="noopener author" tabindex="-1"
+     [attr.aria-label]="'Designed and developed by ' + author.name">·</a>
+</aside>
 ```
 
 **React**:
@@ -128,18 +129,21 @@ export class Login {
 ```tsx
 import { AUTHOR, authorUrl } from './shared/author';
 
-<p className="auth__foot">
-  {footerText}
+<aside className="auth__brand">
+  {/* ... */}
   <a className="auth__credit" href={authorUrl('login_hidden_link')} target="_blank" rel="noopener author"
-     aria-label={`Designed and developed by ${AUTHOR.name}`}>&nbsp;·</a>
-</p>
+     tabIndex={-1} aria-label={`Designed and developed by ${AUTHOR.name}`}>·</a>
+</aside>
 ```
 
 **Plain HTML** (set the href with a line of script so `ref` gets the host):
 
 ```html
-<p class="auth__foot">© 2026 Company<a class="auth__credit" id="credit" target="_blank" rel="noopener author"
-   aria-label="Designed and developed by Mohammad Hamza">&nbsp;·</a></p>
+<aside class="auth__brand">
+  ...
+  <a class="auth__credit" id="credit" target="_blank" rel="noopener author" tabindex="-1"
+     aria-label="Designed and developed by Mohammad Hamza">·</a>
+</aside>
 <script>
   document.getElementById('credit').href =
     'https://mhfrough.github.io/?utm_source=PROJECT&utm_medium=referral&utm_campaign=built_by&utm_content=login_hidden_link&ref=' +
@@ -147,36 +151,48 @@ import { AUTHOR, authorUrl } from './shared/author';
 </script>
 ```
 
-**CSS** (makes the link look like the text around it):
+**CSS**:
 
 ```css
+.auth__brand { position: relative; }   /* the panel the dot sits in */
+
 .auth__credit {
+  position: absolute;
+  bottom: 0.5rem;
+  right: 0.5rem;
+  z-index: 1;
+  display: grid;
+  place-items: center;
+  width: 1rem;
+  height: 1rem;
   color: inherit;
+  font-size: 12px;
+  line-height: 1;
   text-decoration: none;
-  cursor: default;
-}
-.auth__credit:focus-visible {
-  outline: 1px dotted currentColor;
-  outline-offset: 2px;
+  cursor: default;   /* no hand cursor gives it away */
+  opacity: 0;        /* invisible, but still clickable */
 }
 ```
 
+`tabindex="-1"` keeps it out of the keyboard Tab order, so it never shows a focus ring.
+
 ## Rules to keep it safe and honest
 
-- Keep it a real, clickable link with an `aria-label` that says what it is. Do not use `display: none`,
-  `visibility: hidden`, zero-size or same-colour-as-background text: search engines treat truly hidden links as spam,
-  and screen-reader users should hear what the link is.
+- Use `opacity: 0`, never `display: none` or `visibility: hidden`: those remove the link, so a click does nothing.
+- Keep the `aria-label` so screen-reader users still hear what the link is.
+- Search engines may ignore or discount an invisible link, so do not count on it for SEO: it is for the click and
+  the UTM report. The head credits and humans.txt are the visible-to-crawlers part.
 - `target="_blank"` always with `rel="noopener"`; `rel="author"` marks it as the author's page.
 - One hidden link per project is enough (the sign-in page). The head credits and humans.txt cover the rest.
 - Never put personal data (user names, emails, ids) in the UTM parameters: only the project key, the placement and
   the host name.
-- The client's own brand stays first everywhere on screen; the credit is only the dot on the sign-in page.
+- The client's own brand stays first everywhere on screen; the credit is only the invisible dot on the sign-in page.
 
 ## Checklist for a new project
 
 - [ ] `index.html`: comment block, `author` / `creator` / `designer` meta, `rel="author"` and `rel="me"` links
 - [ ] `humans.txt` in the static folder
 - [ ] `shared/author.ts` (or `.js`) with the project key set
-- [ ] the ` ·` credit link on the sign-in page footer, with its CSS
-- [ ] open the sign-in page, click the dot, confirm the author's site opens with `utm_source=<project>` and `ref=<host>`
+- [ ] the invisible credit dot in the corner of the sign-in brand panel, with its CSS
+- [ ] open the sign-in page, click the bottom-right corner of the panel, confirm the author's site opens with `utm_source=<project>` and `ref=<host>`
 - [ ] in the author's analytics, filter by `utm_campaign = built_by` to see every project's visits

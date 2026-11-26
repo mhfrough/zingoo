@@ -35,10 +35,7 @@
         Sign in
       </button>
 
-      <p class="auth__foot muted">
-        {{ platform.footer() }}<a class="auth__credit" [href]="creditUrl" target="_blank" rel="noopener author"
-          [attr.aria-label]="'Designed and developed by ' + author.name">&nbsp;·</a>
-      </p>
+      <p class="auth__foot muted">{{ platform.footer() }}</p>
     </form>
   </section>
 
@@ -88,5 +85,8 @@
 
       <p class="auth__brand-foot">{{ platform.platform().tagline || platform.platform().name }}</p>
     </div>
+    <!-- author credit: an invisible dot in the bottom-right corner of the panel; a click opens the author's site -->
+    <a class="auth__credit" [href]="creditUrl" target="_blank" rel="noopener author" tabindex="-1"
+       [attr.aria-label]="'Designed and developed by ' + author.name">·</a>
   </aside>
 </main>

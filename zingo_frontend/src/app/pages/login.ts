@@ -1,6 +1,7 @@
 import { ChangeDetectionStrategy, Component, ElementRef, inject, signal, viewChild } from '@angular/core';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { Router } from '@angular/router';
+import { PlatformStore } from '../core/platform.store';
 import { AuthService } from '../core/auth.service';
 import { homePath } from '../portal.config';
 import { Btn, Field, IconComponent, PasswordField } from '../ui';
@@ -33,6 +34,8 @@ function writeRemembered(email: string | null) {
 })
 export class Login {
   private auth = inject(AuthService);
+  /** the platform name, logo and contact line (Settings > Zingo), loaded before sign-in */
+  protected platform = inject(PlatformStore);
   private router = inject(Router);
   private host = inject<ElementRef<HTMLElement>>(ElementRef);
   private password = viewChild(PasswordField);

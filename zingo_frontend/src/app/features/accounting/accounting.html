@@ -31,11 +31,11 @@
 
   <div class="toolbar acc-period">
     <label for="acc-period">Period</label>
-    <select id="acc-period" [value]="period()" (change)="period.set($any($event.target).value)">
+    <app-select id="acc-period" [value]="period()" (valueChange)="period.set($any($event))">
       @for (o of periodOptions(); track o.value) {
-        <option [value]="o.value" [selected]="o.value === period()">{{ o.label }}</option>
+        <option [value]="o.value">{{ o.label }}</option>
       }
-    </select>
+    </app-select>
   </div>
 
   <app-tabs [tabs]="tabs()" [(active)]="tab" ariaLabel="Accounting sections">

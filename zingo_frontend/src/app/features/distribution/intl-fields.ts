@@ -288,11 +288,11 @@ export function intlValue(g: IntlGroup) {
         @for (a of addresses.controls; track a; let i = $index) {
           <div class="row" [formGroupName]="i">
             <app-field label="Type">
-              <select formControlName="type">
+              <app-select formControlName="type">
                 @for (t of addressTypes; track t) {
                   <option [value]="t">{{ t }}</option>
                 }
-              </select>
+              </app-select>
             </app-field>
             <app-field label="Address" [required]="true"><input type="text" formControlName="line" maxlength="300" /></app-field>
             <app-field label="City"><input type="text" formControlName="city" maxlength="80" /></app-field>
@@ -313,12 +313,12 @@ export function intlValue(g: IntlGroup) {
         @for (k of kycDocs.controls; track k; let i = $index) {
           <div class="row row--doc" [formGroupName]="i">
             <app-field label="Document" [required]="true">
-              <select formControlName="type">
+              <app-select formControlName="type">
                 <option value="">Choose a type</option>
                 @for (t of kycTypes(); track t.code) {
                   <option [value]="t.code">{{ t.code }}{{ t.required ? ' (required)' : '' }}</option>
                 }
-              </select>
+              </app-select>
             </app-field>
             <app-field label="Expiry"><input type="date" formControlName="expiry" /></app-field>
             <span class="row__end">
@@ -334,11 +334,11 @@ export function intlValue(g: IntlGroup) {
       <app-field label="Start"><input type="date" formControlName="agreementStart" /></app-field>
       <app-field label="End"><input type="date" formControlName="agreementEnd" /></app-field>
       <app-field label="Status">
-        <select formControlName="agreementStatus">
+        <app-select formControlName="agreementStatus">
           @for (s of agreementStatuses; track s) {
             <option [value]="s">{{ s }}</option>
           }
-        </select>
+        </app-select>
       </app-field>
       <app-field label="Renewal notice (days)" hint="Before the end date"><input type="number" formControlName="renewalNoticeDays" min="0" step="1" /></app-field>
       <app-field label="Notice period (days)" hint="To terminate"><input type="number" formControlName="noticePeriodDays" min="0" step="1" /></app-field>
@@ -359,20 +359,20 @@ export function intlValue(g: IntlGroup) {
       <app-field label="Named port / place"><input type="text" formControlName="incotermPlace" maxlength="120" placeholder="Jebel Ali, Dubai" /></app-field>
       <app-field label="Incoterms version"><input type="text" formControlName="incotermVersion" maxlength="20" /></app-field>
       <app-field label="Payment terms">
-        <select formControlName="paymentTermType">
+        <app-select formControlName="paymentTermType">
           <option value="">Choose terms</option>
           @for (t of termTypes; track t) {
             <option [value]="t">{{ t }}</option>
           }
-        </select>
+        </app-select>
       </app-field>
       <app-field label="Bank charges" hint="Who bears them">
-        <select formControlName="bankCharges">
+        <app-select formControlName="bankCharges">
           <option value="">Not agreed yet</option>
           @for (c of bankChargeOptions; track c) {
             <option [value]="c">{{ c }}</option>
           }
-        </select>
+        </app-select>
       </app-field>
       <app-field label="Remittance methods" [wide]="true">
         <app-multi-select formControlName="settlementMethods" [options]="remittanceMethods()" placeholder="Bank transfer, LC ..." />
@@ -391,11 +391,11 @@ export function intlValue(g: IntlGroup) {
             <app-field label="Instalment" [required]="true"><input type="text" formControlName="label" maxlength="80" placeholder="Advance" /></app-field>
             <app-field label="Share (%)" [required]="true"><input type="number" formControlName="pct" min="0" max="100" step="1" /></app-field>
             <app-field label="Due">
-              <select formControlName="trigger">
+              <app-select formControlName="trigger">
                 @for (t of triggers; track t) {
                   <option [value]="t">{{ t }}</option>
                 }
-              </select>
+              </app-select>
             </app-field>
             <app-field label="Days after"><input type="number" formControlName="days" min="0" max="365" step="1" /></app-field>
             <span class="row__end">
@@ -432,7 +432,7 @@ export function intlValue(g: IntlGroup) {
       <app-field label="Discharge port"><input type="text" formControlName="dischargePort" maxlength="120" /></app-field>
       <app-field label="Final destination"><input type="text" formControlName="finalDestination" maxlength="120" /></app-field>
       <app-field label="Shipping mode">
-        <select formControlName="shippingMode"><option value="">-</option><option>Sea</option><option>Air</option><option>Road</option></select>
+        <app-select formControlName="shippingMode"><option value="">-</option><option>Sea</option><option>Air</option><option>Road</option></app-select>
       </app-field>
       <app-field label="Container preference" [wide]="true" hint="20GP, 40HC, LCL ... and any weight limits"><input type="text" formControlName="containerPreference" maxlength="200" /></app-field>
       <app-field label="Importer of record"><input type="text" formControlName="importerOfRecord" maxlength="200" /></app-field>

@@ -1,3 +1,4 @@
+import { logoUrl } from '../../core/attachments.api';
 import { ChangeDetectionStrategy, Component, computed, inject, input, signal } from '@angular/core';
 import { rxResource } from '@angular/core/rxjs-interop';
 import { AuthService } from '../../core/auth.service';
@@ -104,7 +105,7 @@ export class SettingsPartners {
   protected accountOf = signal<string | null>(null);
 
   protected manufacturerColumns: TableColumn<Manufacturer>[] = [
-    { id: 'name', label: 'Manufacturer', value: (m) => m.name, sub: (m) => m.contact },
+    { id: 'name', label: 'Manufacturer', value: (m) => m.name, sub: (m) => m.contact, image: (m) => logoUrl(m.logoId) },
     { id: 'poc', label: 'Point of contact', priority: 2, value: (m) => m.poc || null, sub: (m) => contractText(m) },
     {
       id: 'terms', label: 'Payment terms',
@@ -122,7 +123,7 @@ export class SettingsPartners {
   protected manufacturerActions = (): RowAction[] => !this.canManufacturers() ? [] : [{ id: 'edit', label: 'Edit' }];
 
   protected distributorColumns: TableColumn<Distributor>[] = [
-    { id: 'name', label: 'Distributor', value: (d) => (d.code ? `${d.name} · ${d.code}` : d.name), sub: (d) => `${d.market ?? 'Local'} · ${areaText(d)}` },
+    { id: 'name', label: 'Distributor', value: (d) => (d.code ? `${d.name} · ${d.code}` : d.name), sub: (d) => `${d.market ?? 'Local'} · ${areaText(d)}`, image: (d) => logoUrl(d.logoId) },
     { id: 'contact', label: 'Contact', value: (d) => d.poc || d.contact || primaryContact(d), sub: (d) => contractText(d) ?? (d.address || defaultAddress(d)), priority: 3 },
     {
       id: 'days', label: 'Payment terms', align: 'end', priority: 2, value: (d) => (d.paymentDays ? `${d.paymentDays} days` : 'No limit'),

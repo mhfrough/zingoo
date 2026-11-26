@@ -10,6 +10,7 @@ import { NgTemplateOutlet } from '@angular/common';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { ActivatedRoute, Router } from '@angular/router';
 import { IconComponent, IconName } from './icon';
+import { UnsavedChanges } from './unsaved-changes';
 import { lastTab, rememberTab } from './tab-memory';
 
 /** One tab: `count` shows a small number badge (records in that section). */
@@ -152,9 +153,14 @@ export class Tabs {
     });
   }
 
+  private unsaved = inject(UnsavedChanges);
+  private hostEl = inject<ElementRef<HTMLElement>>(ElementRef);
+
   /** make a tab active (click or keyboard) */
-  protected select(id: string) {
+  protected async select(id: string) {
     if (id === this.active()) return;
+    // a page form with unsaved changes would be lost with its tab: ask first (tabs inside a panel keep their form)
+    if (!this.hostEl.nativeElement.closest('dialog') && !(await this.unsaved.confirmLeave())) return;
     this.active.set(id);
     if (this.remember()) {
       rememberTab(this.pageKey(), id);

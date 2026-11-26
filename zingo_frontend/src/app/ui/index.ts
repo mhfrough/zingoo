@@ -15,6 +15,8 @@ export type { IconName } from './icon';
 export { Modal } from './modal';
 export { Offcanvas } from './offcanvas';
 export { FileInput } from './file-input';
+export { LogoInput } from './logo-input';
+export { UnsavedChanges, unsavedChangesGuard } from './unsaved-changes';
 export { FilesInput } from './files-input';
 export { MoneyInput } from './money-input';
 export { NumberInput } from './number-input';

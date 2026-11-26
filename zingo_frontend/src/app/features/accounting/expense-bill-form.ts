@@ -6,7 +6,7 @@ import { AuthService } from '../../core/auth.service';
 import { SettingsStore } from '../../core/settings.store';
 import { errorText } from '../../shared/errors';
 import { fmtMoney } from '../../shared/format';
-import { Btn, Field, FileInput, MoneyInput, Offcanvas, RichText, Tag } from '../../ui';
+import { Btn, Field, FileInput, MoneyInput, Offcanvas, RichText, Select, Tag } from '../../ui';
 import { FinanceApi } from '../finance/finance.api';
 import { AccountingDoc, Currency } from '../finance/models';
 import { FormModal } from '../ops/form-modal';
@@ -56,7 +56,7 @@ type AllocForm = ReturnType<typeof allocGroup>;
 @Component({
   selector: 'app-expense-bill-form',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [ReactiveFormsModule, Offcanvas, Field, MoneyInput, Btn, Tag, FileInput, RichText],
+  imports: [ReactiveFormsModule, Offcanvas, Field, MoneyInput, Btn, Tag, FileInput, RichText, Select],
   styles: `
     .sections {
       display: flex;
@@ -188,11 +188,11 @@ type AllocForm = ReturnType<typeof allocGroup>;
           <header><h3>1. Bill classification & party</h3></header>
           <div class="grid-4">
             <app-field label="Bill type" [required]="true" hint="From Settings">
-              <select formControlName="billType" (change)="onType()">
+              <app-select formControlName="billType" (valueChange)="onType()">
                 @for (t of billTypes(); track t) {
                   <option [value]="t">{{ t }}</option>
                 }
-              </select>
+              </app-select>
             </app-field>
             <app-field label="Bill date" [required]="true"><input type="date" formControlName="date" /></app-field>
             <app-field label="Invoice / voucher number" hint="Blank: the document number is used">
@@ -202,18 +202,18 @@ type AllocForm = ReturnType<typeof allocGroup>;
               <input type="text" formControlName="party" maxlength="150" />
             </app-field>
             <app-field label="Expense account" [required]="true" hint="The expense category it posts to">
-              <select formControlName="category">
+              <app-select formControlName="category">
                 @for (c of categories(); track c) {
                   <option [value]="c">{{ c }}</option>
                 }
-              </select>
+              </app-select>
             </app-field>
             <app-field label="Currency">
-              <select formControlName="currency">
+              <app-select formControlName="currency">
                 @for (c of currencies(); track c.code) {
                   <option [value]="c.code">{{ c.code }} · {{ c.name }}</option>
                 }
-              </select>
+              </app-select>
             </app-field>
             <app-field label="Exchange rate (PKR per unit)"><input type="number" formControlName="fxRate" min="0" step="any" /></app-field>
             <app-field label="Gross bill amount" [required]="true" [error]="invalid('grossAmount') ? 'Enter an amount above zero' : null">
@@ -224,21 +224,21 @@ type AllocForm = ReturnType<typeof allocGroup>;
               <app-money-input formControlName="billWht" [currency]="cur()" />
             </app-field>
             <app-field label="Payment terms">
-              <select formControlName="paymentDays">
-                <option [ngValue]="0">Immediate</option>
+              <app-select formControlName="paymentDays">
+                <option [value]="0">Immediate</option>
                 @for (d of cycles(); track d) {
-                  <option [ngValue]="d">{{ d }} days</option>
+                  <option [value]="d">{{ d }} days</option>
                 }
-              </select>
+              </app-select>
             </app-field>
             <app-field label="Due date"><input type="date" formControlName="dueDate" /></app-field>
             <app-field label="Accounting treatment" hint="A label for now: the bill posts as an expense">
-              <select formControlName="treatment">
+              <app-select formControlName="treatment">
                 <option value="">Choose</option>
                 @for (t of treatments(); track t) {
                   <option [value]="t">{{ t }}</option>
                 }
-              </select>
+              </app-select>
             </app-field>
             <app-field label="Description / reason" [required]="true" [wide]="true" [error]="invalid('note') ? 'Say what the bill is for' : null">
               <app-rich-text formControlName="note" [max]="2000" placeholder="What was bought or paid for, and why" />
@@ -258,22 +258,22 @@ type AllocForm = ReturnType<typeof allocGroup>;
           <header><h3>2. Allocate this bill across one or more streams</h3><p>Edit the amount or the percentage. The total must equal the gross bill amount.</p></header>
           <div class="grid-4">
             <app-field label="Allocation mode">
-              <select formControlName="mode" (change)="onMode()">
+              <app-select formControlName="mode" (valueChange)="onMode()">
                 <option value="single">Single stream</option>
                 <option value="split">Split allocation</option>
-              </select>
+              </app-select>
             </app-field>
           </div>
           <div class="alloc" formArrayName="allocations">
             @for (a of allocs.controls; track a; let i = $index) {
               <div class="alloc__row" [formGroupName]="i">
                 <div class="field"><div class="field__control">
-                  <select formControlName="stream" [attr.aria-label]="'Stream, line ' + (i + 1)">
+                  <app-select formControlName="stream" [ariaLabel]="'Stream, line ' + (i + 1)">
                     <option value="">Choose a stream</option>
                     @for (s of streams(); track s) {
                       <option [value]="s" [disabled]="usedElsewhere(a, s)">{{ s }}</option>
                     }
-                  </select>
+                  </app-select>
                 </div></div>
                 <div class="field"><div class="field__control">
                   <app-money-input formControlName="amount" currency="" (input)="onAllocAmount(a)" [ariaLabel]="'Amount, line ' + (i + 1)" />
@@ -303,20 +303,20 @@ type AllocForm = ReturnType<typeof allocGroup>;
           <header><h3>3. Payment & settlement</h3><p>A bill is paid once it is approved, from the documents list (Pay).</p></header>
           <div class="grid-4">
             <app-field label="Payment account" hint="From Settings">
-              <select formControlName="receivingAccount">
+              <app-select formControlName="receivingAccount">
                 <option value="">Choose</option>
                 @for (b of bankAccounts(); track b) {
                   <option [value]="b">{{ b }}</option>
                 }
-              </select>
+              </app-select>
             </app-field>
             <app-field label="Payment method">
-              <select formControlName="paymentMethod">
+              <app-select formControlName="paymentMethod">
                 <option value="">Choose</option>
                 @for (m of methods(); track m) {
                   <option [value]="m">{{ m }}</option>
                 }
-              </select>
+              </app-select>
             </app-field>
           </div>
           <div class="chips">
@@ -336,20 +336,20 @@ type AllocForm = ReturnType<typeof allocGroup>;
               <input type="text" [value]="approvalText()" readonly />
             </app-field>
             <app-field label="Approved by" hint="From Settings. The signatures still decide">
-              <select formControlName="approver">
+              <app-select formControlName="approver">
                 <option value="">Select approver</option>
                 @for (a of approvers(); track a) {
                   <option [value]="a">{{ a }}</option>
                 }
-              </select>
+              </app-select>
             </app-field>
             <app-field label="Cost center / department">
-              <select formControlName="costCenter">
+              <app-select formControlName="costCenter">
                 <option value="">Choose</option>
                 @for (s of streams(); track s) {
                   <option [value]="s">{{ s }}</option>
                 }
-              </select>
+              </app-select>
             </app-field>
             <app-field label="Project / campaign reference"><input type="text" formControlName="projectRef" maxlength="100" /></app-field>
             <app-field label="Created by"><input type="text" formControlName="createdBy" maxlength="120" /></app-field>

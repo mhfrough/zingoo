@@ -1,3 +1,4 @@
+import { plainText } from '../common/plain-text';
 import { Injectable, OnModuleInit } from '@nestjs/common';
 import { InjectDataSource } from '@nestjs/typeorm';
 import { DataSource, EntityManager } from 'typeorm';
@@ -517,7 +518,7 @@ export class PostingService implements OnModuleInit {
     const fx = Number(v.fxRate) || 1;
     const rows: LedgerRow[] = v.lines
       .map((l) => ({
-        date: v.date, source: 'Manual Voucher' as const, reference: v.refNo, description: v.memo, account: l.account,
+        date: v.date, source: 'Manual Voucher' as const, reference: v.refNo, description: plainText(v.memo).slice(0, 255), account: l.account,
         debit: round2(Number(l.debit) * fx), credit: round2(Number(l.credit) * fx), currency: v.currency, fxRate: fx,
       }))
       .filter((r) => r.debit > 0 || r.credit > 0);

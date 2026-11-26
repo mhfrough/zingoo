@@ -38,7 +38,7 @@ import { Select, SelectOption } from './select';
       gap: var(--space-1);
       padding: var(--space-1) var(--space-2);
       border: 1px solid var(--border);
-      border-radius: var(--radius-pill);
+      border-radius: var(--radius);
       background: var(--surface-sunken);
       color: var(--text);
       font-size: var(--text-sm);

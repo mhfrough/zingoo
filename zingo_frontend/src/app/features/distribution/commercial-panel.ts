@@ -1,12 +1,12 @@
 import { ChangeDetectionStrategy, Component, computed, effect, inject, input, model, output, signal, untracked } from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
-import { FormBuilder, ReactiveFormsModule } from '@angular/forms';
+import { FormBuilder, FormsModule, ReactiveFormsModule } from '@angular/forms';
 import { ApiService } from '../../core/api.service';
 import { AuthService } from '../../core/auth.service';
 import { SettingsStore } from '../../core/settings.store';
 import { errorText } from '../../shared/errors';
 import { Tone } from '../../shared/format';
-import { Btn, Field, Offcanvas, PlainPipe, Select, SelectOption, Tag, ToastService } from '../../ui';
+import { Btn, Field, Offcanvas, PlainPipe, RichText, Select, SelectOption, Tag, ToastService } from '../../ui';
 import { Distributor, DistributorPrice, Product } from '../ops/models';
 
 const UNITS = ['Pack', 'Dozen', 'Bundle', 'Container', 'Pallet', 'Metric tonne'] as const;
@@ -25,7 +25,7 @@ const costPerPack = (p: Product) =>
 @Component({
   selector: 'app-commercial-panel',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [ReactiveFormsModule, Offcanvas, Field, Btn, Tag, Select, PlainPipe],
+  imports: [FormsModule, ReactiveFormsModule, Offcanvas, Field, Btn, Tag, Select, PlainPipe, RichText],
   styles: `
     h3 {
       margin: var(--space-5) 0 var(--space-2);
@@ -136,7 +136,7 @@ const costPerPack = (p: Product) =>
     }
   `,
   template: `
-    <app-offcanvas [(open)]="open" [title]="'Credit & prices · ' + (d()?.name ?? '')" [subtitle]="d()?.code ?? 'International distributor'" size="lg">
+    <app-offcanvas [(open)]="open" [dirty]="credit.dirty || price.dirty || !!note().trim()" [title]="'Credit & prices · ' + (d()?.name ?? '')" [subtitle]="d()?.code ?? 'International distributor'" size="lg">
       @if (d(); as dist) {
         <h3>Credit</h3>
         <p class="lead">
@@ -154,10 +154,10 @@ const costPerPack = (p: Product) =>
             <app-field label="Currency"><app-select formControlName="creditCurrency" [options]="currencyOptions()" [clearable]="false" /></app-field>
             <app-field label="Expires"><input type="date" formControlName="creditExpiry" /></app-field>
             <app-field label="When passed">
-              <select formControlName="creditControl">
+              <app-select formControlName="creditControl">
                 <option value="Block">Block the order</option>
                 <option value="Warn">Warn only</option>
-              </select>
+              </app-select>
             </app-field>
             <div><button appBtn type="submit" variant="primary" size="sm" [loading]="busy()">Approve credit</button></div>
           </form>
@@ -220,7 +220,7 @@ const costPerPack = (p: Product) =>
         </div>
         @if (finance() && hasPending()) {
           <app-field label="Note for the approval or rejection" [wide]="true">
-            <input type="text" [value]="note()" (input)="note.set($any($event.target).value)" maxlength="500" placeholder="Needed to reject" />
+            <app-rich-text [ngModel]="note()" (ngModelChange)="note.set($event)" [ngModelOptions]="{ standalone: true }" [max]="500" [storeMax]="500" placeholder="Needed to reject" />
           </app-field>
         }
 
@@ -232,11 +232,11 @@ const costPerPack = (p: Product) =>
             <form class="grid" [formGroup]="price" (ngSubmit)="addPrice()">
               <app-field label="Product" [required]="true"><app-select formControlName="productId" [options]="productOptions()" [clearable]="false" /></app-field>
               <app-field label="Unit">
-                <select formControlName="unit">
+                <app-select formControlName="unit">
                   @for (u of units; track u) {
                     <option [value]="u">{{ u }}</option>
                   }
-                </select>
+                </app-select>
               </app-field>
               @if (needsFactor()) {
                 <app-field label="Packs per unit" [required]="true"><input type="number" formControlName="packsPerUnit" min="1" step="1" /></app-field>
@@ -249,7 +249,7 @@ const costPerPack = (p: Product) =>
               <app-field label="Minimum order (units)"><input type="number" formControlName="moq" min="0" step="1" /></app-field>
               <app-field label="Order multiple"><input type="number" formControlName="increment" min="0" step="1" /></app-field>
               <label class="check"><input type="checkbox" formControlName="promo" /> Promotional / sample price</label>
-              <app-field label="Note" [wide]="true"><input type="text" formControlName="note" maxlength="300" /></app-field>
+              <app-field label="Note" [wide]="true"><app-rich-text formControlName="note" [max]="300" [storeMax]="300" /></app-field>
               @if (preview(); as pv) {
                 <p class="preview" [attr.data-low]="pv.low ? '' : null">
                   {{ pv.packs }} packs per unit · PKR {{ money(pv.pkrPerPack) }} a pack against a cost of {{ money(pv.cost) }} · margin {{ pv.margin }}%
@@ -359,6 +359,7 @@ export class CommercialPanel {
       creditLimit: Number(v.creditLimit) || 0, creditCurrency: v.creditCurrency, creditExpiry: v.creditExpiry || null, creditControl: v.creditControl,
     }), (row) => {
       this.d.set(row);
+      this.credit.markAsPristine();
       this.toast.success('Credit approved.');
     });
   }
@@ -387,6 +388,7 @@ export class CommercialPanel {
     }), (row) => {
       this.toast.success(row.status === 'Active' ? `Version ${row.version} is active.` : `Version ${row.version} waits for Finance (margin ${row.marginPct}%).`);
       this.price.patchValue({ price: null, note: '', promo: false, effectiveTo: '' });
+      this.price.markAsPristine();
       this.loadPrices(dist.id);
     });
   }

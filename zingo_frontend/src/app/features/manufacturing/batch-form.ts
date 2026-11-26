@@ -1,6 +1,6 @@
 import { ChangeDetectionStrategy, Component, input } from '@angular/core';
 import { ReactiveFormsModule, Validators } from '@angular/forms';
-import { Btn, Field, MoneyInput, Offcanvas, RichText } from '../../ui';
+import { Btn, Field, MoneyInput, Offcanvas, RichText, Select } from '../../ui';
 import { FormModal } from '../ops/form-modal';
 import { Batch, Manufacturer, Product, QC_OPTIONS } from '../ops/models';
 
@@ -10,7 +10,7 @@ const today = () => new Date().toISOString().slice(0, 10);
 @Component({
   selector: 'app-batch-form',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [MoneyInput, ReactiveFormsModule, Offcanvas, Field, Btn, RichText],
+  imports: [MoneyInput, ReactiveFormsModule, Offcanvas, Field, Btn, RichText, Select],
   template: `
     <app-offcanvas #oc [(open)]="open" [title]="batch() ? 'Edit production batch ' + batch()!.refNo : 'New production batch'"
                subtitle="Enter the actual bundles and cost after the run, then release it once QC passes." size="lg" [dirty]="form.dirty">
@@ -22,27 +22,27 @@ const today = () => new Date().toISOString().slice(0, 10);
           <input type="date" formControlName="date" />
         </app-field>
         <app-field label="Product / SKU" [required]="true" [error]="invalid('productId') ? 'Choose a product' : null">
-          <select formControlName="productId">
+          <app-select formControlName="productId">
             <option value="">Choose a product...</option>
             @for (p of products(); track p.id) {
               <option [value]="p.id">{{ p.sku }} · {{ p.name }} · Rs {{ p.pack }}</option>
             }
-          </select>
+          </app-select>
         </app-field>
         <app-field label="Manufacturer" [required]="true" [error]="invalid('manufacturerId') ? 'Choose the manufacturer' : null">
-          <select formControlName="manufacturerId">
+          <app-select formControlName="manufacturerId">
             <option value="">Choose a manufacturer...</option>
             @for (m of manufacturers(); track m.id) {
               <option [value]="m.id">{{ m.name }}</option>
             }
-          </select>
+          </app-select>
         </app-field>
         <app-field label="Quality control">
-          <select formControlName="qc">
+          <app-select formControlName="qc">
             @for (q of qcOptions; track q) {
               <option [value]="q">{{ q }}</option>
             }
-          </select>
+          </app-select>
         </app-field>
         <app-field label="Target bundles" [required]="true" [error]="invalid('targetCartons') ? 'At least 1 bundle' : null">
           <input type="number" formControlName="targetCartons" min="1" step="1" />

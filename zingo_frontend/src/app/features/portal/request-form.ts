@@ -226,21 +226,21 @@ interface LineValue {
                   @if ((rate?.madeBy?.length ?? 0) > 1) {
                     <app-field label="Manufacturer"
                       help="Several factories make this product. The order goes to the one picked here; the default is preselected.">
-                      <select formControlName="manufacturerId">
+                      <app-select formControlName="manufacturerId">
                         @for (m of rate!.madeBy!; track m.id) {
                           <option [value]="m.id">{{ m.name }}{{ m.isDefault ? ' (default)' : '' }}</option>
                         }
-                      </select>
+                      </app-select>
                     </app-field>
                   }
                   <app-field label="Packaging template" [hint]="tpl ? tpl.packetsPerBundle + ' × ' + tpl.bundlesPerContainer + ' saved' : 'No template saved: enter the figures'">
-                    <select formControlName="packaging" (change)="applyTemplate(i)">
+                    <app-select formControlName="packaging" (valueChange)="applyTemplate(i)">
                       @for (t of rate?.packagings ?? []; track t.name) {
                         <option [value]="t.name">{{ t.name }}{{ t.isDefault ? ' (default)' : '' }}</option>
                       } @empty {
                         <option value="">Custom</option>
                       }
-                    </select>
+                    </app-select>
                   </app-field>
                   <app-field label="Packets per bundle" [required]="true" [error]="lineInvalid(i, 'packetsPerBundle') ? '1 or more' : null">
                     <input type="number" formControlName="packetsPerBundle" min="1" step="1" />
@@ -249,13 +249,13 @@ interface LineValue {
                     <input type="number" formControlName="bundlesPerContainer" min="1" step="1" />
                   </app-field>
                   <app-field label="Load" help="Order a number of containers, or a full or half truck / shipping container when the packaging template says how many fill one.">
-                    <select formControlName="load">
+                    <app-select formControlName="load">
                       <option value="containers">{{ unitOf(i) || 'Container' }}s</option>
                       @if (tpl?.containersPerTruck) {
                         <option value="full">Full {{ truckOf(i) }}</option>
                         <option value="half">Half {{ truckOf(i) }}</option>
                       }
-                    </select>
+                    </app-select>
                   </app-field>
                   @switch (g.value.load) {
                     @case ('full') {
@@ -322,12 +322,12 @@ interface LineValue {
             }
             <app-field label="Amount paid" [error]="advErr('amount')"><app-money-input formControlName="advAmount" /></app-field>
             <app-field label="Method" [required]="advOn()" [error]="advErr('method')">
-              <select formControlName="advMethod">
+              <app-select formControlName="advMethod">
                 <option value="">Choose</option>
                 @for (m of methods(); track m) {
                   <option [value]="m">{{ m }}</option>
                 }
-              </select>
+              </app-select>
             </app-field>
             <app-field label="Paid on" [required]="advOn()" [error]="advErr('date')"><input type="date" formControlName="advDate" [max]="today" /></app-field>
             <app-field label="Bank / transfer reference"><input type="text" formControlName="advRef" maxlength="80" /></app-field>

@@ -97,6 +97,34 @@ export class Setting {
   /** upper day limits of the aged-receivable buckets, e.g. [30, 60, 90] = 1-30, 31-60, 61-90, over 90 days */
   @Column({ type: 'jsonb', default: () => "'[30,60,90]'" })
   agingBuckets: number[];
+
+  /**
+   * The platform (Zingoo) itself: name, logo and contact details. Fixed data that only the super admin changes. Shown on
+   * the sidebar brand, the login page, the browser title and the foot of printed documents.
+   */
+  @Column({ type: 'jsonb', default: () => "'{}'" })
+  platform: PlatformInfo;
+
+  /** true once the first start made the starting company; a later start never makes one again (all may be deleted) */
+  @Column({ default: false })
+  setupDone: boolean;
+
+  /** true after the business data was cleared: the seed never loads the sample data again */
+  @Column({ default: false })
+  sampleDataOff: boolean;
+}
+
+/** the platform's own details (Settings > Zingo) */
+export interface PlatformInfo {
+  name?: string;
+  tagline?: string;
+  logoId?: string;
+  logoName?: string;
+  address?: string;
+  phone?: string;
+  email?: string;
+  website?: string;
+  taxNo?: string;
 }
 
 @Entity('currencies')

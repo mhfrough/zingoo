@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, Get, Param, ParseUUIDPipe, Post, Request, Res, UploadedFile, UseInterceptors } from '@nestjs/common';
+import { Body, Controller, Delete, ForbiddenException, Get, Param, ParseUUIDPipe, Post, Request, Res, UploadedFile, UseInterceptors } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { ApiBody, ApiConsumes, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { IsIn, IsOptional, IsString, IsUUID, MaxLength } from 'class-validator';
@@ -34,6 +34,8 @@ export class AttachmentsController {
   @ApiBody({ schema: { type: 'object', properties: { file: { type: 'string', format: 'binary' } } } })
   @UseInterceptors(FileInterceptor('file', { limits: { fileSize: MAX_ATTACHMENT_BYTES, files: 1 } }))
   upload(@UploadedFile() file: Express.Multer.File, @Body() body: UploadMeta, @Request() req: any) {
+    // a logo is shown to everyone (also on the login page), so only an Admin may add one
+    if (body.ownerType === 'logo' && req.user.role !== 'Admin') throw new ForbiddenException('Only an Admin can add a logo.');
     return this.service.create(file, req.user.name, { type: body.ownerType, id: body.ownerId });
   }
 

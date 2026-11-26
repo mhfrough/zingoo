@@ -5,7 +5,7 @@ import { ReactiveFormsModule, Validators } from '@angular/forms';
 import { PlacesService, placeKey, splitKey } from '../../core/places.service';
 import { Area, areasOf, holds } from '../../shared/areas';
 import { countryOptions } from '../../shared/countries';
-import { Btn, Field, FilesInput, MoneyInput, MultiSelect, Offcanvas, RichText, SelectOption } from '../../ui';
+import { Btn, Field, FilesInput, LogoInput, MoneyInput, MultiSelect, Offcanvas, RichText, Select, SelectOption } from '../../ui';
 import { FormModal } from '../ops/form-modal';
 import { Distributor, Product } from '../ops/models';
 import { IntlFields, intlGroup, intlReset, intlValue } from './intl-fields';
@@ -28,7 +28,7 @@ const STATUSES: { value: Distributor['status']; hint: string }[] = [
 @Component({
   selector: 'app-distributor-form',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [FilesInput, MoneyInput, ReactiveFormsModule, Offcanvas, Field, Btn, MultiSelect, IntlFields, RichText],
+  imports: [FilesInput, MoneyInput, ReactiveFormsModule, Offcanvas, Field, Btn, MultiSelect, IntlFields, RichText, LogoInput, Select],
   styles: `
     .form-section {
       grid-column: 1 / -1;
@@ -71,6 +71,9 @@ const STATUSES: { value: Distributor['status']; hint: string }[] = [
       }
       <form [id]="formId" [formGroup]="form" (ngSubmit)="submit()" class="form-grid" novalidate>
         <h4 class="form-section">Distributor</h4>
+        <app-field label="Logo" [wide]="true" hint="Shown in the sidebar of its portal logins">
+          <app-logo-input formControlName="logoId" />
+        </app-field>
         <app-field label="Distributor / company" [wide]="true" [required]="true" [error]="invalid('name') ? 'Enter the company name' : null">
           <input type="text" formControlName="name" />
         </app-field>
@@ -103,10 +106,10 @@ const STATUSES: { value: Distributor['status']; hint: string }[] = [
         }
         <app-field label="Distribution rights" [wide]="true"
                    [hint]="form.controls.exclusive.value === 'true' ? 'No other distributor can be given these areas' : 'Other distributors may share these areas'">
-          <select formControlName="exclusive">
+          <app-select formControlName="exclusive">
             <option value="false">Non-exclusive</option>
             <option value="true">Exclusive</option>
-          </select>
+          </app-select>
         </app-field>
 
         @if (international()) {
@@ -128,13 +131,13 @@ const STATUSES: { value: Distributor['status']; hint: string }[] = [
 
         <h4 class="form-section">Trading terms</h4>
         <app-field label="Payment terms" hint="Days after an invoice that payment is due">
-          <select formControlName="paymentChoice">
+          <app-select formControlName="paymentChoice">
             <option value="0">No limit</option>
             @for (d of paymentCycles(); track d) {
               <option [value]="'' + d">{{ d }} days</option>
             }
             <option value="custom">Custom…</option>
-          </select>
+          </app-select>
         </app-field>
         @if (form.controls.paymentChoice.value === 'custom') {
           <app-field label="Custom payment days" [required]="true" [error]="invalid('paymentCustom') ? '0 to 365 days' : null" hint="0 = no limit">
@@ -165,11 +168,11 @@ const STATUSES: { value: Distributor['status']; hint: string }[] = [
         @if (distributor()) {
           <h4 class="form-section">Status</h4>
           <app-field label="Status" [hint]="statusHint()">
-            <select formControlName="status">
+            <app-select formControlName="status">
               @for (s of statuses; track s.value) {
                 <option [value]="s.value">{{ s.value }}</option>
               }
-            </select>
+            </app-select>
           </app-field>
           @if (form.controls.status.value === 'Temporary suspend') {
             <app-field label="Suspended until" hint="Lifted on this date. Empty = until changed">
@@ -177,7 +180,7 @@ const STATUSES: { value: Distributor['status']; hint: string }[] = [
             </app-field>
           }
           @if (form.controls.status.value !== 'Active') {
-            <app-field label="Reason" [wide]="true"><input type="text" formControlName="statusNote" maxlength="500" /></app-field>
+            <app-field label="Reason" [wide]="true"><app-rich-text formControlName="statusNote" [max]="500" [storeMax]="500" /></app-field>
           }
         }
       </form>
@@ -220,6 +223,7 @@ export class DistributorForm extends FormModal {
   readonly form = this.fb.nonNullable.group({
     market: ['Local' as Distributor['market']],
     name: ['', Validators.required],
+    logoId: this.fb.control<string | null>(null),
     provinces: [[] as string[]],
     districts: [[] as string[]],
     cities: [[] as string[]],
@@ -301,7 +305,7 @@ export class DistributorForm extends FormModal {
     const choice = days === 0 ? '0' : cycles.includes(days) ? String(days) : 'custom';
     this.form.reset(d
       ? {
-        market: d.market ?? 'Local', name: d.name,
+        market: d.market ?? 'Local', name: d.name, logoId: d.logoId ?? null,
         provinces: d.provinces ?? [],
         districts: (d.districts ?? []).map((x) => placeKey(x.province, x.name)),
         cities: (d.cities ?? []).map((x) => placeKey(x.province, x.name)),
@@ -312,7 +316,7 @@ export class DistributorForm extends FormModal {
         poc: d.poc ?? '', contract: d.contract ?? '', terms: d.terms ?? '', files: d.files ?? [],
       }
       : {
-        market: 'Local', name: '', provinces: [], districts: [], cities: [], countries: [], exclusive: 'false',
+        market: 'Local', name: '', logoId: null, provinces: [], districts: [], cities: [], countries: [], exclusive: 'false',
         contact: '', address: '', taxNo: '', paymentChoice: cycles.includes(30) ? '30' : String(cycles[0] ?? 30), paymentCustom: 30,
         creditLimit: 0, advancePct: 0, selloutDays: this.defaultSelloutDays(), warrantyDays: null, status: 'Active', statusNote: '', statusUntil: '',
         poc: '', contract: '', terms: '', files: [],
@@ -327,7 +331,7 @@ export class DistributorForm extends FormModal {
     const international = v.market !== 'Local';
     const paymentDays = v.paymentChoice === 'custom' ? Number(v.paymentCustom) : Number(v.paymentChoice);
     return this.api.saveDistributor(this.distributor()?.id ?? null, {
-      name: v.name.trim(), market: v.market,
+      name: v.name.trim(), logoId: v.logoId, market: v.market,
       provinces: local ? v.provinces : [],
       districts: local ? v.districts.map((k) => { const x = splitKey(k); return { name: x.name, province: x.province }; }) : [],
       cities: local ? v.cities.map((k) => { const x = splitKey(k); return { name: x.name, province: x.province, district: this.places.districtOf(x.province, x.name) }; }) : [],

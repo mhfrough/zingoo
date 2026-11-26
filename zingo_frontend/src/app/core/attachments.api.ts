@@ -16,15 +16,20 @@ export interface AttachmentMeta {
 export const ATTACHMENT_ACCEPT = '.png,.jpg,.jpeg,.gif,.webp,.pdf,.doc,.docx';
 export const ATTACHMENT_MAX_BYTES = 5 * 1024 * 1024;
 
+/** the address of a logo image (served without a login, so it works in <img>, on the login page and in print) */
+export const logoUrl = (id: string | null | undefined): string | null => (id ? `${environment.apiUrl}/logos/${id}` : null);
+
 /** Upload, download and remove files. Uploads are sent as a normal file upload (multipart), 5 MB at most. */
 @Injectable({ providedIn: 'root' })
 export class AttachmentsApi {
   private http = inject(HttpClient);
   private base = `${environment.apiUrl}/attachments`;
 
-  upload(file: File) {
+  /** ownerType 'logo' marks an image that may be shown to everyone (company, partner and platform logos; Admin only) */
+  upload(file: File, ownerType?: string) {
     const body = new FormData();
     body.append('file', file, file.name);
+    if (ownerType) body.append('ownerType', ownerType);
     return this.http.post<AttachmentMeta>(this.base, body);
   }
 

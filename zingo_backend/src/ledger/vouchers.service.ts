@@ -1,3 +1,4 @@
+import { plainText } from '../common/plain-text';
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectDataSource } from '@nestjs/typeorm';
 import { DataSource } from 'typeorm';
@@ -67,7 +68,7 @@ export class VouchersService {
       const back = await em.save(em.create(JournalVoucher, {
         refNo,
         date: new Date().toISOString().slice(0, 10),
-        memo: `REVERSAL of ${old.refNo} · ${old.memo}`,
+        memo: `REVERSAL of ${old.refNo} · ${plainText(old.memo)}`,
         currency: old.currency,
         fxRate: old.fxRate,
         status: 'Posted',

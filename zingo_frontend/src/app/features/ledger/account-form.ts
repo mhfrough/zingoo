@@ -1,6 +1,6 @@
 import { ChangeDetectionStrategy, Component, inject, input } from '@angular/core';
 import { ReactiveFormsModule, Validators } from '@angular/forms';
-import { Btn, Field, Offcanvas } from '../../ui';
+import { Btn, Field, Offcanvas, Select } from '../../ui';
 import { FormModal } from '../ops/form-modal';
 import { LedgerApi } from './ledger.api';
 import { ACCOUNT_TYPES, Account } from './models';
@@ -12,7 +12,7 @@ import { ACCOUNT_TYPES, Account } from './models';
 @Component({
   selector: 'app-account-form',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [ReactiveFormsModule, Offcanvas, Field, Btn],
+  imports: [ReactiveFormsModule, Offcanvas, Field, Btn, Select],
   template: `
     <app-offcanvas #oc [(open)]="open" [title]="account() ? 'Rename account' : 'Add an account'"
                subtitle="The chart of accounts is what every posting lands in." size="lg" [dirty]="form.dirty">
@@ -25,11 +25,11 @@ import { ACCOUNT_TYPES, Account } from './models';
           <input type="text" formControlName="code" maxlength="10" />
         </app-field>
         <app-field label="Type" [required]="true">
-          <select formControlName="type">
+          <app-select formControlName="type">
             @for (t of types; track t) {
               <option [value]="t">{{ t }}</option>
             }
-          </select>
+          </app-select>
         </app-field>
         <app-field label="Account name" [wide]="true" [required]="true" [error]="invalid('name') ? 'Enter a name' : null">
           <input type="text" formControlName="name" maxlength="80" />

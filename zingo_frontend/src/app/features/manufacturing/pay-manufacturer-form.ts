@@ -2,7 +2,7 @@ import { ChangeDetectionStrategy, Component, input, inject } from '@angular/core
 import { ReactiveFormsModule, Validators } from '@angular/forms';
 import { SettingsStore } from '../../core/settings.store';
 import { fmtMoney } from '../../shared/format';
-import { Btn, Field, Offcanvas, MoneyInput } from '../../ui';
+import { Btn, Field, MoneyInput, Offcanvas, RichText, Select } from '../../ui';
 import { FormModal } from '../ops/form-modal';
 import { Batch } from '../ops/models';
 
@@ -12,7 +12,7 @@ const today = () => new Date().toISOString().slice(0, 10);
 @Component({
   selector: 'app-pay-manufacturer-form',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [MoneyInput, ReactiveFormsModule, Offcanvas, Field, Btn],
+  imports: [MoneyInput, ReactiveFormsModule, Offcanvas, Field, Btn, RichText, Select],
   template: `
     <app-offcanvas #oc [(open)]="open" title="Pay manufacturer" [subtitle]="batch() ? batch()!.refNo + ' · ' + batch()!.manufacturer.name : ''" size="lg" [dirty]="form.dirty">
       @if (batch(); as b) {
@@ -29,13 +29,13 @@ const today = () => new Date().toISOString().slice(0, 10);
           <app-money-input formControlName="amount" />
         </app-field>
         <app-field label="Method" [wide]="true">
-          <select formControlName="method">
+          <app-select formControlName="method">
             @for (m of methods(); track m) {
               <option [value]="m">{{ m }}</option>
             }
-          </select>
+          </app-select>
         </app-field>
-        <app-field label="Reference / notes" [wide]="true"><input type="text" formControlName="note" /></app-field>
+        <app-field label="Reference / notes" [wide]="true"><app-rich-text formControlName="note" [max]="2000" [storeMax]="2000" /></app-field>
       </form>
       <ng-container offcanvasFooter>
         <button appBtn type="button" (click)="oc.requestClose()">Cancel</button>

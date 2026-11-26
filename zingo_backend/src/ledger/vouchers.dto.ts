@@ -1,5 +1,5 @@
 import { Type } from 'class-transformer';
-import { ArrayMinSize, IsArray, IsDateString, IsNotEmpty, IsNumber, IsOptional, IsString, Min, ValidateNested } from 'class-validator';
+import { ArrayMinSize, IsArray, IsDateString, IsNotEmpty, IsNumber, IsOptional, IsString, MaxLength, Min, ValidateNested } from 'class-validator';
 
 /** One debit or credit line of a manual journal voucher, in the voucher's currency. */
 export class VoucherLineDto {
@@ -12,7 +12,7 @@ export class VoucherLineDto {
 /** A multi-line manual journal voucher. Debits and credits must match. */
 export class CreateVoucherDto {
   @IsDateString() date: string;
-  @IsString() @IsNotEmpty() memo: string;
+  @IsString() @IsNotEmpty() @MaxLength(5000) memo: string;
   @IsOptional() @IsString() currency?: string;
   /** PKR per 1 unit of the voucher currency (1 for PKR) */
   @IsOptional() @IsNumber() @Min(0.000001) fxRate?: number;

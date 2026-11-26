@@ -1,9 +1,10 @@
 import {
-  ChangeDetectionStrategy, Component, DestroyRef, ElementRef, ViewEncapsulation, effect, inject, input, model,
+  ChangeDetectionStrategy, Component, DestroyRef, ElementRef, ViewEncapsulation, booleanAttribute, effect, inject, input, model,
   signal, untracked, viewChild,
 } from '@angular/core';
 import { IconComponent, IconName } from './icon';
 import { tokenMs } from './motion';
+import { UnsavedChanges } from './unsaved-changes';
 
 let nextId = 0;
 
@@ -54,7 +55,7 @@ let nextId = 0;
           </div>
           @if (variant() !== 'alert') {
             <button type="button" class="btn btn-icon" data-variant="ghost" data-size="sm" aria-label="Close dialog"
-                    (click)="open.set(false)">
+                    (click)="requestClose()">
               <app-icon name="x" [size]="18" />
             </button>
           }
@@ -74,6 +75,8 @@ export class Modal {
   readonly tone = input<'primary' | 'danger'>('primary');
   readonly alertIcon = input<IconName>('circle-alert');
   readonly focusSelector = input<string>();
+  /** the form inside has unsaved changes: closing asks "Discard changes?" first */
+  readonly dirty = input(false, { transform: booleanAttribute });
 
   protected titleId = `modal-title-${nextId}`;
   protected bodyId = `modal-body-${nextId++}`;
@@ -81,6 +84,10 @@ export class Modal {
 
   private dlg = viewChild.required<ElementRef<HTMLDialogElement>>('dlg');
   private closeTimer?: ReturnType<typeof setTimeout>;
+  private unsaved = inject(UnsavedChanges);
+  private asking = false;
+  /** while open with changes, the tab close / page change warnings know about this dialog */
+  private stopWatch = this.unsaved.watch(() => this.open() && this.dirty(), inject(DestroyRef));
 
   constructor() {
     effect(() => {
@@ -116,12 +123,26 @@ export class Modal {
     queueMicrotask(() => el.querySelector<HTMLElement>(sel)?.focus());
   }
 
+  /** close the way a person would: asks "Discard changes?" first when `dirty` is true. Call it from a Cancel button. */
+  async requestClose(): Promise<boolean> {
+    if (!this.open()) return true;
+    if (this.dirty()) {
+      if (this.asking) return false;
+      this.asking = true;
+      const discard = await this.unsaved.askDiscard();
+      this.asking = false;
+      if (!discard) return false;
+    }
+    this.open.set(false);
+    return true;
+  }
+
   protected onCancel(event: Event) {
     event.preventDefault(); // Esc: go through the animated close instead of an instant one
-    this.open.set(false);
+    void this.requestClose();
   }
 
   protected onBackdrop(event: MouseEvent) {
-    if (event.target === this.dlg().nativeElement) this.open.set(false);
+    if (event.target === this.dlg().nativeElement) void this.requestClose();
   }
 }

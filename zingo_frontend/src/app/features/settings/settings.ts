@@ -5,6 +5,7 @@ import { SettingsData } from './settings-data';
 import { SettingsGeneral } from './settings-general';
 import { SettingsLists } from './settings-lists';
 import { SettingsPartners } from './settings-partners';
+import { SettingsPlatform } from './settings-platform';
 import { ProductsPanel } from '../products/products-panel';
 
 /**
@@ -15,11 +16,12 @@ import { ProductsPanel } from '../products/products-panel';
 @Component({
   selector: 'app-settings',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [PageHeader, Tabs, TabPanel, SettingsGeneral, SettingsLists, SettingsCategories, SettingsPartners, SettingsData, ProductsPanel],
+  imports: [PageHeader, Tabs, TabPanel, SettingsGeneral, SettingsLists, SettingsCategories, SettingsPartners, SettingsData, ProductsPanel, SettingsPlatform],
   template: `
-    <app-page-header eyebrow="Zingoo · Zen Foods" title="Settings & data"
+    <app-page-header eyebrow="Zingoo" title="Settings & data"
       description="Everything the business can change lives here: assumptions, lists, currencies, categories and partners." />
     <app-tabs [tabs]="tabs" [(active)]="tab" ariaLabel="Settings sections">
+      <ng-template appTabPanel="zingo"><app-settings-platform /></ng-template>
       <ng-template appTabPanel="general"><app-settings-general /></ng-template>
       <ng-template appTabPanel="lists"><app-settings-lists /></ng-template>
       <ng-template appTabPanel="categories"><app-settings-categories /></ng-template>
@@ -32,8 +34,9 @@ import { ProductsPanel } from '../products/products-panel';
   `,
 })
 export class Settings {
-  protected tab = signal('general');
+  protected tab = signal('zingo');
   protected tabs: TabItem[] = [
+    { id: 'zingo', label: 'Zingo', icon: 'crown' },
     { id: 'general', label: 'Company & assumptions', icon: 'settings' },
     { id: 'lists', label: 'Lists & currencies', icon: 'list' },
     { id: 'categories', label: 'Categories & cost centers', icon: 'landmark' },

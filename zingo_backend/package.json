@@ -10,6 +10,7 @@
     "start:dev": "nest start --watch",
     "start:prod": "node dist/main",
     "seed": "ts-node src/database/seed.ts",
+    "db:clear": "ts-node src/database/clear.ts",
     "seed:fresh": "ts-node src/database/reset.ts && ts-node src/database/seed.ts",
     "db:reset": "ts-node src/database/reset.ts",
     "test:api": "node scripts/api-smoke.mjs"

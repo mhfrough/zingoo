@@ -2,7 +2,7 @@ import { ChangeDetectionStrategy, Component, computed, inject, input, model, sig
 import { ATTACHMENT_ACCEPT, ATTACHMENT_MAX_BYTES, AttachmentsApi } from '../../core/attachments.api';
 import { errorText } from '../../shared/errors';
 import { fmtNumber } from '../../shared/format';
-import { Btn, Help, IconComponent } from '../../ui';
+import { Btn, Help, IconComponent, Select } from '../../ui';
 
 /** one damage line: becomes a claim on the load when the form is saved */
 export interface DamageLine {
@@ -35,7 +35,7 @@ export const damagesValid = (lines: DamageLine[]) => lines.every((l) => l.bundle
 @Component({
   selector: 'app-damage-lines',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [Btn, Help, IconComponent],
+  imports: [Btn, Help, IconComponent, Select],
   styles: `
     :host {
       display: flex;
@@ -132,7 +132,7 @@ export const damagesValid = (lines: DamageLine[]) => lines.every((l) => l.bundle
     }
 
     .line .fl > input,
-    .line .fl > select {
+    .line .fl > :is(select, app-select) {
       inline-size: 100%;
     }
 
@@ -151,9 +151,9 @@ export const damagesValid = (lines: DamageLine[]) => lines.every((l) => l.bundle
     @for (l of lines(); track $index; let i = $index) {
       <div class="line">
         <label class="fl">What is wrong
-          <select [value]="l.kind" (change)="set(i, { kind: $any($event.target).value })">
-            @for (k of kinds; track k.value) { <option [value]="k.value" [selected]="k.value === l.kind">{{ k.label }}</option> }
-          </select>
+          <app-select [value]="l.kind" (valueChange)="set(i, { kind: $any($event) })">
+            @for (k of kinds; track k.value) { <option [value]="k.value">{{ k.label }}</option> }
+          </app-select>
         </label>
         <label class="fl">Bundles
           <input type="number" min="1" step="1" [max]="maxBundles() || null" [value]="l.bundles" (input)="set(i, { bundles: +$any($event.target).value })" />

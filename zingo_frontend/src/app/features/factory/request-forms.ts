@@ -28,10 +28,10 @@ const today = () => new Date().toISOString().slice(0, 10);
           <app-select formControlName="orderId" [options]="orderOptions()" placeholder="Choose an accepted order" [clearable]="false" />
         </app-field>
         <app-field label="Payment for" [required]="true">
-          <select formControlName="kind">
+          <app-select formControlName="kind">
             <option value="Advance">Advance</option>
             <option value="Balance">Balance</option>
-          </select>
+          </app-select>
         </app-field>
         <app-field label="Amount (PKR)" [required]="true" [hint]="'Still open: ' + money(openAmount())" [error]="invalid('amount') ? 'Enter an amount' : null">
           <app-money-input formControlName="amount" />
@@ -129,7 +129,7 @@ export class PaymentRequestForm extends FormModal {
 @Component({
   selector: 'app-pay-request-form',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [ReactiveFormsModule, Offcanvas, Field, Btn, MoneyInput, RichText],
+  imports: [ReactiveFormsModule, Offcanvas, Field, Btn, MoneyInput, RichText, Select],
   template: `
     <app-offcanvas #oc [(open)]="open" [title]="req() ? 'Pay ' + req()!.refNo : 'Pay request'" [subtitle]="subject()" size="lg" [dirty]="form.dirty">
       @if (error()) {
@@ -147,21 +147,21 @@ export class PaymentRequestForm extends FormModal {
         </app-field>
         <app-field label="Date" [required]="true"><input type="date" formControlName="date" [max]="maxDate" /></app-field>
         <app-field label="Method" [required]="true">
-          <select formControlName="method">
+          <app-select formControlName="method">
             @for (m of methods(); track m) {
               <option [value]="m">{{ m }}</option>
             }
-          </select>
+          </app-select>
         </app-field>
         <app-field label="Paid from">
-          <select formControlName="fromAccount">
+          <app-select formControlName="fromAccount">
             <option value="">Not recorded</option>
             @for (a of accounts(); track a) {
               <option [value]="a">{{ a }}</option>
             }
-          </select>
+          </app-select>
         </app-field>
-        <app-field label="Transfer / cheque ref."><input type="text" formControlName="reference" maxlength="80" /></app-field>
+        <app-field label="Transfer / cheque ref."><app-rich-text formControlName="reference" [max]="80" [storeMax]="80" /></app-field>
         <app-field label="Note" [wide]="true"><app-rich-text formControlName="note" [max]="500" [storeMax]="500" /></app-field>
       </form>
       <ng-container offcanvasFooter>

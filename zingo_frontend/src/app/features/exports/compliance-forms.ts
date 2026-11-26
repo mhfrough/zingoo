@@ -18,7 +18,7 @@ const t = (s: string | null | undefined) => (s ?? '').trim() || null;
 @Component({
   selector: 'app-logistics-form',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [ReactiveFormsModule, Offcanvas, Field, Btn, FileInput],
+  imports: [ReactiveFormsModule, Offcanvas, Field, Btn, FileInput, Select],
   template: `
     <app-offcanvas #oc [(open)]="open" title="Logistics & documents" [subtitle]="shipment() ? shipment()!.refNo + ' · ' + shipment()!.buyer : ''" size="lg" [dirty]="form.dirty">
       @if (error()) {
@@ -32,7 +32,7 @@ const t = (s: string | null | undefined) => (s ?? '').trim() || null;
         <h4 class="form-section" style="grid-column: 1 / -1">Shipment</h4>
         <app-field label="Discharge port"><input type="text" formControlName="dischargePort" maxlength="120" /></app-field>
         <app-field label="Mode">
-          <select formControlName="shippingMode"><option value="">-</option><option>Sea</option><option>Air</option><option>Road</option></select>
+          <app-select formControlName="shippingMode"><option value="">-</option><option>Sea</option><option>Air</option><option>Road</option></app-select>
         </app-field>
         <app-field label="Booking no."><input type="text" formControlName="bookingNo" maxlength="60" /></app-field>
         <app-field label="Container no."><input type="text" formControlName="containerNo" maxlength="30" /></app-field>
@@ -43,7 +43,7 @@ const t = (s: string | null | undefined) => (s ?? '').trim() || null;
         <app-field label="ETA"><input type="date" formControlName="eta" /></app-field>
         @if (shipped()) {
           <app-field label="Status">
-            <select formControlName="shippingStatus"><option value="">Shipped</option><option>Loaded</option><option>Sailed</option><option>Arrived</option><option>Delivered</option></select>
+            <app-select formControlName="shippingStatus"><option value="">Shipped</option><option>Loaded</option><option>Sailed</option><option>Arrived</option><option>Delivered</option></app-select>
           </app-field>
         }
         <h4 class="form-section" style="grid-column: 1 / -1">Export documents</h4>
@@ -51,9 +51,9 @@ const t = (s: string | null | undefined) => (s ?? '').trim() || null;
           @for (d of docs.controls; track d; let i = $index) {
             <div [formGroupName]="i" style="display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 2fr) auto; gap: var(--space-2); align-items: end">
               <app-field label="Document">
-                <select formControlName="type">
+                <app-select formControlName="type">
                   @for (x of docTypes(); track x) { <option [value]="x">{{ x }}</option> }
-                </select>
+                </app-select>
               </app-field>
               <app-field label="File"><app-file-input formControlName="file" /></app-field>
               <button appBtn type="button" variant="ghost" icon="trash" iconOnly (click)="docs.removeAt(i); form.markAsDirty()" [attr.aria-label]="'Remove document ' + (i + 1)"></button>
@@ -126,7 +126,7 @@ export class LogisticsForm extends FormModal {
 @Component({
   selector: 'app-claim-form',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [ReactiveFormsModule, Offcanvas, Field, Btn, FilesInput, RichText],
+  imports: [ReactiveFormsModule, Offcanvas, Field, Btn, FilesInput, RichText, Select],
   template: `
     <app-offcanvas #oc [(open)]="open" title="Raise a claim" [subtitle]="shipment() ? shipment()!.refNo + ' · ' + shipment()!.cartons + ' bundles' : ''" size="md" [dirty]="form.dirty">
       @if (error()) {
@@ -135,7 +135,7 @@ export class LogisticsForm extends FormModal {
       <form [id]="formId" [formGroup]="form" (ngSubmit)="submit()" class="form-grid" novalidate>
         <app-field label="Date" [required]="true"><input type="date" formControlName="date" /></app-field>
         <app-field label="Kind">
-          <select formControlName="kind"><option>Damage</option><option>Shortage</option><option>Quality</option><option>Return</option></select>
+          <app-select formControlName="kind"><option>Damage</option><option>Shortage</option><option>Quality</option><option>Return</option></app-select>
         </app-field>
         <app-field label="Bundles" [required]="true"><input type="number" formControlName="quantity" min="1" step="1" /></app-field>
         <app-field label="Batch"><input type="text" formControlName="batchRef" maxlength="60" /></app-field>
@@ -174,7 +174,7 @@ export class ClaimForm extends FormModal {
 @Component({
   selector: 'app-claim-decision-form',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [ReactiveFormsModule, Offcanvas, Field, Btn, PlainPipe],
+  imports: [ReactiveFormsModule, Offcanvas, Field, Btn, PlainPipe, RichText, Select],
   template: `
     <app-offcanvas #oc [(open)]="open" title="Decide claim" [subtitle]="claim() ? claim()!.refNo + ' · ' + claim()!.kind + ' · ' + claim()!.quantity + ' bundle(s)' : ''" size="md" [dirty]="form.dirty">
       @if (claim(); as c) {
@@ -185,18 +185,18 @@ export class ClaimForm extends FormModal {
       }
       <form [id]="formId" [formGroup]="form" (ngSubmit)="submit()" class="form-grid" novalidate>
         <app-field label="Decision">
-          <select formControlName="decision"><option value="Approve">Approve</option><option value="Reject">Reject</option></select>
+          <app-select formControlName="decision"><option value="Approve">Approve</option><option value="Reject">Reject</option></app-select>
         </app-field>
         @if (form.controls.decision.value === 'Approve') {
           <app-field label="Settle by">
-            <select formControlName="resolution"><option>Credit note</option><option>Replacement</option></select>
+            <app-select formControlName="resolution"><option>Credit note</option><option>Replacement</option></app-select>
           </app-field>
           @if (form.controls.resolution.value === 'Credit note') {
             <app-field label="Credit" [hint]="'In the invoice currency; at most ' + maxCredit()"><input type="number" formControlName="creditAmount" min="0" step="any" /></app-field>
           }
         }
         <app-field label="Inspection result" [wide]="true"><input type="text" formControlName="inspection" maxlength="2000" /></app-field>
-        <app-field label="Note" [wide]="true" [required]="form.controls.decision.value === 'Reject'"><input type="text" formControlName="note" maxlength="1000" /></app-field>
+        <app-field label="Note" [wide]="true" [required]="form.controls.decision.value === 'Reject'"><app-rich-text formControlName="note" [max]="1000" [storeMax]="1000" /></app-field>
       </form>
       <ng-container offcanvasFooter>
         <button appBtn type="button" (click)="oc.requestClose()">Cancel</button>
@@ -251,9 +251,9 @@ export class ClaimDecisionForm extends FormModal {
       <form [id]="formId" [formGroup]="form" (ngSubmit)="submit()" class="form-grid" novalidate>
         @if (!approval()) {
           <app-field label="Product" [required]="true">
-            <select formControlName="productId">
+            <app-select formControlName="productId">
               @for (p of products(); track p.id) { <option [value]="p.id">{{ p.sku }} · {{ p.name }}</option> }
-            </select>
+            </app-select>
           </app-field>
           <app-field label="Market (country)" [required]="true"><app-select formControlName="country" [options]="countries" placeholder="Country" /></app-field>
         }
@@ -270,7 +270,7 @@ export class ClaimDecisionForm extends FormModal {
         <div formArrayName="certificates" style="grid-column: 1 / -1; display: flex; flex-direction: column; gap: var(--space-2)">
           @for (c of certs.controls; track c; let i = $index) {
             <div [formGroupName]="i" style="display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 2fr) minmax(0, 1fr) auto; gap: var(--space-2); align-items: end">
-              <app-field label="Type"><select formControlName="type">@for (x of certTypes(); track x) { <option [value]="x">{{ x }}</option> }</select></app-field>
+              <app-field label="Type"><app-select formControlName="type">@for (x of certTypes(); track x) { <option [value]="x">{{ x }}</option> }</app-select></app-field>
               <app-field label="File"><app-file-input formControlName="file" /></app-field>
               <app-field label="Expiry"><input type="date" formControlName="expiry" /></app-field>
               <button appBtn type="button" variant="ghost" icon="trash" iconOnly (click)="certs.removeAt(i); form.markAsDirty()" [attr.aria-label]="'Remove certificate ' + (i + 1)"></button>

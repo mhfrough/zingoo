@@ -4,7 +4,7 @@ import { toSignal } from '@angular/core/rxjs-interop';
 import { SettingsStore } from '../../core/settings.store';
 import { errorText } from '../../shared/errors';
 import { docDate, subLine, Tone, fmtAmount, fmtAmount2, fmtDate, fmtMoney, fmtNumber, productLabel, dueCountdown, dueTone } from '../../shared/format';
-import { Btn, ConfirmService, DataTable, Field, MoneyInput, Offcanvas, RichText, RowAction, RowActionEvent, TableColumn, ToastService } from '../../ui';
+import { Btn, ConfirmService, DataTable, Field, MoneyInput, Offcanvas, RichText, RowAction, RowActionEvent, Select, TableColumn, ToastService } from '../../ui';
 import { FormModal } from '../ops/form-modal';
 import { OrderReasonForm } from './answer-forms';
 import { DistInvoice, FactoryApi, Shipment } from './factory.api';
@@ -149,7 +149,7 @@ export class SalesInvoiceForm extends FormModal {
 @Component({
   selector: 'app-invoice-payment-form',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [ReactiveFormsModule, Offcanvas, Field, Btn, MoneyInput],
+  imports: [ReactiveFormsModule, Offcanvas, Field, Btn, MoneyInput, RichText, Select],
   template: `
     <app-offcanvas #oc [(open)]="open" [title]="inv() ? 'Payment for ' + inv()!.refNo : 'Record payment'" [subtitle]="inv()?.distributor?.name ?? ''" size="md" [dirty]="form.dirty">
       @if (error()) {
@@ -159,21 +159,21 @@ export class SalesInvoiceForm extends FormModal {
         <app-field label="Amount (PKR)" [required]="true" [hint]="'Due ' + money(inv()?.due ?? 0)"><app-money-input formControlName="amount" /></app-field>
         <app-field label="Date" [required]="true"><input type="date" formControlName="date" [max]="maxDate" /></app-field>
         <app-field label="Method" [required]="true">
-          <select formControlName="method">
+          <app-select formControlName="method">
             @for (m of methods(); track m) {
               <option [value]="m">{{ m }}</option>
             }
-          </select>
+          </app-select>
         </app-field>
         <app-field label="Received into">
-          <select formControlName="toAccount">
+          <app-select formControlName="toAccount">
             <option value="">Not recorded</option>
             @for (a of accounts(); track a) {
               <option [value]="a">{{ a }}</option>
             }
-          </select>
+          </app-select>
         </app-field>
-        <app-field label="Reference" [wide]="true"><input type="text" formControlName="reference" maxlength="80" /></app-field>
+        <app-field label="Reference" [wide]="true"><app-rich-text formControlName="reference" [max]="80" [storeMax]="80" /></app-field>
       </form>
       <ng-container offcanvasFooter>
         <button appBtn type="button" (click)="oc.requestClose()">Cancel</button>

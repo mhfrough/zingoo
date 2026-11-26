@@ -2,9 +2,9 @@
   <section class="auth__form-side">
     <form class="auth__form" [formGroup]="form" (ngSubmit)="submit()" novalidate>
       <header class="auth__head">
-        <p class="auth__eyebrow">Zingoo OS</p>
+        <p class="auth__eyebrow">{{ platform.platform().name }}</p>
         <h1>Welcome back</h1>
-        <p class="muted">Sign in to the Zingoo distributor portal.</p>
+        <p class="muted">Sign in to the {{ platform.platform().name }} portal.</p>
       </header>
 
       @if (error()) {
@@ -35,11 +35,11 @@
         Sign in
       </button>
 
-      <p class="auth__foot muted">Zen Foods (Pvt.) Ltd.</p>
+      <p class="auth__foot muted">{{ platform.footer() }}</p>
     </form>
   </section>
 
-  <aside class="auth__brand" aria-label="About Zingoo OS">
+  <aside class="auth__brand" [attr.aria-label]="'About ' + platform.platform().name">
     <div class="auth__bg" aria-hidden="true">
       <span class="auth__orb auth__orb--1"></span>
       <span class="auth__orb auth__orb--2"></span>
@@ -48,10 +48,14 @@
     </div>
 
     <div class="auth__brand-inner">
-      <img class="auth__logo" src="brand/zingoo-logo-dark.svg" alt="Zingoo, Zen Foods OS" width="176" height="73" />
+      @if (platform.platformLogo(); as logo) {
+        <img class="auth__logo auth__logo--custom" [src]="logo" [alt]="platform.platform().name" width="73" height="73" />
+      } @else {
+        <img class="auth__logo" src="brand/zingoo-logo-dark.svg" [alt]="platform.platform().name" width="176" height="73" />
+      }
 
       <div class="auth__pitch">
-        <h2 class="auth__headline">Run the entire <em>Zingoo</em> business</h2>
+        <h2 class="auth__headline">Run the entire <em>{{ platform.platform().name }}</em> business</h2>
         <p class="auth__lead">One place for the factory, the money desk and every distributor.</p>
 
         <ul class="auth__points">
@@ -79,7 +83,7 @@
         </ul>
       </div>
 
-      <p class="auth__brand-foot">Zen Foods (Pvt.) Ltd.</p>
+      <p class="auth__brand-foot">{{ platform.platform().tagline || platform.platform().name }}</p>
     </div>
   </aside>
 </main>

@@ -36,6 +36,11 @@ async function run() {
   const db = app.get(DataSource);
 
   try {
+    // the business data was cleared on purpose (Settings > Zingo or npm run db:clear): never bring the sample back
+    if ((await app.get(SettingsService).get()).sampleDataOff) {
+      console.log('Business data was cleared on purpose, so the sample data is not loaded. Run `npm run seed:fresh` to start over.');
+      return;
+    }
     // (the root account is created at start-up, so "users" is never empty here; look at real data instead)
     if ((await db.query('SELECT 1 FROM manufacturers LIMIT 1')).length) {
       console.log('Database already has data. Run `npm run seed:fresh` to wipe it and start over.');

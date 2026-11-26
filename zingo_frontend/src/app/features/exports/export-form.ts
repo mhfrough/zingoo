@@ -3,7 +3,7 @@ import { takeUntilDestroyed, toSignal } from '@angular/core/rxjs-interop';
 import { ReactiveFormsModule, Validators } from '@angular/forms';
 import { SettingsStore } from '../../core/settings.store';
 import { fmtAmount2, fmtMoney, fmtPct } from '../../shared/format';
-import { Btn, Field, MoneyInput, Offcanvas } from '../../ui';
+import { Btn, Field, MoneyInput, Offcanvas, Select } from '../../ui';
 import { Currency } from '../finance/models';
 import { FormModal } from '../ops/form-modal';
 import { OpsApi } from '../ops/ops.api';
@@ -30,7 +30,7 @@ const COSTS = [
 @Component({
   selector: 'app-export-form',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [ReactiveFormsModule, Offcanvas, Field, MoneyInput, Btn],
+  imports: [ReactiveFormsModule, Offcanvas, Field, MoneyInput, Btn, Select],
   template: `
     <app-offcanvas #oc [(open)]="open" [title]="quote() ? 'Edit container quote' : 'New container quote'"
                subtitle="A quote is a costing scenario. Shipping it posts the invoice, the goods cost and the seller's costs." size="lg" [dirty]="form.dirty">
@@ -40,48 +40,48 @@ const COSTS = [
       <form [id]="formId" [formGroup]="form" (ngSubmit)="submit()" class="form-grid" novalidate>
         <app-field label="International distributor" [wide]="true"
                    [hint]="distributorId() ? 'Its buyer name, country, port, Incoterm, currency, price and terms are filled in; change any of them for this order only' : 'Or a one-off buyer typed below'">
-          <select formControlName="distributorId">
+          <app-select formControlName="distributorId">
             <option value="">No distributor (one-off buyer)</option>
             @for (d of distributors(); track d.id) {
               <option [value]="d.id">{{ d.name }}{{ d.code ? ' · ' + d.code : '' }}{{ d.registrationStatus !== 'Active' ? ' (' + (d.registrationStatus ?? 'Draft').toLowerCase() + ')' : '' }}</option>
             }
-          </select>
+          </app-select>
         </app-field>
         <app-field label="Quote date" [required]="true"><input type="date" formControlName="date" /></app-field>
         <app-field label="Foreign buyer" [required]="true" [error]="invalid('buyer') ? 'Enter the buyer' : null"><input type="text" formControlName="buyer" /></app-field>
         <app-field label="Destination country" [required]="true" [error]="invalid('country') ? 'Enter the country' : null"><input type="text" formControlName="country" /></app-field>
         <app-field label="Destination port or named place"><input type="text" formControlName="port" /></app-field>
         <app-field label="Container type" [required]="true">
-          <select formControlName="container">
+          <app-select formControlName="container">
             @for (c of containers(); track c.code) {
               <option [value]="c.code">{{ c.code }} · planning {{ c.maxCartons }} bundles</option>
             }
-          </select>
+          </app-select>
         </app-field>
         <app-field label="Sale term (Incoterm)" [required]="true">
-          <select formControlName="incoterm">
+          <app-select formControlName="incoterm">
             @for (t of terms(); track t) {
               <option [value]="t">{{ t }}</option>
             }
-          </select>
+          </app-select>
         </app-field>
         <app-field label="Export product" [required]="true" [error]="invalid('productId') ? 'Choose a product' : null">
-          <select formControlName="productId">
+          <app-select formControlName="productId">
             <option value="">Choose a product</option>
             @for (p of productChoices(); track p.id) {
               <option [value]="p.id">{{ p.sku }} · {{ p.name }}</option>
             }
-          </select>
+          </app-select>
         </app-field>
         <app-field label="Bundles in this container" [required]="true" [error]="invalid('cartons') ? 'Enter at least 1 bundle' : null">
           <input type="number" formControlName="cartons" min="1" step="1" />
         </app-field>
         <app-field label="Invoice currency" [required]="true">
-          <select formControlName="currency">
+          <app-select formControlName="currency">
             @for (c of currencies(); track c.code) {
               <option [value]="c.code">{{ c.code }} · {{ c.name }}</option>
             }
-          </select>
+          </app-select>
         </app-field>
         <app-field label="Exchange rate" hint="PKR per 1 unit of the invoice currency" [required]="true" [error]="invalid('fxRate') ? 'Enter the rate' : null">
           <input type="number" formControlName="fxRate" min="0" step="any" />

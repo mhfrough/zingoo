@@ -5,7 +5,7 @@ import { of } from 'rxjs';
 import { AttachmentMeta, AttachmentsApi } from '../../core/attachments.api';
 import { errorText } from '../../shared/errors';
 import { fmtDate, fmtMoney, Tone } from '../../shared/format';
-import { Btn, Field, FileInput, Modal, MoneyInput, ToastService } from '../../ui';
+import { Btn, Field, FileInput, Modal, MoneyInput, RichText, Select, ToastService } from '../../ui';
 import { PortalApi } from './portal.api';
 import { OrderMoney } from './portal.models';
 
@@ -25,9 +25,9 @@ export function daysTone(o: OrderMoney): Tone | null {
 @Component({
   selector: 'app-order-pay',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [ReactiveFormsModule, Modal, Field, Btn, MoneyInput, FileInput],
+  imports: [ReactiveFormsModule, Modal, Field, Btn, MoneyInput, FileInput, RichText, Select],
   template: `
-    <app-modal [(open)]="open" [title]="'Pay on ' + (order()?.orderRef ?? '')" [subtitle]="order()?.products?.join(', ') ?? ''" size="md">
+    <app-modal #dlg [(open)]="open" [dirty]="form.dirty" [title]="'Pay on ' + (order()?.orderRef ?? '')" [subtitle]="order()?.products?.join(', ') ?? ''" size="md">
       @if (order(); as o) {
         @if (error()) {
           <div class="notice" data-tone="danger" role="alert">{{ error() }}</div>
@@ -43,21 +43,21 @@ export function daysTone(o: OrderMoney): Tone | null {
             <app-money-input formControlName="amount" />
           </app-field>
           <app-field label="Method" [required]="true" [error]="err('method')">
-            <select formControlName="method">
+            <app-select formControlName="method">
               @for (m of methods(); track m) {
                 <option [value]="m">{{ m }}</option>
               }
-            </select>
+            </app-select>
           </app-field>
           <app-field label="Paid on" [required]="true"><input type="date" formControlName="date" [max]="today" /></app-field>
-          <app-field label="Bank / transfer reference" [wide]="true"><input type="text" formControlName="reference" maxlength="80" /></app-field>
+          <app-field label="Bank / transfer reference" [wide]="true"><app-rich-text formControlName="reference" [max]="80" [storeMax]="80" /></app-field>
           <app-field label="Proof of payment" [wide]="true" [required]="true" [error]="err('proof')" hint="Bank slip or transfer screenshot: picture or PDF, 5 MB at most">
             <app-file-input formControlName="proof" />
           </app-field>
         </form>
       }
       <ng-container modalFooter>
-        <button appBtn type="button" (click)="open.set(false)">Cancel</button>
+        <button appBtn type="button" (click)="dlg.requestClose()">Cancel</button>
         <button appBtn variant="primary" type="submit" form="form-order-pay" icon="check" [loading]="busy()">Pay {{ money(amount()) }}</button>
       </ng-container>
     </app-modal>

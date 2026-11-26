@@ -3,7 +3,7 @@ import { toSignal } from '@angular/core/rxjs-interop';
 import { ReactiveFormsModule, Validators } from '@angular/forms';
 import { fmtMoney } from '../../shared/format';
 import { ProofFile, readProof } from '../../shared/files';
-import { Btn, Field, MoneyInput, Offcanvas, RichText } from '../../ui';
+import { Btn, Field, MoneyInput, Offcanvas, RichText, Select } from '../../ui';
 import { FormModal } from '../ops/form-modal';
 import { PortalApi } from './portal.api';
 import { PortalOrder } from './portal.models';
@@ -21,7 +21,7 @@ export const payableOf = (o: PortalOrder) =>
 @Component({
   selector: 'app-advice-form',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [MoneyInput, ReactiveFormsModule, Offcanvas, Field, Btn, RichText],
+  imports: [MoneyInput, ReactiveFormsModule, Offcanvas, Field, Btn, RichText, Select],
   template: `
     <app-offcanvas #oc [(open)]="open" title="Report a payment" size="lg" [dirty]="form.dirty"
                    subtitle="This is an advice, not confirmed cash. Zingo checks it against the bank record.">
@@ -39,25 +39,25 @@ export const payableOf = (o: PortalOrder) =>
       }
       <form [id]="formId" [formGroup]="form" (ngSubmit)="submit()" class="form-grid" novalidate>
         <app-field label="Pay against" [wide]="true" [required]="true" [error]="invalid('orderId') ? 'Choose an order' : null">
-          <select formControlName="orderId">
+          <app-select formControlName="orderId">
             <option value="">Choose an order</option>
             @for (o of payable(); track o.id) {
               <option [value]="o.id">{{ o.refNo }} · {{ o.product.sku }} · open {{ money(payableOf(o)) }}</option>
             }
-          </select>
+          </app-select>
         </app-field>
         <app-field label="Payment date" [required]="true"><input type="date" formControlName="date" /></app-field>
         <app-field label="Amount" [required]="true" [error]="invalid('amount') ? 'Enter an amount above zero' : null">
           <app-money-input formControlName="amount" />
         </app-field>
         <app-field label="Payment mode">
-          <select formControlName="method">
+          <app-select formControlName="method">
             @for (m of methods(); track m) {
               <option [value]="m">{{ m }}</option>
             }
-          </select>
+          </app-select>
         </app-field>
-        <app-field label="Bank reference / transaction ID" [wide]="true"><input type="text" formControlName="bankRef" maxlength="80" /></app-field>
+        <app-field label="Bank reference / transaction ID" [wide]="true"><app-rich-text formControlName="bankRef" [max]="80" [storeMax]="80" /></app-field>
         <app-field label="Receipt or screenshot" [wide]="true" [hint]="file() ? file()!.proofName : 'Image or PDF, under 450 KB'" [error]="fileError() || null">
           <input type="file" accept="image/png,image/jpeg,image/webp,image/gif,application/pdf" (change)="pick($event)" />
         </app-field>

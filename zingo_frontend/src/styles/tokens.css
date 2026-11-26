@@ -84,7 +84,7 @@
     /* radius - ONE corner radius for every control, card, table, modal and menu. The sm / md / lg names stay so
        existing rules keep working, but they all resolve to it. Change the look of the whole app here.
        --radius-pill is only for things that are round by shape (scrollbar thumbs, switches, progress tracks). */
-    --radius: 0.45rem;
+    --radius: 0.375rem;
     --radius-sm: var(--radius);
     --radius-md: var(--radius);
     --radius-lg: var(--radius);

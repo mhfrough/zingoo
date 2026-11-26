@@ -37,8 +37,6 @@ const LIST_META: Partial<Record<LookupList, readonly string[]>> = {
   // whose account it is, and the bank details (a cash counter has none)
   BANK_ACCOUNT: ['kind', 'ownerType', 'ownerId', 'ownerName', 'bank', 'title', 'account', 'branch'],
 };
-
-/** the lists whose description is written in the rich-text editor */
 const RICH_LISTS: readonly string[] = ['LOAN_TENURE', 'REPAY_PLAN', 'REPAY_FREQUENCY', 'CERT_TYPE'];
 
 /** who a bank or cash account belongs to */
@@ -142,9 +140,10 @@ export class LookupsService implements OnApplicationBootstrap {
     return row;
   }
 
-  /** a rich-text list keeps the text in notes and its plain start as the description shown in lists */
+  /** a list keeps its rich text in notes and the plain start as the description shown in lists */
   private texts(list: string, description?: string, notes?: string): { description?: string; notes?: string } {
-    if (RICH_LISTS.includes(list) && notes !== undefined) return { notes, description: plainText(notes).slice(0, 250) };
+    // every list is written in the rich-text editor now; an older client may still send a plain description
+    if (notes !== undefined) return { notes, description: plainText(notes).slice(0, 250) };
     return { ...(description !== undefined ? { description } : {}), ...(notes !== undefined ? { notes } : {}) };
   }
 

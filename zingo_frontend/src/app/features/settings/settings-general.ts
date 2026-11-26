@@ -1,9 +1,9 @@
-import { ChangeDetectionStrategy, Component, computed, effect, inject, signal, untracked } from '@angular/core';
+import { ChangeDetectionStrategy, Component, DestroyRef, computed, effect, inject, signal, untracked } from '@angular/core';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { AuthService } from '../../core/auth.service';
 import { SettingsStore } from '../../core/settings.store';
 import { errorText } from '../../shared/errors';
-import { Btn, Field, ToastService, MoneyInput } from '../../ui';
+import { Btn, Field, MoneyInput, Select, ToastService, UnsavedChanges } from '../../ui';
 import { SettingsApi } from './settings.api';
 import { SettingsCompanies } from './settings-companies';
 
@@ -30,7 +30,7 @@ const numbers = (text: string) => text.split(/[,\s]+/).filter(Boolean).map(Numbe
 @Component({
   selector: 'app-settings-general',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [MoneyInput, ReactiveFormsModule, Field, Btn, SettingsCompanies],
+  imports: [MoneyInput, ReactiveFormsModule, Field, Btn, SettingsCompanies, Select],
   template: `
     <div class="stack">
     <app-settings-companies />
@@ -40,18 +40,18 @@ const numbers = (text: string) => text.split(/[,\s]+/).filter(Boolean).map(Numbe
         <div class="card__body form-grid">
           <app-field label="Company name" [required]="true" [error]="bad('companyName') ? 'Enter the company name' : null"><input type="text" formControlName="companyName" /></app-field>
           <app-field label="Financial year starts in">
-            <select formControlName="fiscalMonth">
+            <app-select formControlName="fiscalMonth">
               @for (m of months; track m; let i = $index) {
                 <option [value]="i + 1">{{ m }}</option>
               }
-            </select>
+            </app-select>
           </app-field>
           <app-field label="Number format" hint="Changes how every amount is written">
-            <select formControlName="numberFormat">
+            <app-select formControlName="numberFormat">
               @for (l of locales; track l[0]) {
                 <option [value]="l[0]">{{ l[1] }}</option>
               }
-            </select>
+            </app-select>
           </app-field>
           <app-field label="Base currency" hint="Every amount is kept in this currency"><input type="text" [value]="settings()?.baseCurrency ?? 'PKR'" disabled /></app-field>
         </div>
@@ -89,28 +89,28 @@ const numbers = (text: string) => text.split(/[,\s]+/).filter(Boolean).map(Numbe
             <input type="number" formControlName="transitDays" min="0" max="60" step="1" />
           </app-field>
           <app-field label="Sales orders from the warehouse" hint="The earlier flow. Off: distributors hold stock on consignment and invoice what they sell">
-            <select formControlName="salesOrdersEnabled"><option value="false">Hidden</option><option value="true">Shown</option></select>
+            <app-select formControlName="salesOrdersEnabled"><option value="false">Hidden</option><option value="true">Shown</option></app-select>
           </app-field>
           <app-field label="Distributor orders need Zingo approval" hint="Off: a distributor's order goes straight to the manufacturer and Zen Foods watches it. On: it waits on the approval desk"
             help="Off: the order becomes a production order with the product's manufacturer at once. On: it waits on the Zingo approval desk until staff accept or reject it.">
-            <select formControlName="requestsNeedApproval"><option value="false">Off</option><option value="true">On</option></select>
+            <app-select formControlName="requestsNeedApproval"><option value="false">Off</option><option value="true">On</option></app-select>
           </app-field>
           <app-field label="Manufacturer advance (%)" hint="Default for a new manufacturer" [required]="true"
             help="Share of an order's value a manufacturer may invoice as an advance before production. Each manufacturer can have its own."><input type="number" formControlName="defaultAdvancePct" min="0" max="100" step="1" /></app-field>
           <app-field label="Low-stock alert below" hint="Cartons per SKU"><input type="number" formControlName="lowStockCartons" min="0" step="1" /></app-field>
           <app-field label="Default container">
-            <select formControlName="containerSize">
+            <app-select formControlName="containerSize">
               @for (c of store.containers(); track c.code) {
                 <option [value]="c.code">{{ c.code }}</option>
               }
-            </select>
+            </app-select>
           </app-field>
           <app-field label="Default Incoterm">
-            <select formControlName="defaultIncoterm">
+            <app-select formControlName="defaultIncoterm">
               @for (t of store.incoterms(); track t.id) {
                 <option [value]="t.code">{{ t.code }}</option>
               }
-            </select>
+            </app-select>
           </app-field>
           <app-field label="Payment terms offered" hint="Days, separated by commas" [error]="bad('paymentCycles') ? 'Enter whole days, for example 15, 30, 45' : null">
             <input type="text" formControlName="paymentCycles" />
@@ -161,6 +161,8 @@ export class SettingsGeneral {
   protected settings = this.store.settings;
   protected busy = signal(false);
   protected error = signal('');
+  /** changed settings not saved yet: leaving the page or closing the tab asks first */
+  private unsaved = inject(UnsavedChanges).watch(() => this.form.dirty, inject(DestroyRef));
 
   protected form = this.fb.nonNullable.group({
     companyName: ['', Validators.required],

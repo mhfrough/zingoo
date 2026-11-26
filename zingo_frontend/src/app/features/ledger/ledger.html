@@ -44,18 +44,18 @@
         </div>
         <div class="toolbar ledger-filters">
           <label for="led-account">Account</label>
-          <select id="led-account" [value]="account()" (change)="account.set($any($event.target).value)">
-            <option value="all" [selected]="account() === 'all'">All accounts (combined)</option>
+          <app-select id="led-account" [value]="account()" (valueChange)="account.set($any($event))">
+            <option value="all">All accounts (combined)</option>
             @for (a of accountOptions(); track a.id) {
-              <option [value]="a.code" [selected]="a.code === account()">{{ a.code }} · {{ a.name }}</option>
+              <option [value]="a.code">{{ a.code }} · {{ a.name }}</option>
             }
-          </select>
+          </app-select>
           <label for="led-period">Period</label>
-          <select id="led-period" [value]="period()" (change)="period.set($any($event.target).value)">
+          <app-select id="led-period" [value]="period()" (valueChange)="period.set($any($event))">
             @for (o of periodOptions(); track o.value) {
-              <option [value]="o.value" [selected]="o.value === period()">{{ o.label }}</option>
+              <option [value]="o.value">{{ o.label }}</option>
             }
-          </select>
+          </app-select>
         </div>
         <div class="card__body">
           <app-data-table keepOrder [columns]="ledgerColumns" [rows]="ledgerRows()" [loading]="lines.isLoading()"
@@ -69,11 +69,11 @@
       <div class="stack">
         <div class="toolbar ledger-filters">
           <label for="pnl-period">Period</label>
-          <select id="pnl-period" [value]="period()" (change)="period.set($any($event.target).value)">
+          <app-select id="pnl-period" [value]="period()" (valueChange)="period.set($any($event))">
             @for (o of periodOptions(); track o.value) {
-              <option [value]="o.value" [selected]="o.value === period()">{{ o.label }}</option>
+              <option [value]="o.value">{{ o.label }}</option>
             }
-          </select>
+          </app-select>
         </div>
         <div class="two-col">
           <div class="card">

@@ -21,9 +21,11 @@ export class CompaniesService extends CrudService<Company> implements OnApplicat
   async onApplicationBootstrap() {
     // the company name changed on Settings: the primary company follows
     this.settings.changed$.subscribe(() => void this.followSettings().catch(() => undefined));
-    if (await this.repo.count()) return;
+    // the first start makes the starting company from Settings, once: the super admin may later delete every company
     const s = await this.settings.get();
-    await this.repo.save(this.repo.create({ name: s.companyName, primary: true, active: true }));
+    if (s.setupDone) return;
+    if (!(await this.repo.count())) await this.repo.save(this.repo.create({ name: s.companyName, primary: true, active: true }));
+    await this.settings.update({ setupDone: true });
   }
 
   private async followSettings() {
@@ -73,6 +75,36 @@ export class CompaniesService extends CrudService<Company> implements OnApplicat
     const row = await this.findOne(id);
     if (row.primary) throw new BadRequestException('The primary company cannot be deleted. Make another company primary first.');
     return super.remove(id);
+  }
+
+  /**
+   * Super admin: delete any company, the primary one too. The next active company (else any) becomes primary; with
+   * none left, the platform name (Settings > Zingo) names the business.
+   */
+  async removeAsSuperAdmin(id: string) {
+    const row = await this.findOne(id);
+    await this.repo.remove(row);
+    if (row.primary) await this.promoteNext();
+    return { deleted: true };
+  }
+
+  /** super admin: delete every company of the group */
+  async removeAll() {
+    const n = await this.repo.count();
+    await this.repo.clear();
+    await this.promoteNext();
+    return { deleted: n };
+  }
+
+  private async promoteNext() {
+    const next = (await this.repo.findOne({ where: { active: true }, order: { name: 'ASC' } })) ?? (await this.repo.findOne({ where: {}, order: { name: 'ASC' } }));
+    if (next) {
+      await this.repo.update({ id: next.id }, { primary: true, active: true });
+      return this.makePrimary({ ...next, primary: true });
+    }
+    const s = await this.settings.get();
+    const name = s.platform?.name?.trim() || 'Zingoo';
+    if (s.companyName !== name) await this.settings.update({ companyName: name });
   }
 
   /** the one primary company; its name becomes the company name in Settings */

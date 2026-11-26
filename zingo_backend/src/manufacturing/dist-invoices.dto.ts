@@ -1,3 +1,4 @@
+import { PlainRef } from '../common/plain-text';
 import { Type } from 'class-transformer';
 import { ArrayMaxSize, ArrayMinSize, IsArray, IsDateString, IsInt, IsNumber, IsOptional, IsString, IsUUID, Max, MaxLength, Min, ValidateNested } from 'class-validator';
 
@@ -25,7 +26,7 @@ export class DistOrderPayDto {
   @IsDateString() date: string;
   @IsNumber() @Min(0.01) amount: number;
   @IsString() @MaxLength(40) method: string;
-  @IsOptional() @IsString() @MaxLength(80) reference?: string;
+  @IsOptional() @PlainRef() @IsString() @MaxLength(80) reference?: string;
   /** the uploaded proof of payment */
   @IsUUID() proofId: string;
 }
@@ -36,6 +37,6 @@ export class DistInvoicePayDto {
   @IsNumber() @Min(0.01) amount: number;
   @IsString() @MaxLength(40) method: string;
   @IsOptional() @IsString() @MaxLength(80) toAccount?: string;
-  @IsOptional() @IsString() @MaxLength(80) reference?: string;
+  @IsOptional() @PlainRef() @IsString() @MaxLength(80) reference?: string;
   @IsOptional() @IsString() @MaxLength(500) note?: string;
 }

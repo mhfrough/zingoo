@@ -1,3 +1,4 @@
+import { PlainRef } from '../common/plain-text';
 import { ArrayMaxSize, IsArray, IsDateString, IsIn, IsNumber, IsOptional, IsString, IsUUID, MaxLength, Min } from 'class-validator';
 import { REQUEST_KINDS, RequestKind } from './payment-requests.entities';
 
@@ -29,6 +30,6 @@ export class PayRequestDto {
   @IsString() @MaxLength(40) method: string;
   /** the company account paid from (Settings list BANK_ACCOUNT) */
   @IsOptional() @IsString() @MaxLength(80) fromAccount?: string;
-  @IsOptional() @IsString() @MaxLength(80) reference?: string;
+  @IsOptional() @PlainRef() @IsString() @MaxLength(80) reference?: string;
   @IsOptional() @IsString() @MaxLength(500) note?: string;
 }

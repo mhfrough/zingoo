@@ -87,20 +87,20 @@ const LIST_TEXT: Record<LookupList, { word: string; use: string; code: string; m
           <input type="text" formControlName="code" maxlength="40" />
         </app-field>
         <app-field label="Status">
-          <select formControlName="active">
+          <app-select formControlName="active">
             <option value="true">Active</option>
             <option value="false">Switched off</option>
-          </select>
+          </app-select>
         </app-field>
         @if (current() === 'LOAN_TENURE') {
           <app-field label="Length" hint="Months the loan runs">
-            <select formControlName="lengthPick">
+            <app-select formControlName="lengthPick">
               @for (m of tenureMonths; track m) {
                 <option [value]="m">{{ m }} months</option>
               }
               <option value="custom">Custom</option>
               <option value="">Open (no fixed end)</option>
-            </select>
+            </app-select>
           </app-field>
           @if (v().lengthPick === 'custom') {
             <app-field label="Months" [required]="true" [error]="badMonths() ? '1 to 600 months' : null">
@@ -110,13 +110,13 @@ const LIST_TEXT: Record<LookupList, { word: string; use: string; code: string; m
         }
         @if (current() === 'REPAY_FREQUENCY') {
           <app-field label="Period" hint="How often an instalment is due">
-            <select formControlName="lengthPick">
+            <app-select formControlName="lengthPick">
               @for (p of periods; track p[0]) {
                 <option [value]="p[0]">{{ p[1] }}</option>
               }
               <option value="custom">Every … months</option>
               <option value="">Agreed per loan</option>
-            </select>
+            </app-select>
           </app-field>
           @if (v().lengthPick === 'custom') {
             <app-field label="Every (months)" [required]="true" [error]="badMonths() ? '1 to 600 months' : null">
@@ -131,11 +131,11 @@ const LIST_TEXT: Record<LookupList, { word: string; use: string; code: string; m
             <label><input type="radio" formControlName="kind" value="Cash" /> <span><strong>Cash counter</strong> · cash in hand, no bank</span></label>
           </div>
           <app-field label="Belongs to" help="Only the company's own accounts are offered when money is paid or received. The others are kept for reference.">
-            <select formControlName="ownerType">
+            <app-select formControlName="ownerType">
               @for (o of owners; track o) {
                 <option [value]="o">{{ o }}</option>
               }
-            </select>
+            </app-select>
           </app-field>
           @if (v().ownerType !== 'Company') {
             <app-field [label]="v().ownerType ?? ''" [required]="true" [error]="noOwner() ? 'Choose who it belongs to' : null">
@@ -154,12 +154,10 @@ const LIST_TEXT: Record<LookupList, { word: string; use: string; code: string; m
             <app-field label="Branch"><input type="text" formControlName="branch" maxlength="150" /></app-field>
           }
         }
-        @if (rich()) {
-          <app-field label="Description" [wide]="true">
+        @if (list() !== 'PAY_METHOD') {
+          <app-field [label]="rich() ? 'Description' : text().meaning" [wide]="true">
             <app-rich-text formControlName="notes" [max]="2000" [storeMax]="20000" placeholder="What it means, when it is used" />
           </app-field>
-        } @else if (list() !== 'PAY_METHOD') {
-          <app-field [label]="text().meaning" [wide]="true"><input type="text" formControlName="description" maxlength="250" /></app-field>
         }
         @if (current() === 'CERT_TYPE') {
           <app-field label="Picture" [wide]="true" hint="A sample of the certificate: PNG, JPG, GIF or WebP, 5 MB at most">
@@ -376,7 +374,7 @@ export class LookupForm extends FormModal {
       : list === 'PERSON' ? { investor: v.investor, owner: v.owner }
       : {};
     const meta = this.metaOf(list, v);
-    const text = RICH_LISTS.includes(list) ? { notes: v.notes } : { description: v.description };
+    const text = list === 'PAY_METHOD' ? {} : { notes: v.notes };
     const e = this.entry();
     return e
       ? this.settingsApi.updateLookup(e.id, { ...text, flags, meta, active: v.active === 'true' })

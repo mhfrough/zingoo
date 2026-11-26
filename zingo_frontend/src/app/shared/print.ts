@@ -4,6 +4,8 @@
  * and the user can print it or save it as a PDF. Plain HTML with its own small style sheet, light colours only.
  */
 
+import { isRich, richToPlain } from '../ui/rich-text';
+
 /** one printed document */
 export interface Voucher {
   /** "Sales invoice", "Production order" ... */
@@ -22,8 +24,16 @@ export interface Voucher {
   signatures?: string[];
 }
 
+/** who issues the documents (the signed-in party, else the platform), set by PlatformStore */
+let brand: { company: string; logo: string | null; footer: string } = { company: 'Zingoo', logo: null, footer: '' };
+export function setVoucherBrand(b: { company: string; logo: string | null; footer: string }) {
+  brand = b;
+}
+
+/** escapes text for the page; a note written in the rich-text editor prints as its plain text */
 const esc = (s: unknown) =>
-  String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]!);
+  (isRich(String(s ?? '')) ? richToPlain(String(s)).replace(/\s*\n\s*/g, ' · ') : String(s ?? ''))
+    .replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]!);
 
 /** the voucher as a complete HTML page */
 export function voucherHtml(v: Voucher): string {
@@ -37,7 +47,9 @@ ${v.table.foot ? `<tfoot><tr>${v.table.foot.map((c) => `<td>${esc(c)}</td>`).joi
   @page { margin: 16mm; }
   body { font: 13px/1.45 system-ui, -apple-system, 'Segoe UI', sans-serif; color: #0c1727; max-width: 720px; margin: 0 auto; }
   header { display: flex; justify-content: space-between; align-items: baseline; border-bottom: 2px solid #0c1727; padding-bottom: 8px; margin-bottom: 16px; }
-  header strong { font-size: 15px; }
+  header strong { font-size: 15px; display: inline-flex; align-items: center; gap: 8px; }
+  header img { inline-size: 36px; block-size: 36px; object-fit: contain; }
+  footer { margin-top: 32px; padding-top: 6px; border-top: 1px solid #dde3ec; color: #556070; font-size: 10px; text-align: center; }
   h1 { font-size: 20px; margin: 0; }
   .facts { width: 100%; border-collapse: collapse; margin-bottom: 18px; }
   .facts td { padding: 5px 0; border-bottom: 1px solid #dde3ec; vertical-align: top; }
@@ -52,11 +64,12 @@ ${v.table.foot ? `<tfoot><tr>${v.table.foot.map((c) => `<td>${esc(c)}</td>`).joi
   .signs div { flex: 1; border-top: 1px solid #0c1727; padding-top: 6px; font-size: 11px; color: #556070; }
   .signs b { display: block; color: #0c1727; font-size: 12px; }
 </style></head><body>
-<header><strong>${esc(v.company ?? 'Zen Foods')}</strong><h1>${esc(v.title)} · ${esc(v.ref)}</h1></header>
+<header><strong>${brand.logo ? `<img src="${esc(brand.logo)}" alt="">` : ''}${esc(v.company ?? brand.company)}</strong><h1>${esc(v.title)} · ${esc(v.ref)}</h1></header>
 <table class="facts">${v.facts.map(([k, val]) => `<tr><td>${esc(k)}</td><td>${esc(val)}</td></tr>`).join('')}</table>
 ${table}
 ${v.note ? `<p class="note">${esc(v.note)}</p>` : ''}
 ${v.signatures?.length ? `<div class="signs">${v.signatures.map((s) => `<div><b>${esc(s)}</b>Name, signature and date</div>`).join('')}</div>` : ''}
+${brand.footer ? `<footer>${esc(brand.footer)}</footer>` : ''}
 </body></html>`;
 }
 

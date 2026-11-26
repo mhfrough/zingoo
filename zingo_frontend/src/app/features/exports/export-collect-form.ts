@@ -3,7 +3,7 @@ import { toSignal } from '@angular/core/rxjs-interop';
 import { ReactiveFormsModule, Validators } from '@angular/forms';
 import { SettingsStore } from '../../core/settings.store';
 import { fmtAmount2, fmtMoney } from '../../shared/format';
-import { Btn, Field, MoneyInput, Offcanvas } from '../../ui';
+import { Btn, Field, MoneyInput, Offcanvas, RichText, Select } from '../../ui';
 import { FormModal } from '../ops/form-modal';
 import { ExportsApi } from './exports.api';
 import { ExportRow } from './models';
@@ -17,7 +17,7 @@ const today = () => new Date().toISOString().slice(0, 10);
 @Component({
   selector: 'app-export-collect-form',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [ReactiveFormsModule, Offcanvas, Field, MoneyInput, Btn],
+  imports: [ReactiveFormsModule, Offcanvas, Field, MoneyInput, Btn, RichText, Select],
   template: `
     <app-offcanvas #oc [(open)]="open" title="Collect from the buyer"
                [subtitle]="shipment() ? shipment()!.refNo + ' · ' + shipment()!.buyer : ''" size="lg" [dirty]="form.dirty">
@@ -40,13 +40,13 @@ const today = () => new Date().toISOString().slice(0, 10);
           <input type="number" formControlName="fxRate" min="0" step="any" />
         </app-field>
         <app-field label="Payment method">
-          <select formControlName="method">
+          <app-select formControlName="method">
             @for (m of methods(); track m) {
               <option [value]="m">{{ m }}</option>
             }
-          </select>
+          </app-select>
         </app-field>
-        <app-field label="Bank advice / reference" [wide]="true"><input type="text" formControlName="note" /></app-field>
+        <app-field label="Bank advice / reference" [wide]="true"><app-rich-text formControlName="note" [max]="2000" [storeMax]="2000" /></app-field>
       </form>
       @if (preview(); as p) {
         <div class="notice" [attr.data-tone]="p.diff < 0 ? 'warning' : null">

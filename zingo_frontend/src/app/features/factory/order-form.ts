@@ -63,11 +63,11 @@ const today = () => new Date().toISOString().slice(0, 10);
         </app-field>
         @if (templateOptions().length > 1) {
           <app-field label="Packaging" hint="The product's packaging templates">
-            <select formControlName="packaging">
+            <app-select formControlName="packaging">
               @for (t of templateOptions(); track t.value) {
                 <option [value]="t.value">{{ t.label }}</option>
               }
-            </select>
+            </app-select>
           </app-field>
         }
         <app-field label="Containers" [required]="true" [error]="invalid('containers') ? 'At least 1' : null">
@@ -80,10 +80,10 @@ const today = () => new Date().toISOString().slice(0, 10);
           <app-select formControlName="manufacturerId" [options]="manufacturerOptions()" placeholder="Choose a manufacturer" [clearable]="false" />
         </app-field>
         <app-field label="Deliver to">
-          <select formControlName="destination">
+          <app-select formControlName="destination">
             <option value="Distributor">Assigned distributor</option>
             <option value="Warehouse">Zen Foods warehouse (exports)</option>
-          </select>
+          </app-select>
         </app-field>
         @if (value().destination === 'Distributor') {
           <app-field label="Distributor" [required]="true" [error]="invalid('distributorId') ? 'Choose a distributor' : null">

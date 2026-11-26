@@ -2,6 +2,7 @@
  * offcanvas.ts - the off-canvas panel that slides in from the right edge and holds forms.
  * Owned by the design-system session. Modal stays for short alerts and confirms; forms use this.
  */
+import { UnsavedChanges } from './unsaved-changes';
 import {
   ChangeDetectionStrategy, Component, DestroyRef, ElementRef, ViewEncapsulation, booleanAttribute, effect, inject,
   input, model, signal, untracked, viewChild,
@@ -105,6 +106,8 @@ export class Offcanvas {
   protected closing = signal(false);
 
   private confirm = inject(ConfirmService);
+  /** while open with changes, the tab close / page change warnings know about this panel */
+  private unsaved = inject(UnsavedChanges).watch(() => this.open() && this.dirty(), inject(DestroyRef));
   private dlg = viewChild.required<ElementRef<HTMLDialogElement>>('dlg');
   private closeTimer?: ReturnType<typeof setTimeout>;
   private asking = false;

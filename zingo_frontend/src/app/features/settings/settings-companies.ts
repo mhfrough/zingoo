@@ -2,6 +2,8 @@ import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@a
 import { rxResource } from '@angular/core/rxjs-interop';
 import { AuthService } from '../../core/auth.service';
 import { SettingsStore } from '../../core/settings.store';
+import { PlatformStore } from '../../core/platform.store';
+import { logoUrl } from '../../core/attachments.api';
 import { errorText } from '../../shared/errors';
 import { Btn, ConfirmService, DataTable, RowAction, RowActionEvent, TableColumn, ToastService } from '../../ui';
 import { CompanyForm } from './company-form';
@@ -36,13 +38,14 @@ export class SettingsCompanies {
   private confirm = inject(ConfirmService);
   private toast = inject(ToastService);
   private auth = inject(AuthService);
+  private platform = inject(PlatformStore);
   protected canEdit = computed(() => this.auth.can('admin'));
 
   private tick = signal(0);
   protected companies = rxResource({ params: () => this.tick(), stream: () => this.api.companies() });
 
   protected columns: TableColumn<Company>[] = [
-    { id: 'name', label: 'Company', value: (c) => c.name, sub: (c) => c.legalName || null },
+    { id: 'name', label: 'Company', value: (c) => c.name, sub: (c) => c.legalName || null, image: (c) => logoUrl(c.logoId) },
     { id: 'contact', label: 'Contact', priority: 2, value: (c) => c.poc || c.phone || c.email || null, sub: (c) => (c.taxNo ? `NTN ${c.taxNo}` : null) },
     {
       id: 'place', label: 'Location', priority: 2,
@@ -52,9 +55,12 @@ export class SettingsCompanies {
     { id: 'money', label: 'Currency', priority: 3, value: (c) => c.currency || 'PKR', sub: (c) => `Year from ${MONTH_SHORT[(c.fiscalMonth || 7) - 1]}` },
     { id: 'status', label: 'Status', kind: 'tag', value: (c) => (c.primary ? 'Primary' : c.active ? 'Active' : 'Switched off') },
   ];
+  /** the super admin may delete any company, the primary one too */
+  protected superAdmin = computed(() => !!this.auth.user()?.isRoot && !this.auth.user()?.viewAs);
   protected actions = (c: Company): RowAction[] => !this.canEdit() ? [] : [
     { id: 'edit', label: 'Edit' },
-    ...(c.primary ? [] : [{ id: 'primary', label: 'Make primary' }, { id: 'delete', label: 'Delete', tone: 'danger' as const }]),
+    ...(c.primary ? [] : [{ id: 'primary', label: 'Make primary' }]),
+    ...(!c.primary || this.superAdmin() ? [{ id: 'delete', label: 'Delete', tone: 'danger' as const }] : []),
   ];
 
   protected formOpen = signal(false);
@@ -63,6 +69,7 @@ export class SettingsCompanies {
   protected reload() {
     this.tick.update((n) => n + 1);
     this.store.reload();
+    this.platform.reload();
   }
 
   protected openForm(c: Company | null = null) {
@@ -83,9 +90,11 @@ export class SettingsCompanies {
   }
 
   private async remove(c: Company) {
-    const ok = await this.confirm.ask({ title: `Delete ${c.name}?`, message: 'It is removed for good.', confirmLabel: 'Delete', tone: 'danger' });
+    const message = c.primary ? 'It is removed for good. The next active company becomes primary.' : 'It is removed for good.';
+    const ok = await this.confirm.ask({ title: `Delete ${c.name}?`, message, confirmLabel: 'Delete', tone: 'danger' });
     if (!ok) return;
-    this.api.deleteCompany(c.id).subscribe({
+    const call = this.superAdmin() ? this.api.deleteCompanyAsSuperAdmin(c.id) : this.api.deleteCompany(c.id);
+    call.subscribe({
       next: () => { this.toast.success('Deleted.'); this.reload(); },
       error: (err) => this.toast.error(errorText(err)),
     });

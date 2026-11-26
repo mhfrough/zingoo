@@ -8,11 +8,20 @@
     Look: soft fill (--surface-field), 44px height, 3:1 border, border + 4px ring animate on focus.
   */
 
-  /* form layout: 3 compact columns, 2 on small screens, 1 on phones; .field--wide spans every column */
+  /* form layout: 4 compact columns (the default), 3 on laptops, 2 on small screens and in a narrow (md) panel,
+     1 on phones; .field--wide spans every column */
   .form-grid {
     display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-template-columns: repeat(4, minmax(0, 1fr));
     gap: var(--form-gap) var(--space-3);
+
+    @media (max-width: 1100px) {
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+
+    .offcanvas[data-size='md'] & {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
 
     @media (max-width: 760px) {
       grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -36,6 +45,20 @@
     /* a worked-out price line inside a form: its own full row */
     & > .formula {
       grid-column: 1 / -1;
+    }
+
+    /* every field shares three rows with its neighbours (label, control, hint), so a label that wraps or a hint
+       under one field never pushes the inputs of that row out of line */
+    & > .field {
+      display: grid;
+      grid-row: span 3;
+      grid-template-rows: subgrid;
+      row-gap: var(--space-2);
+      align-content: start;
+
+      & > :is(.field__label, .field__head) {
+        align-self: end;
+      }
     }
   }
 
@@ -548,6 +571,82 @@
   }
 
   /* ───────────── file input: choose, then name + size + remove ───────────── */
+  /* ───────────── logo picker ───────────── */
+  .logo-input {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+
+    & > .logo-input__preview {
+      display: grid;
+      place-items: center;
+      flex: none;
+      inline-size: 3rem;
+      block-size: 3rem;
+      overflow: hidden;
+      border: 1px dashed var(--control-line);
+      border-radius: var(--radius-md);
+      background-color: var(--surface-field);
+      color: var(--text-3);
+
+      & > img {
+        inline-size: 100%;
+        block-size: 100%;
+        object-fit: contain;
+      }
+    }
+
+    & .logo-input__text {
+      display: grid;
+      gap: 2px;
+      min-inline-size: 0;
+    }
+
+    & .logo-input__actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: var(--space-3);
+    }
+
+    & .logo-input__btn {
+      display: inline-flex;
+      align-items: center;
+      gap: var(--space-1);
+      padding: 0;
+      border: 0;
+      background: none;
+      color: var(--accent-text);
+      font: inherit;
+      font-size: var(--text-sm);
+      font-weight: 500;
+      cursor: pointer;
+
+      &[data-tone='danger'] {
+        color: var(--tone-danger-fg);
+      }
+
+      &:disabled {
+        cursor: not-allowed;
+        opacity: 0.6;
+      }
+
+      &:focus-visible {
+        outline: 2px solid var(--control-line-focus);
+        outline-offset: 2px;
+        border-radius: var(--radius-sm);
+      }
+    }
+
+    & .logo-input__hint {
+      color: var(--text-3);
+      font-size: var(--text-xs);
+    }
+
+    &[data-invalid] .logo-input__hint {
+      color: var(--tone-danger-fg);
+    }
+  }
+
   .file-input {
     display: flex;
     align-items: center;

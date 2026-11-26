@@ -4,9 +4,7 @@ import { AuthService } from '../../core/auth.service';
 import { downloadCsv } from '../../shared/csv';
 import { errorText } from '../../shared/errors';
 import { docDate, Tone, fmtAmount2, fmtDate, fmtMoney } from '../../shared/format';
-import {
-  Btn, ConfirmService, DataTable, Kpi, PageHeader, RowAction, RowActionEvent, TabItem, TabPanel, Tabs, Tag, TableColumn, ToastService,
-} from '../../ui';
+import { Btn, ConfirmService, DataTable, Kpi, PageHeader, RowAction, RowActionEvent, Select, TabItem, TableColumn, TabPanel, Tabs, Tag, ToastService } from '../../ui';
 import { FinanceApi } from '../finance/finance.api';
 import { AccountForm } from './account-form';
 import { LedgerApi } from './ledger.api';
@@ -29,7 +27,7 @@ const TYPE_TONE: Record<string, Tone> = {
 @Component({
   selector: 'app-ledger',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [Btn, DataTable, Kpi, PageHeader, Tag, Tabs, TabPanel, VoucherForm, AccountForm],
+  imports: [Btn, DataTable, Kpi, PageHeader, Tag, Tabs, TabPanel, VoucherForm, AccountForm, Select],
   templateUrl: './ledger.html',
   styleUrl: './ledger.css',
 })

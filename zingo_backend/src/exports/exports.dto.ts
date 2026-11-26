@@ -1,3 +1,4 @@
+import { PlainRef } from '../common/plain-text';
 import { PartialType } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
 import {
@@ -86,7 +87,7 @@ export class RemittanceDto {
   /** PKR per 1 unit on the day the money arrived */
   @IsNumber() @IsPositive() fxRate: number;
   @IsString() @IsNotEmpty() @MaxLength(60) method: string;
-  @IsOptional() @IsString() @MaxLength(80) bankRef?: string;
+  @IsOptional() @PlainRef() @IsString() @MaxLength(80) bankRef?: string;
   /** which of the distributor's bank accounts it came from (its position in the list) */
   @IsOptional() @IsInt() @Min(0) bankIndex?: number;
   @IsOptional() @IsString() @MaxLength(1000) note?: string;
@@ -177,7 +178,7 @@ export class RemittanceAdviceDto {
   @IsString() @MaxLength(3) currency: string;
   @IsNumber() @IsPositive() amount: number;
   @IsOptional() @IsString() @MaxLength(60) method?: string;
-  @IsOptional() @IsString() @MaxLength(80) bankRef?: string;
+  @IsOptional() @PlainRef() @IsString() @MaxLength(80) bankRef?: string;
   @IsOptional() @IsString() @MaxLength(300) forInvoices?: string;
   @ValidateNested() @Type(() => FileDto) proof: FileDto;
   @IsOptional() @IsString() @MaxLength(1000) note?: string;

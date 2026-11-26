@@ -2,7 +2,7 @@ import { ChangeDetectionStrategy, Component, inject, input } from '@angular/core
 import { ReactiveFormsModule, Validators } from '@angular/forms';
 import { SettingsStore } from '../../core/settings.store';
 import { fmtMoney } from '../../shared/format';
-import { Btn, Field, Offcanvas, MoneyInput } from '../../ui';
+import { Btn, Field, MoneyInput, Offcanvas, RichText, Select } from '../../ui';
 import { FinanceApi } from '../finance/finance.api';
 import { AccountingDoc } from '../finance/models';
 import { FormModal } from '../ops/form-modal';
@@ -13,7 +13,7 @@ const today = () => new Date().toISOString().slice(0, 10);
 @Component({
   selector: 'app-settle-form',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [MoneyInput, ReactiveFormsModule, Offcanvas, Field, Btn],
+  imports: [MoneyInput, ReactiveFormsModule, Offcanvas, Field, Btn, RichText, Select],
   template: `
     <app-offcanvas #oc [(open)]="open" [title]="doc()?.kind === 'Income' ? 'Collect income' : 'Pay expense bill'"
                [subtitle]="doc() ? doc()!.refNo + ' · ' + doc()!.party : ''" size="lg" [dirty]="form.dirty">
@@ -33,13 +33,13 @@ const today = () => new Date().toISOString().slice(0, 10);
           <app-money-input formControlName="amount" />
         </app-field>
         <app-field label="Payment method" [wide]="true">
-          <select formControlName="method">
+          <app-select formControlName="method">
             @for (m of methods(); track m) {
               <option [value]="m">{{ m }}</option>
             }
-          </select>
+          </app-select>
         </app-field>
-        <app-field label="Reference / notes" [wide]="true"><input type="text" formControlName="note" /></app-field>
+        <app-field label="Reference / notes" [wide]="true"><app-rich-text formControlName="note" [max]="2000" [storeMax]="2000" /></app-field>
       </form>
       <ng-container offcanvasFooter>
         <button appBtn type="button" (click)="oc.requestClose()">Cancel</button>

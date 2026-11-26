@@ -1,3 +1,4 @@
+import { PlainRef } from '../common/plain-text';
 import { PartialType } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
 import {
@@ -92,7 +93,7 @@ export class RepaymentDto {
   @IsIn(['principal', 'markup']) kind: 'principal' | 'markup';
   /** a payment method from Settings */
   @IsOptional() @IsString() @MaxLength(30) method?: string;
-  @IsOptional() @IsString() @MaxLength(100) reference?: string;
+  @IsOptional() @PlainRef() @IsString() @MaxLength(100) reference?: string;
   @IsOptional() @IsString() note?: string;
   @IsOptional() @IsUUID() proofId?: string;
 }

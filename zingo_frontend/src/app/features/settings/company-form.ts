@@ -4,7 +4,7 @@ import { ReactiveFormsModule, Validators } from '@angular/forms';
 import { PlacesService } from '../../core/places.service';
 import { SettingsStore } from '../../core/settings.store';
 import { countryOptions } from '../../shared/countries';
-import { Btn, Field, MoneyInput, Offcanvas, Select, SelectOption } from '../../ui';
+import { Btn, Field, LogoInput, MoneyInput, Offcanvas, Select, SelectOption } from '../../ui';
 import { FormModal } from '../ops/form-modal';
 import { Company, SettingsApi } from './settings.api';
 
@@ -20,7 +20,7 @@ export const WORLD_REGIONS = ['Middle East', 'South Asia', 'Central Asia', 'East
 @Component({
   selector: 'app-company-form',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [ReactiveFormsModule, Offcanvas, Field, Btn, Select, MoneyInput],
+  imports: [ReactiveFormsModule, Offcanvas, Field, Btn, Select, MoneyInput, LogoInput],
   template: `
     <app-offcanvas #oc [(open)]="open" [title]="company() ? 'Edit company' : 'Add company'"
                    subtitle="A company of the group. The primary one names the business on every page." size="lg" [dirty]="form.dirty">
@@ -29,6 +29,9 @@ export const WORLD_REGIONS = ['Middle East', 'South Asia', 'Central Asia', 'East
       }
       <form [id]="formId" [formGroup]="form" (ngSubmit)="submit()" class="form-grid" novalidate>
         <h4 class="form-section">Company</h4>
+        <app-field label="Logo" [wide]="true" hint="Shown in the sidebar and on printed documents when this is the primary company">
+          <app-logo-input formControlName="logoId" />
+        </app-field>
         <app-field label="Name" [required]="true" [error]="invalid('name') ? 'Enter the name' : null">
           <input type="text" formControlName="name" maxlength="150" />
         </app-field>
@@ -46,12 +49,12 @@ export const WORLD_REGIONS = ['Middle East', 'South Asia', 'Central Asia', 'East
         </div>
         @if (international()) {
           <app-field label="Region">
-            <select formControlName="region">
+            <app-select formControlName="region">
               <option value="">Choose</option>
               @for (r of regions; track r) {
                 <option [value]="r">{{ r }}</option>
               }
-            </select>
+            </app-select>
           </app-field>
           <app-field label="Country" [required]="true" [error]="noCountry() ? 'Choose the country' : null">
             <app-select formControlName="country" [options]="countries" placeholder="Search countries" />
@@ -67,11 +70,11 @@ export const WORLD_REGIONS = ['Middle East', 'South Asia', 'Central Asia', 'East
           </app-field>
         }
         <app-field label="Financial year starts in">
-          <select formControlName="fiscalMonth">
+          <app-select formControlName="fiscalMonth">
             @for (m of months; track m; let i = $index) {
               <option [value]="i + 1">{{ m }}</option>
             }
-          </select>
+          </app-select>
         </app-field>
         <app-field label="Currency" hint="The list is on Settings & Data">
           <app-select formControlName="currency" [options]="currencies()" [clearable]="false" />
@@ -90,10 +93,10 @@ export const WORLD_REGIONS = ['Middle East', 'South Asia', 'Central Asia', 'East
         @if (!company()?.primary) {
           <h4 class="form-section">Status</h4>
           <app-field label="Status">
-            <select formControlName="active">
+            <app-select formControlName="active">
               <option value="true">Active</option>
               <option value="false">Switched off</option>
-            </select>
+            </app-select>
           </app-field>
           <label class="check field--wide"><input type="checkbox" formControlName="primary" /> Primary company (names the business on every page)</label>
         }
@@ -149,6 +152,7 @@ export class CompanyForm extends FormModal {
 
   readonly form = this.fb.group({
     name: this.fb.nonNullable.control('', Validators.required),
+    logoId: this.fb.control<string | null>(null),
     legalName: this.fb.nonNullable.control(''),
     taxNo: this.fb.nonNullable.control(''),
     poc: this.fb.nonNullable.control(''),
@@ -195,7 +199,7 @@ export class CompanyForm extends FormModal {
     const c = this.company();
     const local = (c?.market ?? 'Local') !== 'International';
     this.form.reset({
-      name: c?.name ?? '', legalName: c?.legalName ?? '', taxNo: c?.taxNo ?? '', poc: c?.poc ?? '', phone: c?.phone ?? '',
+      name: c?.name ?? '', logoId: c?.logoId ?? null, legalName: c?.legalName ?? '', taxNo: c?.taxNo ?? '', poc: c?.poc ?? '', phone: c?.phone ?? '',
       email: c?.email ?? '', address: c?.address ?? '',
       market: local ? 'Local' : 'International', region: c?.region ?? '', country: local ? null : c?.country || null,
       state: c?.state || null, city: c?.city || null,
@@ -222,7 +226,7 @@ export class CompanyForm extends FormModal {
     const primary = !!c?.primary || v.primary;
     const local = v.market === 'Local';
     return this.settingsApi.saveCompany(c?.id ?? null, {
-      name: v.name.trim(), legalName: v.legalName, taxNo: v.taxNo, poc: v.poc, phone: v.phone, email: v.email, address: v.address,
+      name: v.name.trim(), logoId: v.logoId, legalName: v.legalName, taxNo: v.taxNo, poc: v.poc, phone: v.phone, email: v.email, address: v.address,
       market: v.market, region: local ? '' : v.region, country: local ? 'Pakistan' : v.country ?? '', state: v.state ?? '', city: v.city ?? '',
       fiscalMonth: Number(v.fiscalMonth), currency: v.currency,
       approvalThreshold: v.approvalThreshold === null || (v.approvalThreshold as unknown) === '' ? null : Number(v.approvalThreshold),

@@ -4,7 +4,7 @@ import { ReactiveFormsModule, Validators } from '@angular/forms';
 import { AttachmentMeta } from '../../core/attachments.api';
 import { SettingsStore } from '../../core/settings.store';
 import { fmtMoney } from '../../shared/format';
-import { Btn, Field, FileInput, MoneyInput, Offcanvas, RichText } from '../../ui';
+import { Btn, Field, FileInput, MoneyInput, Offcanvas, RichText, Select } from '../../ui';
 import { FormModal } from '../ops/form-modal';
 import { FinanceApi } from './finance.api';
 import { FinanceEntry } from './models';
@@ -18,7 +18,7 @@ const today = () => new Date().toISOString().slice(0, 10);
 @Component({
   selector: 'app-repayment-form',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [ReactiveFormsModule, Offcanvas, Field, Btn, MoneyInput, FileInput, RichText],
+  imports: [ReactiveFormsModule, Offcanvas, Field, Btn, MoneyInput, FileInput, RichText, Select],
   template: `
     <app-offcanvas #oc [(open)]="open" [title]="title()" [subtitle]="subtitle()" size="lg" [dirty]="form.dirty">
       @if (error()) {
@@ -26,10 +26,10 @@ const today = () => new Date().toISOString().slice(0, 10);
       }
       <form [id]="formId" [formGroup]="form" (ngSubmit)="submit()" class="form-grid" novalidate>
         <app-field label="Payment applied against" [required]="true">
-          <select formControlName="kind">
+          <app-select formControlName="kind">
             <option value="principal">{{ paidOut() ? 'Advance returned (principal)' : 'Loan or advance (principal)' }}</option>
             <option value="markup">Markup / interest</option>
-          </select>
+          </app-select>
         </app-field>
         <app-field label="Amount" [required]="true" [error]="invalid('amount') ? 'Enter an amount above zero' : null"
                    [hint]="kind() === 'principal' ? 'Up to ' + money(open2()) + ' outstanding' : 'Does not reduce the principal'">
@@ -37,13 +37,13 @@ const today = () => new Date().toISOString().slice(0, 10);
         </app-field>
         <app-field label="Date" [required]="true"><input type="date" formControlName="date" [attr.min]="since()" [attr.max]="today" /></app-field>
         <app-field label="Payment method">
-          <select formControlName="method">
+          <app-select formControlName="method">
             @for (m of methods(); track m) {
               <option [value]="m">{{ m }}</option>
             }
-          </select>
+          </app-select>
         </app-field>
-        <app-field label="Reference" [wide]="true"><input type="text" formControlName="reference" placeholder="Transaction id, slip or voucher no." /></app-field>
+        <app-field label="Reference" [wide]="true"><app-rich-text formControlName="reference" [max]="100" [storeMax]="100" placeholder="Transaction id, slip or voucher no." /></app-field>
         <app-field label="Notes" [wide]="true"><app-rich-text formControlName="note" [max]="2000" placeholder="Optional" /></app-field>
         <app-field label="Proof" [wide]="true"><app-file-input formControlName="proof" label="Attach proof" /></app-field>
       </form>

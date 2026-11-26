@@ -3,6 +3,7 @@
  * pagination with a "Showing a-b of N records" footer, optional server-side paging, and the phone card layout.
  * Owned by the design-system session. Styling lives in styles/components/table.css.
  */
+import { Select } from './select';
 import {
   ChangeDetectionStrategy, Component, ViewEncapsulation, booleanAttribute, computed, effect, inject, input, output,
   signal, untracked,
@@ -53,6 +54,8 @@ export interface TableColumn<T> {
   meter?: (row: T) => number | null | undefined;
   /** text shown on hover over the cell (a list of payments, say); one line per entry */
   tip?: (row: T) => string | null | undefined;
+  /** a small square picture before the cell text (a logo); null = an empty tile with the first letter */
+  image?: (row: T) => string | null | undefined;
 }
 
 /** A row action button (the first two show as buttons, the rest go into a "more" menu). */
@@ -131,7 +134,7 @@ export function pageList(current: number, total: number): (number | '…')[] {
   selector: 'app-data-table',
   encapsulation: ViewEncapsulation.None,
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [IconComponent, Tag, Btn, EmptyState, SearchBox, Skeleton],
+  imports: [IconComponent, Tag, Btn, EmptyState, SearchBox, Skeleton, Select],
   host: { '(document:click)': 'closeMenus($event)', '(keydown.escape)': 'closeMenus()' },
   template: `
     <div class="dt">
@@ -165,12 +168,12 @@ export function pageList(current: number, total: number): (number | '…')[] {
                          [value]="fv(f.id).text ?? ''" (input)="setFilter(f.id, { text: val($event) })" />
                 }
                 @case ('select') {
-                  <select class="control" [attr.aria-label]="f.label" (change)="setFilter(f.id, { value: val($event) })">
-                    <option value="" [selected]="!fv(f.id).value">All</option>
+                  <app-select [ariaLabel]="f.label" [value]="fv(f.id).value || ''" (valueChange)="setFilter(f.id, { value: $any($event) })">
+                    <option value="">All</option>
                     @for (o of f.options; track o.value) {
-                      <option [value]="o.value" [selected]="fv(f.id).value === o.value">{{ o.label }}</option>
+                      <option [value]="o.value">{{ o.label }}</option>
                     }
-                  </select>
+                  </app-select>
                 }
                 @case ('date-range') {
                   <div class="dt__range">
@@ -266,7 +269,13 @@ export function pageList(current: number, total: number): (number | '…')[] {
                 @for (c of cols(); track c.id; let first = $first) {
                   <td [attr.data-label]="c.label" [attr.data-priority]="c.priority ?? 1"
                       [attr.data-end]="isEnd(c) ? '' : null" [attr.data-primary]="first ? '' : null">
-                    <div class="cell" [attr.title]="c.tip ? c.tip(row) || null : null">
+                    <div class="cell" [attr.title]="c.tip ? c.tip(row) || null : null" [attr.data-image]="c.image ? '' : null">
+                      @if (c.image) {
+                        @let img = c.image(row);
+                        <span class="cell__image" aria-hidden="true">
+                          @if (img) { <img [src]="img" alt="" loading="lazy" /> } @else { {{ initialOf(c, row) }} }
+                        </span>
+                      }
                       @if (c.kind === 'tag') {
                         <app-tag [tone]="c.tone ? c.tone(row) : 'neutral'">{{ text(c, row) }}</app-tag>
                       } @else {
@@ -618,6 +627,11 @@ export class DataTable<T> {
   }
 
   /** a rich-text note as one line in a cell */
+  /** the first letter of the cell text, for a row without a picture */
+  protected initialOf(c: TableColumn<T>, row: T): string {
+    return (this.text(c, row).trim()[0] ?? '').toUpperCase();
+  }
+
   protected flat(v: string): string {
     return isRich(v) ? richToPlain(v).replace(/\s*\n\s*/g, ' · ').replace(/(\s*·\s*){2,}/g, ' · ').replace(/^\s*·\s*|\s*·\s*$/g, '') : v;
   }

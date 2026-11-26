@@ -16,7 +16,7 @@
     color: var(--text-2);
   }
 
-  & select {
+  & :is(select, app-select) {
     inline-size: auto;
     min-inline-size: 10rem;
   }

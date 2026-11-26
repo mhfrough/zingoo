@@ -23,7 +23,8 @@ export class UsersService implements OnApplicationBootstrap {
   /**
    * Root = role Admin (the highest level) + signing seat "Both" + isRoot.
    * Created once from ROOT_EMAIL / ROOT_PASSWORD / ROOT_NAME. If it already exists nothing is changed,
-   * so a password changed later in the app is never overwritten.
+   * so a password changed later in the app is never overwritten. When ROOT_EMAIL itself changes, the existing super
+   * admin moves to the new email and takes ROOT_PASSWORD (no second root account is made).
    */
   async ensureRoot() {
     const email = this.config.get<string>('ROOT_EMAIL')?.trim().toLowerCase();
@@ -34,6 +35,18 @@ export class UsersService implements OnApplicationBootstrap {
     }
     const existing = await this.repo.findOne({ where: { email } });
     if (existing) return;
+    // ROOT_EMAIL changed: the super admin account moves to the new email and takes ROOT_PASSWORD (once, at the move)
+    const oldRoot = await this.repo.findOne({ where: { isRoot: true }, order: { createdAt: 'ASC' } });
+    if (oldRoot) {
+      oldRoot.email = email;
+      oldRoot.password = await bcrypt.hash(password, 10);
+      oldRoot.role = 'Admin';
+      oldRoot.seat = 'Both';
+      oldRoot.status = 'Active';
+      await this.repo.save(oldRoot);
+      this.log.log('Root account moved to the new ROOT_EMAIL.');
+      return;
+    }
     await this.repo.save(this.repo.create({
       email,
       name: this.config.get<string>('ROOT_NAME') || 'Root Admin',
@@ -95,7 +108,7 @@ export class UsersService implements OnApplicationBootstrap {
     const status = patch.status ?? u.status;
     const losesAdmin = u.role === 'Admin' && u.status === 'Active' && (role !== 'Admin' || status !== 'Active');
     if (u.isRoot && (role !== 'Admin' || status !== 'Active' || (patch.seat !== undefined && patch.seat !== 'Both'))) {
-      throw new BadRequestException('The root account keeps the Admin role, seat Both and active status.');
+      throw new BadRequestException('The super admin keeps the Admin role, seat Both and active status.');
     }
     if (id === actorId && (role !== u.role || status !== 'Active')) {
       throw new BadRequestException('You cannot switch off or demote your own account.');

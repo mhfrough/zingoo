@@ -2,7 +2,7 @@ import { ChangeDetectionStrategy, Component, computed, input } from '@angular/co
 import { takeUntilDestroyed, toSignal } from '@angular/core/rxjs-interop';
 import { ReactiveFormsModule, Validators } from '@angular/forms';
 import { fmtMoney } from '../../shared/format';
-import { Btn, Field, MoneyInput, Offcanvas, RichText } from '../../ui';
+import { Btn, Field, MoneyInput, Offcanvas, RichText, Select } from '../../ui';
 import { FormModal } from '../ops/form-modal';
 import { Distributor, Order, Product } from '../ops/models';
 
@@ -12,7 +12,7 @@ const today = () => new Date().toISOString().slice(0, 10);
 @Component({
   selector: 'app-order-form',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [MoneyInput, ReactiveFormsModule, Offcanvas, Field, Btn, RichText],
+  imports: [MoneyInput, ReactiveFormsModule, Offcanvas, Field, Btn, RichText, Select],
   template: `
     <app-offcanvas #oc [(open)]="open" [title]="order() ? 'Edit draft order ' + order()!.refNo : 'New distributor sales order'"
                subtitle="Dispatch it later to reserve stock and create the invoice." size="lg" [dirty]="form.dirty">
@@ -22,20 +22,20 @@ const today = () => new Date().toISOString().slice(0, 10);
       <form [id]="formId" [formGroup]="form" (ngSubmit)="submit()" class="form-grid" novalidate>
         <app-field label="Order date" [required]="true"><input type="date" formControlName="date" /></app-field>
         <app-field label="Distributor" [required]="true" [error]="invalid('distributorId') ? 'Choose a distributor' : null">
-          <select formControlName="distributorId">
+          <app-select formControlName="distributorId">
             <option value="">Choose a distributor...</option>
             @for (d of distributors(); track d.id) {
               <option [value]="d.id">{{ d.name }} · {{ d.region }}</option>
             }
-          </select>
+          </app-select>
         </app-field>
         <app-field label="Product / SKU" [required]="true" [error]="invalid('productId') ? 'Choose a product' : null">
-          <select formControlName="productId">
+          <app-select formControlName="productId">
             <option value="">Choose a product...</option>
             @for (p of products(); track p.id) {
               <option [value]="p.id">{{ p.sku }} · {{ p.name }} · Rs {{ p.pack }}</option>
             }
-          </select>
+          </app-select>
         </app-field>
         <app-field label="Bundles ordered" [required]="true" [error]="invalid('cartons') ? 'At least 1 bundle' : null">
           <input type="number" formControlName="cartons" min="1" step="1" />

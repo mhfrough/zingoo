@@ -2,7 +2,7 @@ import { ChangeDetectionStrategy, Component, computed, inject, input } from '@an
 import { toSignal } from '@angular/core/rxjs-interop';
 import { ReactiveFormsModule, Validators } from '@angular/forms';
 import { fmtMoney } from '../../shared/format';
-import { Btn, Field, MoneyInput, Offcanvas, RichText } from '../../ui';
+import { Btn, Field, MoneyInput, Offcanvas, RichText, Select } from '../../ui';
 import { FormModal } from '../ops/form-modal';
 import { FinanceApi } from './finance.api';
 import { FinanceEntry, FinanceType, FundingRoom } from './models';
@@ -18,7 +18,7 @@ const TYPES: FinanceType[] = ['Operating Expense', 'Asset Purchase', 'Other Rece
 @Component({
   selector: 'app-finance-entry-form',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [MoneyInput, ReactiveFormsModule, Offcanvas, Field, Btn, RichText],
+  imports: [MoneyInput, ReactiveFormsModule, Offcanvas, Field, Btn, RichText, Select],
   template: `
     <app-offcanvas #oc [(open)]="open" [title]="entry() ? 'Edit pending request ' + entry()!.refNo : 'New finance transaction'"
                subtitle="Amounts are in PKR." size="lg" [dirty]="form.dirty">
@@ -32,30 +32,30 @@ const TYPES: FinanceType[] = ['Operating Expense', 'Asset Purchase', 'Other Rece
       }
       <form [id]="formId" [formGroup]="form" (ngSubmit)="submit()" class="form-grid" novalidate>
         <app-field label="Transaction type" [required]="true">
-          <select formControlName="type">
+          <app-select formControlName="type">
             @for (t of types; track t) {
               <option [value]="t">{{ t }}</option>
             }
-          </select>
+          </app-select>
         </app-field>
         <app-field label="Investment stream" [required]="true">
-          <select formControlName="category">
+          <app-select formControlName="category">
             @for (s of streams(); track s) {
               <option [value]="s">{{ s }}</option>
             }
-          </select>
+          </app-select>
         </app-field>
         <app-field label="Amount" [required]="true" [error]="invalid('amount') ? 'Enter an amount above zero' : null">
           <app-money-input formControlName="amount" />
         </app-field>
         @if (needsApproval()) {
           <app-field label="Paid from funding" [wide]="true" [hint]="roomText()">
-            <select formControlName="fundedById">
+            <app-select formControlName="fundedById">
               <option value="">Not tied to a funding</option>
               @for (f of roomOptions(); track f.id) {
                 <option [value]="f.id">{{ f.label }} · {{ money(f.left[category()] ?? 0) }} left</option>
               }
-            </select>
+            </app-select>
           </app-field>
         }
         <app-field label="Date" [required]="true"><input type="date" formControlName="date" /></app-field>

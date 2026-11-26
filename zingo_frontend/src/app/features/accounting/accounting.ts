@@ -4,10 +4,7 @@ import { AuthService } from '../../core/auth.service';
 import { downloadCsv } from '../../shared/csv';
 import { errorText } from '../../shared/errors';
 import { docDate, Tone, fmtDate, fmtMoney, fmtNumber } from '../../shared/format';
-import {
-  Btn, ConfirmService, DataTable, Kpi, PageHeader, RowAction, RowActionEvent, TabItem, TabPanel, Tabs, Tag,
-  TableColumn, ToastService,
-} from '../../ui';
+import { Btn, ConfirmService, DataTable, Kpi, PageHeader, RowAction, RowActionEvent, Select, TabItem, TableColumn, TabPanel, Tabs, Tag, ToastService } from '../../ui';
 import { FinanceApi } from '../finance/finance.api';
 import { AccountingDoc, CashBookRow, JournalLine, OpenItem, Settlement } from '../finance/models';
 import { IncomeInvoiceForm } from './income-invoice-form';
@@ -42,8 +39,7 @@ interface OpenRow extends OpenItem {
   selector: 'app-accounting',
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [
-    Btn, DataTable, Kpi, PageHeader, Tag, Tabs, TabPanel, IncomeInvoiceForm, ExpenseBillForm, SettleForm, OrderReasonForm,
-  ],
+    Btn, DataTable, Kpi, PageHeader, Tag, Tabs, TabPanel, IncomeInvoiceForm, ExpenseBillForm, SettleForm, OrderReasonForm, Select],
   templateUrl: './accounting.html',
   styleUrl: './accounting.css',
 })

@@ -46,7 +46,7 @@ const r4 = (n: number) => Math.round(n * 10000) / 10000;
               <input type="text" formControlName="name" placeholder="Masala Masti" />
             </app-field>
             <app-field label="Availability">
-              <select formControlName="active"><option value="true">Active</option><option value="false">Inactive</option></select>
+              <app-select formControlName="active"><option value="true">Active</option><option value="false">Inactive</option></app-select>
             </app-field>
             <app-field label="Flavour">
               <app-select formControlName="flavour" [options]="flavours()" placeholder="Choose a flavour" />
@@ -101,23 +101,23 @@ const r4 = (n: number) => Math.round(n * 10000) / 10000;
                   <app-field label="Packets per bundle" [required]="true"><input type="number" formControlName="packetsPerBundle" min="1" step="1" /></app-field>
                   <app-field [label]="'Bundles per ' + unitWord(i)" [required]="true"><input type="number" formControlName="bundlesPerContainer" min="1" step="1" /></app-field>
                   <app-field label="Container is a" [help]="i === 0 ? 'What one container of this packing is called when it is counted: a Carton, Bag or Bora (sack). The list is on Settings & Data.' : undefined">
-                    <select formControlName="containerUnit">
+                    <app-select formControlName="containerUnit">
                       <option value="">Not set</option>
                       @for (u of units(); track u.value) {
                         <option [value]="u.value">{{ u.label }}</option>
                       }
-                    </select>
+                    </app-select>
                   </app-field>
                   <app-field [label]="unitWord(i) + ' per full load'" hint="Empty = not set">
                     <input type="number" formControlName="containersPerTruck" min="1" step="1" />
                   </app-field>
                   <app-field label="Full load is a" [help]="i === 0 ? 'A Truck or a shipping Container: the full load an order can ask for (half loads come later). The list is on Settings & Data.' : undefined">
-                    <select formControlName="transportUnit">
+                    <app-select formControlName="transportUnit">
                       <option value="">Not set</option>
                       @for (u of trucks(); track u.value) {
                         <option [value]="u.value">{{ u.label }}</option>
                       }
-                    </select>
+                    </app-select>
                   </app-field>
                 </div>
                 <div class="tpl__foot">
@@ -316,8 +316,19 @@ const r4 = (n: number) => Math.round(n * 10000) / 10000;
     .tpl__fields {
       display: grid;
       grid-template-columns: minmax(8rem, 1.3fr) repeat(3, minmax(5.5rem, 1fr)) minmax(6.5rem, 1fr) minmax(6rem, 1fr) minmax(7rem, 1fr);
-      align-items: end;
       gap: var(--space-2);
+
+      /* label, control and hint rows shared across the row, so every input lines up */
+      & > app-field {
+        display: grid;
+        grid-row: span 3;
+        grid-template-rows: subgrid;
+        row-gap: var(--space-2);
+
+        & > :is(.field__label, .field__head) {
+          align-self: end;
+        }
+      }
 
       @media (max-width: 1100px) {
         grid-template-columns: repeat(4, minmax(0, 1fr));

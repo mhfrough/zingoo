@@ -1,7 +1,7 @@
 import { ChangeDetectionStrategy, Component, computed, inject, input } from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { ReactiveFormsModule, Validators } from '@angular/forms';
-import { Btn, Field, Offcanvas } from '../../ui';
+import { Btn, Field, Offcanvas, Select } from '../../ui';
 import { FormModal } from '../ops/form-modal';
 import { Distributor, Manufacturer } from '../ops/models';
 import { ROLE_LIST, UserRow, UsersApi } from './users.api';
@@ -13,7 +13,7 @@ import { ROLE_LIST, UserRow, UsersApi } from './users.api';
 @Component({
   selector: 'app-user-form',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [ReactiveFormsModule, Offcanvas, Field, Btn],
+  imports: [ReactiveFormsModule, Offcanvas, Field, Btn, Select],
   template: `
     <app-offcanvas #oc [(open)]="open" [title]="user() ? 'Edit user' : 'Add user'"
                [subtitle]="user() ? user()!.email : 'They sign in with this email and password.'" size="lg" [dirty]="form.dirty">
@@ -23,62 +23,62 @@ import { ROLE_LIST, UserRow, UsersApi } from './users.api';
       <form [id]="formId" [formGroup]="form" (ngSubmit)="submit()" class="form-grid" novalidate>
         <app-field label="Full name" [required]="true" [error]="invalid('name') ? 'Enter the name' : null"><input type="text" formControlName="name" maxlength="120" autocomplete="off" /></app-field>
         <app-field label="Email" [required]="true" [error]="invalid('email') ? 'Enter a valid email' : null"><input type="email" formControlName="email" autocomplete="off" /></app-field>
-        <app-field label="Role" [required]="true" [hint]="locked() ? 'The root account is always Admin' : ''">
-          <select formControlName="role">
+        <app-field label="Role" [required]="true" [hint]="locked() ? 'The super admin is always Admin' : ''">
+          <app-select formControlName="role">
             @for (r of roles; track r) {
               <option [value]="r">{{ r }}</option>
             }
-          </select>
+          </app-select>
         </app-field>
         @if (canSign()) {
           <app-field label="Signing seat" hint="Which approval signature they can give">
-            <select formControlName="seat">
+            <app-select formControlName="seat">
               <option value="None">None</option>
               <option value="A">Seat A</option>
               <option value="B">Seat B</option>
               <option value="Both">Both seats</option>
-            </select>
+            </app-select>
           </app-field>
         }
         @if (isDistributor()) {
           <app-field label="Distributor" [required]="true" [error]="invalid('distributorId') ? 'Choose the distributor' : null">
-            <select formControlName="distributorId">
+            <app-select formControlName="distributorId">
               <option value="">Choose a distributor</option>
               @for (d of distributors(); track d.id) {
                 <option [value]="d.id">{{ d.name }}</option>
               }
-            </select>
+            </app-select>
           </app-field>
         }
         @if (isDistributor()) {
           <app-field label="Portal role" hint="Owner does everything; Sales orders and claims; Finance payments; Warehouse receipts and claims; Read-only looks">
-            <select formControlName="portalRole">
+            <app-select formControlName="portalRole">
               @for (r of portalRoles; track r) { <option [value]="r">{{ r }}</option> }
-            </select>
+            </app-select>
           </app-field>
         }
         @if (isManufacturer()) {
           <app-field label="Manufacturer" [required]="true" [error]="invalid('manufacturerId') ? 'Choose the manufacturer' : null">
-            <select formControlName="manufacturerId">
+            <app-select formControlName="manufacturerId">
               <option value="">Choose a manufacturer</option>
               @for (m of manufacturers(); track m.id) {
                 <option [value]="m.id">{{ m.name }}</option>
               }
-            </select>
+            </app-select>
           </app-field>
           <app-field label="Portal role" hint="Owner and Manager accept, reject or hold damage claims; Read-only looks"
             help="On the manufacturer portal the Owner does everything; a Manager also decides damage claims (accept, reject, hold); Read-only can look but not change anything.">
-            <select formControlName="portalRole">
+            <app-select formControlName="portalRole">
               @for (r of makerRoles; track r) { <option [value]="r">{{ r }}</option> }
-            </select>
+            </app-select>
           </app-field>
         }
         @if (user()) {
-          <app-field label="Status" [hint]="locked() ? 'The root account cannot be switched off' : ''">
-            <select formControlName="status">
+          <app-field label="Status" [hint]="locked() ? 'The super admin cannot be switched off' : ''">
+            <app-select formControlName="status">
               <option value="Active">Active</option>
               <option value="Disabled">Disabled</option>
-            </select>
+            </app-select>
           </app-field>
         } @else {
           <app-field label="Password" hint="At least 8 characters" [required]="true" [error]="invalid('password') ? 'Use at least 8 characters' : null">

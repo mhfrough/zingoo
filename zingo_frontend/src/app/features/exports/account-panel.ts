@@ -5,7 +5,7 @@ import { ApiService } from '../../core/api.service';
 import { SettingsStore } from '../../core/settings.store';
 import { errorText } from '../../shared/errors';
 import { fmtAmount2, fmtDate, fmtMoney } from '../../shared/format';
-import { Btn, Field, Offcanvas, PlainPipe, Tag, ToastService } from '../../ui';
+import { Btn, Field, Offcanvas, PlainPipe, RichText, Select, Tag, ToastService } from '../../ui';
 import { ExportsApi } from './exports.api';
 import { DistributorAccount, ExportRow, Remittance } from './models';
 
@@ -19,7 +19,7 @@ const today = () => new Date().toISOString().slice(0, 10);
 @Component({
   selector: 'app-account-panel',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [ReactiveFormsModule, Offcanvas, Field, Btn, Tag, PlainPipe],
+  imports: [ReactiveFormsModule, Offcanvas, Field, Btn, Tag, PlainPipe, RichText, Select],
   styles: `
     h3 {
       margin: var(--space-5) 0 var(--space-2);
@@ -117,7 +117,7 @@ const today = () => new Date().toISOString().slice(0, 10);
     }
   `,
   template: `
-    <app-offcanvas [(open)]="open" [title]="'Account · ' + (a()?.distributor?.name ?? '')" [subtitle]="a()?.distributor?.code ?? 'International distributor'" size="lg">
+    <app-offcanvas [(open)]="open" [dirty]="rem.dirty" [title]="'Account · ' + (a()?.distributor?.name ?? '')" [subtitle]="a()?.distributor?.code ?? 'International distributor'" size="lg">
       @if (a(); as acc) {
         <h3>Credit</h3>
         <div class="cards">
@@ -223,12 +223,12 @@ const today = () => new Date().toISOString().slice(0, 10);
                 <small>{{ r.currency }} {{ amt(r.unapplied) }} not applied</small>
                 @if (canWrite() && openIn(r.currency).length) {
                   <div class="row">
-                    <select [value]="applyTo()[r.id] ?? ''" (change)="setApplyTo(r.id, $any($event.target).value)" [attr.aria-label]="'Invoice for ' + r.refNo">
+                    <app-select [value]="applyTo()[r.id] ?? ''" (valueChange)="setApplyTo(r.id, $any($event))" [ariaLabel]="'Invoice for ' + r.refNo">
                       <option value="">Choose an invoice</option>
                       @for (o of openIn(r.currency); track o.id) {
                         <option [value]="o.id">{{ o.refNo }} · {{ amt(o.due) }} open</option>
                       }
-                    </select>
+                    </app-select>
                     <input class="amt" type="number" min="0" step="any" [value]="applyAmt()[r.id] ?? ''" (input)="setApplyAmt(r.id, $any($event.target).value)"
                            [attr.aria-label]="'Amount to apply from ' + r.refNo" />
                     <button appBtn size="sm" [loading]="busy()" (click)="apply(r)">Apply</button>
@@ -246,33 +246,33 @@ const today = () => new Date().toISOString().slice(0, 10);
           <form class="grid" [formGroup]="rem" (ngSubmit)="remit()">
             <app-field label="Date" [required]="true"><input type="date" formControlName="date" [max]="todayIso" /></app-field>
             <app-field label="Currency">
-              <select formControlName="currency">
+              <app-select formControlName="currency">
                 @for (c of store.currencies(); track c.code) {
                   <option [value]="c.code">{{ c.code }}</option>
                 }
-              </select>
+              </app-select>
             </app-field>
             <app-field label="Amount sent" [required]="true"><input type="number" formControlName="amount" min="0" step="any" /></app-field>
             <app-field label="Bank fees deducted"><input type="number" formControlName="fees" min="0" step="any" /></app-field>
             <app-field label="Rate (PKR per 1)" [required]="true"><input type="number" formControlName="fxRate" min="0" step="any" /></app-field>
             <app-field label="Method" [required]="true">
-              <select formControlName="method">
+              <app-select formControlName="method">
                 @for (m of methods(); track m) {
                   <option [value]="m">{{ m }}</option>
                 }
-              </select>
+              </app-select>
             </app-field>
-            <app-field label="Bank reference"><input type="text" formControlName="bankRef" maxlength="80" placeholder="MT103 / LC no." /></app-field>
+            <app-field label="Bank reference"><app-rich-text formControlName="bankRef" [max]="80" [storeMax]="80" placeholder="MT103 / LC no." /></app-field>
             @if (acc.distributor.bankAccounts.length) {
               <app-field label="From account" [required]="true">
-                <select formControlName="bankIndex">
+                <app-select formControlName="bankIndex">
                   @for (b of acc.distributor.bankAccounts; track b.index) {
                     <option [value]="b.index">{{ b.label }}{{ b.verified ? '' : ' (not verified)' }}</option>
                   }
-                </select>
+                </app-select>
               </app-field>
             }
-            <app-field label="Note" [wide]="true"><input type="text" formControlName="note" maxlength="1000" /></app-field>
+            <app-field label="Note" [wide]="true"><app-rich-text formControlName="note" [max]="1000" [storeMax]="1000" /></app-field>
             @if (openIn(rem.controls.currency.value).length) {
               <div style="grid-column: 1 / -1">
                 <small class="lead">Apply to invoices (what is left stays as the distributor's credit)</small>

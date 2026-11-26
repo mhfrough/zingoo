@@ -1,12 +1,29 @@
 <div class="app" [attr.data-nav-open]="navOpen() ? '' : null">
   <nav class="sidebar" id="sidebar" aria-label="Main navigation">
     <a class="brand" routerLink="/admin/overview">
-      <img class="brand-mark" src="brand/zingoo-mark.svg" alt="" width="56" height="56" />
+      @if (platform.platformLogo(); as logo) {
+        <img class="brand-logo" [src]="logo" alt="" width="40" height="40" />
+      } @else {
+        <img class="brand-mark" src="brand/zingoo-mark.svg" alt="" width="56" height="56" />
+      }
       <span>
-        <span class="brand__name">Zingoo</span><br />
-        <span class="brand__sub">Distributor Portal</span>
+        <span class="brand__name">{{ platform.platform().name }}</span><br />
+        <span class="brand__sub">{{ platform.platform().tagline || 'Distributor Portal' }}</span>
       </span>
     </a>
+
+    @if (platform.identity(); as me) {
+      <div class="whoami" [attr.title]="me.name + (me.sub ? ' · ' + me.sub : '')">
+        <span class="whoami__logo" aria-hidden="true">
+          @if (platform.identityLogo(); as l) { <img [src]="l" alt="" /> } @else { {{ me.name.charAt(0) }} }
+        </span>
+        <span class="whoami__text">
+          <span class="whoami__kind">{{ kindLabel(me.kind) }}</span>
+          <strong class="whoami__name">{{ me.name }}</strong>
+          @if (me.sub) { <small class="whoami__sub">{{ me.sub }}</small> }
+        </span>
+      </div>
+    }
 
     <div class="sidebar__nav scroll-shadow">
       @for (g of groups(); track g.name) {
@@ -20,7 +37,7 @@
       }
     </div>
 
-    <div class="sidebar__foot">Zen Foods (Pvt.) Ltd.</div>
+    <div class="sidebar__foot">{{ platform.platform().name }}@if (platform.platform().phone) { · {{ platform.platform().phone }} }</div>
   </nav>
 
   <div class="scrim" (click)="navOpen.set(false)"></div>
@@ -71,9 +88,9 @@
         <span class="user__avatar" aria-hidden="true">{{ initial() }}</span>
         <span class="user__meta">
           <strong>{{ auth.user()?.name }}</strong>
-          <small>{{ auth.user()?.role }}</small>
+          <small>{{ roleLabel() }}</small>
         </span>
-        <button type="button" class="btn btn-icon" data-variant="ghost" aria-label="Sign out" (click)="auth.logout()">
+        <button type="button" class="btn btn-icon" data-variant="ghost" aria-label="Sign out" (click)="signOut()">
           <app-icon name="logout" [size]="18" />
         </button>
       </div>

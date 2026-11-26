@@ -4,7 +4,7 @@ import { NonNullableFormBuilder, ReactiveFormsModule, Validators } from '@angula
 import { SettingsStore } from '../../core/settings.store';
 import { errorText } from '../../shared/errors';
 import { fmtMoney } from '../../shared/format';
-import { Btn, Field, MoneyInput, Offcanvas, RichText, TabItem, Tabs, Tag } from '../../ui';
+import { Btn, Field, MoneyInput, Offcanvas, RichText, Select, TabItem, Tabs, Tag } from '../../ui';
 import { FinanceApi } from '../finance/finance.api';
 import { AccountingDoc, Currency } from '../finance/models';
 import { FormModal } from '../ops/form-modal';
@@ -43,7 +43,7 @@ type LineForm = ReturnType<typeof lineGroup>;
 @Component({
   selector: 'app-income-invoice-form',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [ReactiveFormsModule, Offcanvas, Field, MoneyInput, Btn, Tabs, Tag, RichText],
+  imports: [ReactiveFormsModule, Offcanvas, Field, MoneyInput, Btn, Tabs, Tag, RichText, Select],
   styles: `
     .step {
       display: flex;
@@ -213,11 +213,11 @@ type LineForm = ReturnType<typeof lineGroup>;
                 <header><h3>Invoice classification & customer</h3><p>Who owes you, what type of income it is, and the agreed terms.</p></header>
                 <div class="grid-4">
                   <app-field label="Income category" [required]="true">
-                    <select formControlName="category">
+                    <app-select formControlName="category">
                       @for (c of categories(); track c) {
                         <option [value]="c">{{ c }}</option>
                       }
-                    </select>
+                    </app-select>
                   </app-field>
                   <app-field label="Invoice / bill number" hint="Blank: the document number is used">
                     <input type="text" formControlName="invoiceNo" maxlength="60" [placeholder]="doc()?.refNo ?? 'e.g. ZF-INV-0001'" />
@@ -229,31 +229,31 @@ type LineForm = ReturnType<typeof lineGroup>;
                   <app-field label="Customer ID / tax reference"><input type="text" formControlName="customerTaxId" maxlength="60" placeholder="Optional" /></app-field>
                   <app-field label="Region / sales territory"><input type="text" formControlName="region" maxlength="80" placeholder="e.g. Hyderabad" /></app-field>
                   <app-field label="Invoice currency" [required]="true">
-                    <select formControlName="currency">
+                    <app-select formControlName="currency">
                       @for (c of currencies(); track c.code) {
                         <option [value]="c.code">{{ c.code }} · {{ c.name }}</option>
                       }
-                    </select>
+                    </app-select>
                   </app-field>
                   <app-field label="Exchange rate · PKR per 1 unit" hint="Stored on the document; used for PKR reporting and profit">
                     <input type="number" formControlName="fxRate" min="0" step="any" />
                   </app-field>
                   <app-field label="Payment terms">
-                    <select formControlName="paymentDays">
-                      <option [ngValue]="0">On receipt</option>
+                    <app-select formControlName="paymentDays">
+                      <option [value]="0">On receipt</option>
                       @for (d of cycles(); track d) {
-                        <option [ngValue]="d">{{ d }} days</option>
+                        <option [value]="d">{{ d }} days</option>
                       }
-                    </select>
+                    </app-select>
                   </app-field>
                   <app-field label="Due date" [required]="true"><input type="date" formControlName="dueDate" /></app-field>
                   <app-field label="Receiving account" hint="From Settings">
-                    <select formControlName="receivingAccount">
+                    <app-select formControlName="receivingAccount">
                       <option value="">Choose</option>
                       @for (b of bankAccounts(); track b) {
                         <option [value]="b">{{ b }}</option>
                       }
-                    </select>
+                    </app-select>
                   </app-field>
                   <app-field label="Order / contract reference"><input type="text" formControlName="orderRef" maxlength="80" placeholder="e.g. ORD-1025" /></app-field>
                 </div>
@@ -263,12 +263,12 @@ type LineForm = ReturnType<typeof lineGroup>;
                 <header><h3>Receipt & dispatch controls</h3><p>Track dispatch and acceptance separately from collections.</p></header>
                 <div class="grid-4">
                   <app-field label="Delivery / acceptance status" hint="From Settings">
-                    <select formControlName="deliveryStatus">
+                    <app-select formControlName="deliveryStatus">
                       <option value="">Choose</option>
                       @for (s of deliveryStatuses(); track s) {
                         <option [value]="s">{{ s }}</option>
                       }
-                    </select>
+                    </app-select>
                   </app-field>
                   <app-field label="GRN / delivery challan / POD"><input type="text" formControlName="deliveryProof" maxlength="120" placeholder="Proof of delivery" /></app-field>
                   <app-field label="Sales / route owner"><input type="text" formControlName="salesOwner" maxlength="120" placeholder="Sales agent" /></app-field>
@@ -296,22 +296,22 @@ type LineForm = ReturnType<typeof lineGroup>;
                   @for (l of lines.controls; track l; let i = $index) {
                     <div class="item" [formGroupName]="i">
                       <div class="item__sku field"><span class="cap">SKU / product</span><div class="field__control">
-                        <select formControlName="productId" (change)="onProduct(l)" [attr.aria-label]="'SKU, line ' + (i + 1)">
+                        <app-select formControlName="productId" (valueChange)="onProduct(l)" [ariaLabel]="'SKU, line ' + (i + 1)">
                           <option value="">Choose a SKU</option>
                           @for (p of products(); track p.id) {
                             <option [value]="p.id">{{ p.name }} · Rs {{ p.mrp }}</option>
                           }
-                        </select>
+                        </app-select>
                       </div></div>
                       <div class="field"><span class="cap">Quantity</span><div class="field__control">
                         <app-money-input formControlName="qty" currency="" [decimals]="2" [ariaLabel]="'Quantity, line ' + (i + 1)" />
                       </div></div>
                       <div class="field"><span class="cap">UOM</span><div class="field__control">
-                        <select formControlName="uom" [attr.aria-label]="'Unit, line ' + (i + 1)">
+                        <app-select formControlName="uom" [ariaLabel]="'Unit, line ' + (i + 1)">
                           @for (u of uoms; track u) {
                             <option [value]="u">{{ uomLabel[u] }}</option>
                           }
-                        </select>
+                        </app-select>
                       </div>
                         <span class="item__packs">{{ packsOf(l) }} packs</span>
                       </div>

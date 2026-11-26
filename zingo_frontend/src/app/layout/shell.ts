@@ -9,9 +9,10 @@ import {
 import { filter, map } from 'rxjs';
 import { AuthService } from '../core/auth.service';
 import { SettingsStore } from '../core/settings.store';
+import { Identity, PlatformStore } from '../core/platform.store';
 import { NAV, NAV_GROUPS, homePath, visibleNav } from '../portal.config';
 import { errorText } from '../shared/errors';
-import { CONNECTION_STATUS, ConnectionStatus, IconComponent, ToastService } from '../ui';
+import { CONNECTION_STATUS, ConnectionStatus, IconComponent, ToastService, UnsavedChanges } from '../ui';
 import { ViewAsOption } from '../core/auth.service';
 import { prefersReducedMotion } from '../ui/motion';
 import { NotificationBell } from './notification-bell';
@@ -28,6 +29,22 @@ export class Shell {
   /** loads the company settings and pick-lists once after sign-in, so every page and form can use them */
   private store = inject(SettingsStore);
   private router = inject(Router);
+  /** the platform name and logo, and who is signed in (the sidebar shows both) */
+  protected platform = inject(PlatformStore);
+  /** the role under the name in the top bar: the root account shows as the super admin */
+  protected roleLabel = computed(() => {
+    const u = this.auth.user();
+    return u?.isRoot && !u.viewAs ? 'Super admin' : u?.role ?? '';
+  });
+  private unsaved = inject(UnsavedChanges);
+  /** sign out, asking first when a form has unsaved changes */
+  protected async signOut() {
+    if (await this.unsaved.confirmLeave()) this.auth.logout();
+  }
+
+  protected kindLabel(kind: Identity['kind']) {
+    return { company: 'Company', distributor: 'Distributor', manufacturer: 'Manufacturer', platform: 'Platform' }[kind];
+  }
 
   /** realtime connection state for the top bar pill (hidden until the platform layer provides CONNECTION_STATUS) */
   protected conn = inject(CONNECTION_STATUS, { optional: true });

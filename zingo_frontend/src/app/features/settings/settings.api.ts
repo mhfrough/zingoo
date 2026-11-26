@@ -23,6 +23,7 @@ export interface Company {
   signatoryA: string;
   signatoryB: string;
   capitalTarget: number | null;
+  logoId: string | null;
   primary: boolean;
   active: boolean;
 }
@@ -58,6 +59,13 @@ export class SettingsApi {
   saveCompany = (id: string | null, body: unknown) =>
     id ? this.api.patch<Company>(`companies/${id}`, body) : this.api.post<Company>('companies', body);
   deleteCompany = (id: string) => this.api.delete(`companies/${id}`);
+  /** super admin: any company, the primary one too; or every company at once */
+  deleteCompanyAsSuperAdmin = (id: string) => this.api.delete(`platform/companies/${id}`);
+  deleteAllCompanies = () => this.api.post<{ deleted: number }>('platform/companies/delete-all', { confirm: 'DELETE' });
+
+  // the platform (super admin)
+  updatePlatform = (body: unknown) => this.api.patch('platform', body);
+  clearBusinessData = () => this.api.post<{ removed: Record<string, number>; usersKept: number }>('platform/clear-data', { confirm: 'DELETE' });
 
   // manufacturers
   saveManufacturer = (id: string | null, body: unknown) =>

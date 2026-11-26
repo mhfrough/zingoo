@@ -1,3 +1,5 @@
+import { Transform } from 'class-transformer';
+
 /**
  * Notes are written in the rich-text editor (a little HTML: p, br, strong, em, u, ul, ol, li, a). Where the server
  * builds plain text from them (notification titles and bodies), the markup goes: paragraphs and list items become
@@ -15,3 +17,9 @@ export function plainText(v: string | null | undefined): string {
     .replace(/^\s*·\s*|\s*·\s*$/g, '')
     .trim();
 }
+
+/**
+ * A short reference (bank reference, transfer or cheque number) may come from the rich-text editor: keep only its plain
+ * text, so ledger lines, notifications and duplicate checks never see markup. Runs before the length check.
+ */
+export const PlainRef = () => Transform(({ value }) => (typeof value === 'string' ? plainText(value) : value));

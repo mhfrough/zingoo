@@ -121,6 +121,14 @@
     animation: rise var(--dur-slow) var(--ease-out) both;
   }
 
+  .auth__logo--custom {
+    inline-size: 4.5rem;
+    block-size: 4.5rem;
+    object-fit: contain;
+    border-radius: var(--radius-lg);
+    background-color: var(--slate-0);
+  }
+
   .auth__pitch {
     display: flex;
     flex-direction: column;

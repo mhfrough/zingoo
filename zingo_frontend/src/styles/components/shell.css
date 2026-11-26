@@ -58,6 +58,78 @@
       }
     }
 
+    & .brand-logo {
+      display: block;
+      flex: none;
+      inline-size: 2.25rem;
+      block-size: 2.25rem;
+      border-radius: var(--radius-md);
+      object-fit: contain;
+      background-color: var(--slate-0);
+    }
+
+    /* who is signed in: the company, the distributor or the manufacturer (1-2 lines under the brand) */
+    & .whoami {
+      display: flex;
+      align-items: center;
+      gap: var(--space-2);
+      margin: 0 var(--space-1) var(--space-2);
+      padding: var(--space-2);
+      border: 1px solid var(--nav-line);
+      border-radius: var(--radius-md);
+      background: var(--nav-hover);
+    }
+
+    & .whoami__logo {
+      display: grid;
+      place-items: center;
+      flex: none;
+      inline-size: 2rem;
+      block-size: 2rem;
+      overflow: hidden;
+      border-radius: var(--radius-sm);
+      background: var(--slate-0);
+      color: var(--navy-900);
+      font-size: var(--text-sm);
+      font-weight: var(--weight-bold);
+
+      & > img {
+        inline-size: 100%;
+        block-size: 100%;
+        object-fit: contain;
+      }
+    }
+
+    & .whoami__text {
+      display: grid;
+      min-inline-size: 0;
+      line-height: 1.25;
+    }
+
+    & .whoami__kind {
+      font-size: var(--text-2xs);
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      color: var(--nav-text);
+    }
+
+    & :is(.whoami__name, .whoami__sub) {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    & .whoami__name {
+      color: var(--nav-text-strong);
+      font-size: var(--text-sm);
+      font-weight: var(--weight-semibold);
+    }
+
+    & .whoami__sub {
+      color: var(--nav-text);
+      font-size: var(--text-xs);
+    }
+
     & .sidebar__nav {
       --scroll-bg: var(--nav-bg);
       --scroll-edge: var(--scroll-shadow-nav);

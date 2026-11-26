@@ -2,7 +2,7 @@ import { ChangeDetectionStrategy, Component, computed, inject, input } from '@an
 import { toSignal } from '@angular/core/rxjs-interop';
 import { ReactiveFormsModule, Validators } from '@angular/forms';
 import { SettingsStore } from '../../core/settings.store';
-import { Btn, Field, MoneyInput, Offcanvas } from '../../ui';
+import { Btn, Field, MoneyInput, Offcanvas, Select } from '../../ui';
 import { FormModal } from '../ops/form-modal';
 import { FinanceApi } from './finance.api';
 import { Budget } from './models';
@@ -15,7 +15,7 @@ import { Budget } from './models';
 @Component({
   selector: 'app-cost-center-form',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [MoneyInput, ReactiveFormsModule, Offcanvas, Field, Btn],
+  imports: [MoneyInput, ReactiveFormsModule, Offcanvas, Field, Btn, Select],
   template: `
     <app-offcanvas #oc [(open)]="open" [title]="center() ? 'Type of ' + center()!.name : 'New investment stream'"
                    [subtitle]="center() ? 'The type comes from Settings & Data.' : 'It appears in the budgets and in every stream list.'" size="lg" [dirty]="form.dirty">
@@ -32,12 +32,12 @@ import { Budget } from './models';
           </app-field>
         }
         <app-field label="Stream type" hint="Set in Settings & Data">
-          <select formControlName="streamType">
+          <app-select formControlName="streamType">
             <option value="">Not set</option>
             @for (t of types(); track t.code) {
               <option [value]="t.code">{{ t.code }}</option>
             }
-          </select>
+          </app-select>
         </app-field>
         @if (depreciable()) {
           <app-field label="Depreciation" hint="Percent of its value lost each year">

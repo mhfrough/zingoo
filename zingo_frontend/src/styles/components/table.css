@@ -471,6 +471,41 @@
 
 @layer components {
   /* coloured main value and a thin progress bar under it (TableColumn.valueTone / meter) */
+  /* a logo before the cell text (companies, manufacturers, distributors) */
+  .cell[data-image] {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    column-gap: var(--space-2);
+    align-items: center;
+
+    & > :not(.cell__image) {
+      grid-column: 2;
+    }
+  }
+
+  .cell__image {
+    grid-column: 1;
+    grid-row: 1 / span 4;
+    display: grid;
+    place-items: center;
+    inline-size: 2rem;
+    block-size: 2rem;
+    overflow: hidden;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    background-color: var(--surface-sunken);
+    color: var(--text-3);
+    font-size: var(--text-xs);
+    font-weight: var(--weight-bold);
+
+    & > img {
+      inline-size: 100%;
+      block-size: 100%;
+      object-fit: contain;
+      background-color: var(--surface-field);
+    }
+  }
+
   .cell__main[data-tone] {
     font-weight: var(--weight-semibold);
   }

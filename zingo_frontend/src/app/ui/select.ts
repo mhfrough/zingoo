@@ -3,8 +3,8 @@
  * A form control (formControlName, formControl, ngModel) built on the combobox + listbox pattern.
  */
 import {
-  ChangeDetectionStrategy, ChangeDetectorRef, Component, DestroyRef, ElementRef, ViewEncapsulation, booleanAttribute,
-  computed, inject, input, signal, viewChild,
+  AfterViewInit, ChangeDetectionStrategy, ChangeDetectorRef, Component, DestroyRef, ElementRef, ViewEncapsulation,
+  booleanAttribute, computed, effect, inject, input, output, signal, untracked, viewChild,
 } from '@angular/core';
 import { ControlValueAccessor, NgControl } from '@angular/forms';
 import { IconComponent } from './icon';
@@ -44,12 +44,22 @@ const norm = (s: string) => s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCa
  * - Clear (x) button resets the value to null (`[clearable]="false"` for required fields).
  * - The list is a popover: it floats above dialogs and the off-canvas panel (never clipped), flips upward when there
  *   is no room below and stays inside the viewport. Long lists render 60 rows at a time and add more while scrolling.
+ *
+ * The choices can also be written as <option> / <optgroup> children, exactly like a native <select> (that is how
+ * every dropdown of the app gets the search box):
+ *
+ *   <app-select formControlName="fiscalMonth">
+ *     @for (m of months; track m; let i = $index) { <option [value]="i + 1">{{ m }}</option> }
+ *   </app-select>
+ *
+ * Then, like a native select, the values are the options' text values (a number when the control held a number) and
+ * there is no clear button. Outside a form use [value] and (valueChange), which sends the chosen value.
  */
 @Component({
   selector: 'app-select',
   encapsulation: ViewEncapsulation.None,
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [IconComponent],
+  imports: [IconComponent, Select],
   host: {
     class: 'select',
     '(document:pointerdown)': 'onOutside($event)',
@@ -79,6 +89,8 @@ const norm = (s: string) => s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCa
       }
       <app-icon class="select__chev" name="chevron-down" [size]="16" />
     </button>
+    <!-- <option> children (native-select style): kept out of sight and read into the list -->
+    <div #source class="select__source" hidden aria-hidden="true"><ng-content /></div>
 
     @if (showClear()) {
       <button type="button" class="select__clear" aria-label="Clear selection" tabindex="-1" (click)="clear()">
@@ -104,6 +116,7 @@ const norm = (s: string) => s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCa
             [attr.aria-activedescendant]="open() && active() >= 0 ? optId(active()) : null"
             [value]="query()"
             (input)="onQuery($event)"
+            (change)="$event.stopPropagation()"
             (keydown)="onKey($event)"
           />
         </div>
@@ -135,15 +148,19 @@ const norm = (s: string) => s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCa
             }
           </div>
         } @empty {
-          <div class="select__empty">{{ options().length ? 'No match' : 'No options' }}</div>
+          <div class="select__empty">{{ all().length ? 'No match' : 'No options' }}</div>
         }
       </div>
     </div>
   `,
 })
-export class Select implements ControlValueAccessor {
-  /** the choices: { value, label, sub?, disabled?, group? } */
-  readonly options = input.required<SelectOption[]>();
+export class Select implements ControlValueAccessor, AfterViewInit {
+  /** the choices: { value, label, sub?, disabled?, group? }; leave out to use <option> children instead */
+  readonly options = input<SelectOption[]>();
+  /** outside a form: the chosen value (a form control sets it through the form instead) */
+  readonly valueIn = input<unknown>(undefined, { alias: 'value' });
+  /** a choice was made (or cleared): sends the new value */
+  readonly changed = output<unknown>({ alias: 'valueChange' });
   /** text shown while nothing is selected */
   readonly placeholder = input('Select...');
   /** use when the select is not inside an <app-field> that labels it */
@@ -161,12 +178,17 @@ export class Select implements ControlValueAccessor {
   protected limit = signal(PAGE);
   protected value = signal<unknown>(undefined);
   protected disabled = signal(false);
-  protected selected = computed(() => this.options().find((o) => Object.is(o.value, this.value())));
-  protected showClear = computed(() => this.clearable() && !this.disabled() && !!this.selected());
+  /** the choices read from <option> children */
+  private projected = signal<SelectOption[]>([]);
+  /** native-select style: the choices come from <option> children */
+  private fromChildren = computed(() => this.options() === undefined);
+  protected all = computed(() => this.options() ?? this.projected());
+  protected selected = computed(() => this.all().find((o) => this.same(o.value, this.value())));
+  protected showClear = computed(() => this.clearable() && !this.fromChildren() && !this.disabled() && !!this.selected());
 
   /** options that match the search, best matches first (label start, then label, then the second line) */
   protected filtered = computed(() => {
-    const opts = this.options();
+    const opts = this.all();
     const q = norm(this.query());
     if (!q) return opts;
     const scored: { o: SelectOption; s: number }[] = [];
@@ -186,12 +208,14 @@ export class Select implements ControlValueAccessor {
   protected optId = (i: number) => `select-${this.uid}-opt-${i}`;
 
   private host = inject<ElementRef<HTMLElement>>(ElementRef).nativeElement;
+  private destroyRef = inject(DestroyRef);
   private ngControl = inject(NgControl, { self: true, optional: true });
   private cdr = inject(ChangeDetectorRef);
   private trigger = viewChild.required<ElementRef<HTMLButtonElement>>('trigger');
   private list = viewChild.required<ElementRef<HTMLElement>>('list');
   private opts = viewChild.required<ElementRef<HTMLElement>>('opts');
   private searchEl = viewChild<ElementRef<HTMLInputElement>>('search');
+  private source = viewChild.required<ElementRef<HTMLElement>>('source');
   private onChange: (v: unknown) => void = () => {};
   private onTouched: () => void = () => {};
   private typed = '';
@@ -205,11 +229,40 @@ export class Select implements ControlValueAccessor {
 
   constructor() {
     if (this.ngControl) this.ngControl.valueAccessor = this;
+    // [value] outside a form
+    effect(() => {
+      const v = this.valueIn();
+      if (v !== undefined && !this.ngControl) untracked(() => this.value.set(v));
+    });
     inject(DestroyRef).onDestroy(() => {
       window.removeEventListener('scroll', this.scrollListener, true);
       clearTimeout(this.typedTimer);
       clearTimeout(this.closeTimer);
     });
+  }
+
+  ngAfterViewInit() {
+    const el = this.source().nativeElement;
+    const read = () => {
+      const list: SelectOption[] = [];
+      el.querySelectorAll('option').forEach((o) => {
+        const group = o.parentElement?.tagName === 'OPTGROUP' ? (o.parentElement as HTMLOptGroupElement).label : undefined;
+        list.push({ value: o.value, label: (o.textContent ?? '').replace(/\s+/g, ' ').trim(), disabled: o.disabled, group });
+      });
+      this.projected.set(list);
+      this.cdr.markForCheck();
+    };
+    read();
+    // the options follow the page (an @for list that loads later, a label that changes)
+    const watch = new MutationObserver(read);
+    watch.observe(el, { childList: true, subtree: true, characterData: true, attributes: true });
+    this.destroyRef.onDestroy(() => watch.disconnect());
+  }
+
+  /** a value read from an <option> is text: "30" matches 30 */
+  private same(a: unknown, b: unknown) {
+    if (Object.is(a, b)) return true;
+    return this.fromChildren() && a !== null && b !== null && a !== undefined && b !== undefined && String(a) === String(b);
   }
 
   protected invalid() {
@@ -218,7 +271,7 @@ export class Select implements ControlValueAccessor {
   }
 
   protected isSelected(o: SelectOption) {
-    return Object.is(o.value, this.value());
+    return this.same(o.value, this.value());
   }
 
   /** move focus to the control */
@@ -321,8 +374,11 @@ export class Select implements ControlValueAccessor {
   // ── choosing ──
   protected choose(o: SelectOption) {
     if (o.disabled) return;
-    this.value.set(o.value);
-    this.onChange(o.value);
+    // an <option> value is text; a control that held a number gets a number back, as with a native select
+    const v = this.fromChildren() && typeof this.value() === 'number' && o.value !== '' && !isNaN(Number(o.value)) ? Number(o.value) : o.value;
+    this.value.set(v);
+    this.onChange(v);
+    this.changed.emit(v);
     this.closeList();
     this.focus();
   }
@@ -331,6 +387,7 @@ export class Select implements ControlValueAccessor {
   protected clear() {
     this.value.set(null);
     this.onChange(null);
+    this.changed.emit(null);
     this.focus();
     this.cdr.markForCheck();
   }

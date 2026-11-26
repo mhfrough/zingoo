@@ -76,7 +76,7 @@ export class Users {
     { id: 'role', label: 'Role', kind: 'tag', value: (u) => u.role, tone: (u): Tone => ROLE_TONE[u.role] ?? 'neutral', sub: (u) => u.distributorName ?? u.manufacturerName ?? null },
     { id: 'seat', label: 'Signing seat', priority: 2, value: (u) => (u.seat === 'None' ? '-' : u.seat === 'Both' ? 'Seat A and B' : `Seat ${u.seat}`) },
     {
-      id: 'status', label: 'Status', kind: 'tag', value: (u) => (u.isRoot ? `${u.status} · root` : u.status),
+      id: 'status', label: 'Status', kind: 'tag', value: (u) => (u.isRoot ? `${u.status} · Super admin` : u.status),
       tone: (u): Tone => (u.status === 'Active' ? 'success' : 'neutral'),
     },
   ];

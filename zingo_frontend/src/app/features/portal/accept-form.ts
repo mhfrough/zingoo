@@ -2,7 +2,7 @@ import { ChangeDetectionStrategy, Component, computed, inject, input, signal } f
 import { takeUntilDestroyed, toSignal } from '@angular/core/rxjs-interop';
 import { ReactiveFormsModule, Validators } from '@angular/forms';
 import { fmtMoney, fmtNumber } from '../../shared/format';
-import { Btn, Field, Offcanvas, MoneyInput } from '../../ui';
+import { Btn, Field, MoneyInput, Offcanvas, RichText, Select } from '../../ui';
 import { FormModal } from '../ops/form-modal';
 import { PortalApi } from './portal.api';
 import { DeskRequest } from './portal.models';
@@ -17,7 +17,7 @@ const today = () => new Date().toISOString().slice(0, 10);
 @Component({
   selector: 'app-accept-form',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [MoneyInput, ReactiveFormsModule, Offcanvas, Field, Btn],
+  imports: [MoneyInput, ReactiveFormsModule, Offcanvas, Field, Btn, RichText, Select],
   template: `
     <app-offcanvas #oc [(open)]="open" title="Accept request" size="lg" [dirty]="form.dirty"
                    [subtitle]="req() ? req()!.distributor.name + ' · ' + req()!.product.sku + ' · ' + req()!.cartons + ' bundles · ' + money(req()!.value) : ''">
@@ -53,21 +53,21 @@ const today = () => new Date().toISOString().slice(0, 10);
           <app-field label="Due date" [hint]="req()?.requestedDate ? 'Asked for ' + req()!.requestedDate : ''">
             <input type="date" formControlName="dueDate" [min]="minDate" />
           </app-field>
-          <app-field label="Note to the manufacturer" [wide]="true"><input type="text" formControlName="note" maxlength="500" /></app-field>
+          <app-field label="Note to the manufacturer" [wide]="true"><app-rich-text formControlName="note" [max]="500" [storeMax]="500" /></app-field>
         } @else {
           <div class="notice" style="grid-column: 1 / -1"><span>A draft sales order is created with this price and these terms. The invoice is posted only when it is dispatched.</span></div>
           <app-field label="Price per pack" [required]="true" [error]="invalid('rate') ? 'Enter the price' : null">
             <app-money-input formControlName="rate" />
           </app-field>
           <app-field label="Credit days">
-            <select formControlName="terms">
+            <app-select formControlName="terms">
               @for (t of cycles(); track t) {
                 <option [value]="t">{{ t }} days</option>
               }
-            </select>
+            </app-select>
           </app-field>
           <app-field label="Suggested advance %"><input type="number" formControlName="advancePct" min="0" max="100" step="0.01" /></app-field>
-          <app-field label="Internal note" [wide]="true"><input type="text" formControlName="note" /></app-field>
+          <app-field label="Internal note" [wide]="true"><app-rich-text formControlName="note" [max]="2000" [storeMax]="2000" /></app-field>
         }
       </form>
       <ng-container offcanvasFooter>

@@ -1,3 +1,4 @@
+import { unsavedChangesGuard } from './ui/unsaved-changes';
 import { Routes } from '@angular/router';
 import { authGuard } from './core/auth.guard';
 import { pageGuard } from './core/page.guard';
@@ -30,6 +31,8 @@ export const routes: Routes = [
   {
     path: 'admin',
     canActivate: [authGuard],
+    // moving to another page asks first when a form has unsaved changes
+    canActivateChild: [unsavedChangesGuard],
     loadComponent: () => import('./layout/shell').then((m) => m.Shell),
     children: [
       { path: '', pathMatch: 'full', redirectTo: 'overview' },

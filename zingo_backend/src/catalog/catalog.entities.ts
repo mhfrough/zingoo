@@ -187,6 +187,10 @@ export class Manufacturer extends AppEntity {
   @Column({ type: 'varchar', length: 150 })
   name: string;
 
+  /** the logo (an uploaded image, served by GET logos/:id) */
+  @Column({ type: 'uuid', nullable: true })
+  logoId: string | null;
+
   /** how the manufacturer is paid: an advance on each order, a credit line, or both */
   @Column({ type: 'jsonb', default: () => `'["Advance"]'` })
   paymentTerms: ManufacturerTerm[];
@@ -341,6 +345,10 @@ export interface AreaCity {
 export class Distributor extends AppEntity {
   @Column({ type: 'varchar', length: 150 })
   name: string;
+
+  /** the logo (an uploaded image, served by GET logos/:id) */
+  @Column({ type: 'uuid', nullable: true })
+  logoId: string | null;
 
   /** a short territory label for lists, worked out from the areas (first city, else district, else province, else country) */
   @Column({ type: 'varchar', length: 80 })

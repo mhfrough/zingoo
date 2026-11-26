@@ -1,6 +1,6 @@
 import { PartialType } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
-import { ArrayMaxSize, ArrayMinSize, IsArray, IsBoolean, IsDateString, IsEmail, IsIn, IsInt, IsNotEmpty, IsNumber, IsOptional, IsString, IsUUID, Max, MaxLength, Min, ValidateNested } from 'class-validator';
+import { ArrayMaxSize, ArrayMinSize, IsArray, IsBoolean, IsDateString, IsEmail, IsIn, IsInt, IsNotEmpty, IsNumber, IsOptional, IsString, IsUUID, Max, MaxLength, Min, ValidateIf, ValidateNested } from 'class-validator';
 import {
   BANK_CHARGES, BankCharges, PAYMENT_TERM_TYPES, PAYMENT_TRIGGERS, PRICE_UNITS, PaymentTermType, PaymentTrigger, PriceUnit,
 } from './catalog.entities';
@@ -82,6 +82,8 @@ export class UpdateProductDto extends PartialType(CreateProductDto) {}
 
 export class CreateManufacturerDto {
   @IsString() @IsNotEmpty() name: string;
+  /** the logo: an uploaded image id; null removes it */
+  @IsOptional() @ValidateIf((_, v) => v !== null) @IsUUID() logoId?: string | null;
   /** Advance and / or Credit line; at least one */
   @IsOptional() @IsArray() @ArrayMinSize(1) @IsIn([...MANUFACTURER_TERMS], { each: true }) paymentTerms?: ManufacturerTerm[];
   /** credit line: days to clear, 0 = no limit */
@@ -161,6 +163,8 @@ export class DistributorBankDto {
 
 export class CreateDistributorDto {
   @IsString() @IsNotEmpty() name: string;
+  /** the logo: an uploaded image id; null removes it */
+  @IsOptional() @ValidateIf((_, v) => v !== null) @IsUUID() logoId?: string | null;
   @IsOptional() @IsIn([...DISTRIBUTOR_MARKETS]) market?: DistributorMarket;
   /** territory label for lists; worked out from the areas when left out */
   @IsOptional() @IsString() @MaxLength(80) region?: string;

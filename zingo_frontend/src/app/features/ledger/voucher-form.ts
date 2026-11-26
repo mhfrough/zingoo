@@ -2,7 +2,7 @@ import { ChangeDetectionStrategy, Component, computed, inject, input, signal } f
 import { takeUntilDestroyed, toSignal } from '@angular/core/rxjs-interop';
 import { AbstractControl, FormArray, FormControl, FormGroup, ReactiveFormsModule, ValidationErrors, Validators } from '@angular/forms';
 import { fmtAmount2 } from '../../shared/format';
-import { Btn, Field, MoneyInput, Offcanvas } from '../../ui';
+import { Btn, Field, MoneyInput, Offcanvas, RichText, Select } from '../../ui';
 import { Currency } from '../finance/models';
 import { FormModal } from '../ops/form-modal';
 import { LedgerApi } from './ledger.api';
@@ -33,7 +33,7 @@ function balanced(group: AbstractControl): ValidationErrors | null {
 @Component({
   selector: 'app-voucher-form',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [ReactiveFormsModule, Offcanvas, Field, MoneyInput, Btn],
+  imports: [ReactiveFormsModule, Offcanvas, Field, MoneyInput, Btn, RichText, Select],
   styles: `
     /* the grid of voucher lines: account, debit, credit, remove */
     .voucher-lines {
@@ -81,15 +81,15 @@ function balanced(group: AbstractControl): ValidationErrors | null {
       }
       <form [id]="formId" [formGroup]="form" (ngSubmit)="submit()" class="form-grid" novalidate>
         <app-field label="Voucher date" [required]="true"><input type="date" formControlName="date" /></app-field>
-        <app-field label="Description / reason" [required]="true" [error]="invalid('memo') ? 'Say why this is being posted' : null">
-          <input type="text" formControlName="memo" />
+        <app-field label="Description / reason" [wide]="true" [required]="true" [error]="invalid('memo') ? 'Say why this is being posted' : null">
+          <app-rich-text formControlName="memo" [max]="5000" [storeMax]="5000" />
         </app-field>
         <app-field label="Currency">
-          <select formControlName="currency">
+          <app-select formControlName="currency">
             @for (c of currencies(); track c.code) {
               <option [value]="c.code">{{ c.code }} · {{ c.name }}</option>
             }
-          </select>
+          </app-select>
         </app-field>
         <app-field label="Exchange rate" hint="PKR per 1 unit of the currency">
           <input type="number" formControlName="fxRate" min="0" step="any" />
@@ -100,12 +100,12 @@ function balanced(group: AbstractControl): ValidationErrors | null {
           @for (g of groups(); track g; let i = $index) {
             <div class="voucher-line" [formGroupName]="i">
               <div class="field line-account"><div class="field__control">
-                <select formControlName="account" [attr.aria-label]="'Account, line ' + (i + 1)">
+                <app-select formControlName="account" [ariaLabel]="'Account, line ' + (i + 1)">
                   <option value="">Choose an account</option>
                   @for (a of accounts(); track a.id) {
                     <option [value]="a.name">{{ a.code }} · {{ a.name }}</option>
                   }
-                </select>
+                </app-select>
               </div></div>
               <div class="field"><div class="field__control">
                 <app-money-input formControlName="debit" currency="" placeholder="Debit" [ariaLabel]="'Debit, line ' + (i + 1)" />

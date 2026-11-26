@@ -20,6 +20,11 @@
     scrollbar-gutter: auto;
   }
 
+  /* while a panel or dialog is open the page behind it stays put (the gutter keeps its room, so nothing jumps) */
+  html:has(dialog[open]:modal) {
+    overflow: hidden;
+  }
+
   body {
     font-size: var(--text-md);
     line-height: var(--leading-normal);

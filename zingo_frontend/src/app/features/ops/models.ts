@@ -84,6 +84,8 @@ export interface PartnerBankAccount {
 export interface Manufacturer {
   id: string;
   name: string;
+  /** the logo image id (GET logos/:id) */
+  logoId?: string | null;
   /** how it is paid: an advance on each order, a credit line, or both */
   paymentTerms?: ('Advance' | 'Credit line')[];
   /** credit line: days to clear after delivery (0 = no limit) */
@@ -105,6 +107,8 @@ export interface Manufacturer {
 export interface Distributor {
   id: string;
   name: string;
+  /** the logo image id (GET logos/:id) */
+  logoId?: string | null;
   /** a short territory label for lists (first city, else district, province or country) */
   region: string;
   /** Pakistan, abroad, or both */

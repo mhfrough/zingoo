@@ -143,7 +143,7 @@
         <app-field label="Reference (disabled)"><input type="text" value="Locked after posting" disabled /></app-field>
         <app-field label="Reference (read only)"><input type="text" value="SO-201" readonly /></app-field>
         <app-field label="Distributor (native select)">
-          <select><option>Sindh Central Distributors</option><option>South Route Partners</option><option>Upper Sindh Supply</option></select>
+          <app-select><option>Sindh Central Distributors</option><option>South Route Partners</option><option>Upper Sindh Supply</option></app-select>
         </app-field>
         <app-field label="Loading a record" [loading]="true"><input type="text" /></app-field>
       </div>
@@ -158,7 +158,7 @@
         <app-field label="Distributor" [float]="true"><input type="text" /></app-field>
         <app-field label="Amount" [float]="true" error="Enter an amount above zero"><input type="number" /></app-field>
         <app-field label="Method" [float]="true">
-          <select><option>Bank transfer</option><option>Cash</option></select>
+          <app-select><option>Bank transfer</option><option>Cash</option></app-select>
         </app-field>
       </div>
     </div>
@@ -498,7 +498,7 @@
       <app-money-input [ngModel]="11700" />
     </app-field>
     <app-field label="Method">
-      <select><option>Bank Transfer</option><option>Cash</option><option>Cheque</option><option>Other</option></select>
+      <app-select><option>Bank Transfer</option><option>Cash</option><option>Cheque</option><option>Other</option></app-select>
     </app-field>
     <app-field label="Reference"><input type="text" /></app-field>
     <app-field label="Notes" [wide]="true"><textarea maxlength="500" placeholder="Optional"></textarea></app-field>

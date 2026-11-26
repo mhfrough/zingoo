@@ -1,3 +1,4 @@
+import { PlainRef } from '../common/plain-text';
 import { Type } from 'class-transformer';
 import {
   ArrayMaxSize, ArrayMinSize, IsArray, IsBoolean, IsDateString, IsIn, IsInt, IsNotEmpty, IsNumber, IsOptional, IsPositive, IsString, IsUUID, Max, MaxLength, Min,
@@ -18,7 +19,7 @@ export class OrderAdvanceDto {
   @IsNumber() @IsPositive() amount: number;
   @IsString() @IsNotEmpty() @MaxLength(40) method: string;
   @IsDateString() date: string;
-  @IsOptional() @IsString() @MaxLength(80) reference?: string;
+  @IsOptional() @PlainRef() @IsString() @MaxLength(80) reference?: string;
   /** the uploaded proof (bank slip, transfer screenshot) */
   @IsUUID() proofId: string;
 }
@@ -96,6 +97,6 @@ export class CreateAdviceDto extends ProofDto {
   @IsDateString() date: string;
   @IsNumber() @IsPositive() amount: number;
   @IsOptional() @IsString() method?: string;
-  @IsOptional() @IsString() @MaxLength(80) bankRef?: string;
+  @IsOptional() @PlainRef() @IsString() @MaxLength(80) bankRef?: string;
   @IsOptional() @IsString() note?: string;
 }

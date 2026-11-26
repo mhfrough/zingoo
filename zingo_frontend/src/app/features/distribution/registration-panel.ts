@@ -4,7 +4,8 @@ import { ApiService } from '../../core/api.service';
 import { AuthService } from '../../core/auth.service';
 import { errorText } from '../../shared/errors';
 import { Tone } from '../../shared/format';
-import { Btn, Offcanvas, PlainPipe, Tag, ToastService } from '../../ui';
+import { FormsModule } from '@angular/forms';
+import { Btn, Offcanvas, PlainPipe, RichText, Tag, ToastService } from '../../ui';
 
 /** one step of the trail */
 interface RegistrationEvent {
@@ -51,7 +52,7 @@ const TONE: Record<string, Tone> = {
 @Component({
   selector: 'app-registration-panel',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [Offcanvas, Tag, Btn, PlainPipe],
+  imports: [FormsModule, Offcanvas, Tag, Btn, PlainPipe, RichText],
   styles: `
     .head {
       display: flex;
@@ -122,7 +123,7 @@ const TONE: Record<string, Tone> = {
     }
   `,
   template: `
-    <app-offcanvas [(open)]="open" [title]="'Registration · ' + (s()?.name ?? '')" [subtitle]="s()?.code ?? 'International distributor'" size="md">
+    <app-offcanvas [(open)]="open" [dirty]="!!reason().trim()" [title]="'Registration · ' + (s()?.name ?? '')" [subtitle]="s()?.code ?? 'International distributor'" size="md">
       @if (s(); as r) {
         <div class="head">
           <app-tag [tone]="tone(r.status)">{{ r.status }}</app-tag>
@@ -157,8 +158,8 @@ const TONE: Record<string, Tone> = {
         }
 
         <h3>Next step</h3>
-        <input class="reason" type="text" [value]="reason()" (input)="reason.set($any($event.target).value)" maxlength="500"
-               placeholder="Reason (needed to reject, hold, suspend or archive)" aria-label="Reason" />
+        <app-rich-text class="reason" [ngModel]="reason()" (ngModelChange)="reason.set($event)" [max]="500" [storeMax]="500"
+                       placeholder="Reason (needed to reject, hold, suspend or archive)" aria-label="Reason" />
         <div class="actions">
           @if (r.status === 'Draft' && can(['Admin', 'Distribution', 'Exports'])) {
             <button appBtn variant="primary" [loading]="busy()" [disabled]="r.missingToSubmit.length > 0" (click)="act('submit')">Submit documents</button>

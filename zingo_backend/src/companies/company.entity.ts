@@ -72,6 +72,10 @@ export class Company extends AppEntity {
   @Column({ type: 'decimal', precision: 16, scale: 2, nullable: true, transformer: numeric })
   capitalTarget: number | null;
 
+  /** the company logo (an uploaded image, served by GET logos/:id) */
+  @Column({ type: 'uuid', nullable: true })
+  logoId: string | null;
+
   @Column({ default: false })
   primary: boolean;
 

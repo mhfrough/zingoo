@@ -1,3 +1,4 @@
+import { logoUrl } from '../../core/attachments.api';
 import { ChangeDetectionStrategy, Component, computed, inject, input, output, signal } from '@angular/core';
 import { rxResource } from '@angular/core/rxjs-interop';
 import { AuthService } from '../../core/auth.service';
@@ -49,7 +50,7 @@ export class ManufacturersCard {
   protected editing = signal<Manufacturer | null>(null);
 
   protected columns: TableColumn<Manufacturer>[] = [
-    { id: 'name', label: 'Manufacturer', kind: 'title', value: (m) => m.name, sub: (m) => m.poc || m.contact || null },
+    { id: 'name', label: 'Manufacturer', kind: 'title', value: (m) => m.name, sub: (m) => m.poc || m.contact || null, image: (m) => logoUrl(m.logoId) },
     {
       id: 'terms', label: 'Payment terms',
       value: (m) => (m.paymentTerms ?? ['Advance']).map((t) => (t === 'Advance' ? `${Number(m.advancePct ?? 0)}% advance` : 'Credit line')).join(' + '),

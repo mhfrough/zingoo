@@ -6,7 +6,7 @@ import { AttachmentMeta } from '../../core/attachments.api';
 import { AuthService } from '../../core/auth.service';
 import { errorText } from '../../shared/errors';
 import { fmtAmount2, fmtDate } from '../../shared/format';
-import { Btn, Field, FileInput, FilesInput, PlainPipe, Tag, ToastService } from '../../ui';
+import { Btn, Field, FileInput, FilesInput, PlainPipe, RichText, Select, Tag, ToastService } from '../../ui';
 
 /** what the portal sees of an order: no Zen Foods costs or margins */
 interface PortalExportOrder {
@@ -38,7 +38,7 @@ const today = () => new Date().toISOString().slice(0, 10);
 @Component({
   selector: 'app-intl-portal',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [ReactiveFormsModule, Btn, Field, FileInput, FilesInput, Tag, PlainPipe],
+  imports: [ReactiveFormsModule, Btn, Field, FileInput, FilesInput, Tag, PlainPipe, RichText, Select],
   styles: `
     :host { display: block; }
     section { margin-block-end: var(--space-6); }
@@ -150,20 +150,20 @@ const today = () => new Date().toISOString().slice(0, 10);
         @if (canClaim() && shipped().length) {
           <form class="card grid" [formGroup]="claim" (ngSubmit)="raise()" style="margin-block-start: var(--space-3)">
             <app-field label="Order" [required]="true">
-              <select formControlName="shipmentId">
+              <app-select formControlName="shipmentId">
                 @for (o of shipped(); track o.id) {
                   <option [value]="o.id">{{ o.refNo }} · {{ o.product.sku }}</option>
                 }
-              </select>
+              </app-select>
             </app-field>
             <app-field label="Kind">
-              <select formControlName="kind">
+              <app-select formControlName="kind">
                 @for (k of kinds; track k) { <option [value]="k">{{ k }}</option> }
-              </select>
+              </app-select>
             </app-field>
             <app-field label="Bundles" [required]="true"><input type="number" formControlName="quantity" min="1" step="1" /></app-field>
             <app-field label="Date"><input type="date" formControlName="date" [max]="todayIso" /></app-field>
-            <app-field label="What happened" [required]="true" [wide]="true"><input type="text" formControlName="description" maxlength="2000" /></app-field>
+            <app-field label="What happened" [required]="true" [wide]="true"><app-rich-text formControlName="description" [max]="2000" [storeMax]="2000" /></app-field>
             <app-field label="Photos" [wide]="true"><app-files-input formControlName="photos" /></app-field>
             <div><button appBtn type="submit" variant="primary" size="sm" [loading]="busy()">Raise claim</button></div>
           </form>
@@ -195,7 +195,7 @@ const today = () => new Date().toISOString().slice(0, 10);
             <app-field label="Date paid" [required]="true"><input type="date" formControlName="date" [max]="todayIso" /></app-field>
             <app-field label="Currency"><input type="text" formControlName="currency" maxlength="3" /></app-field>
             <app-field label="Amount" [required]="true"><input type="number" formControlName="amount" min="0" step="any" /></app-field>
-            <app-field label="Bank reference"><input type="text" formControlName="bankRef" maxlength="80" placeholder="MT103 / LC no." /></app-field>
+            <app-field label="Bank reference"><app-rich-text formControlName="bankRef" [max]="80" [storeMax]="80" placeholder="MT103 / LC no." /></app-field>
             <app-field label="For invoices" [wide]="true"><input type="text" formControlName="forInvoices" maxlength="300" placeholder="EXP-001, EXP-002" /></app-field>
             <app-field label="Proof of payment" [required]="true" [wide]="true"><app-file-input formControlName="proof" label="Upload the bank copy" /></app-field>
             <div><button appBtn type="submit" variant="primary" size="sm" [loading]="busy()">Send payment advice</button></div>

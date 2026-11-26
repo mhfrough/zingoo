@@ -28,7 +28,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     if (standing === 'suspended') throw new UnauthorizedException('This distributor account is suspended.');
     return {
       readOnly: standing === 'hold',
-      id: user.id, email: user.email, name: user.name, role: user.role, seat: user.seat,
+      id: user.id, email: user.email, name: user.name, role: user.role, seat: user.seat, isRoot: !!user.isRoot,
       distributorId: user.distributorId, manufacturerId: user.manufacturerId, portalRole: user.portalRole, viewAs: payload.viewer ?? null,
     };
   }

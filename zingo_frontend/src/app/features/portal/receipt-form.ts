@@ -3,7 +3,7 @@ import { toSignal } from '@angular/core/rxjs-interop';
 import { ReactiveFormsModule, Validators } from '@angular/forms';
 import { fmtMoney } from '../../shared/format';
 import { ProofFile, readProof } from '../../shared/files';
-import { Btn, Field, Offcanvas, RichText } from '../../ui';
+import { Btn, Field, Offcanvas, RichText, Select } from '../../ui';
 import { FormModal } from '../ops/form-modal';
 import { PortalApi } from './portal.api';
 import { PortalOrder } from './portal.models';
@@ -18,7 +18,7 @@ const CONDITIONS = ['Good', 'Damaged', 'Wet', 'Tampered', 'Other'];
 @Component({
   selector: 'app-receipt-form',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [ReactiveFormsModule, Offcanvas, Field, Btn, RichText],
+  imports: [ReactiveFormsModule, Offcanvas, Field, Btn, RichText, Select],
   template: `
     <app-offcanvas #oc [(open)]="open" title="Confirm delivery" size="lg" [dirty]="form.dirty"
                    [subtitle]="order() ? order()!.refNo + ' · ' + order()!.product.sku + ' · ' + order()!.cartons + ' bundles shipped' : ''">
@@ -37,11 +37,11 @@ const CONDITIONS = ['Good', 'Damaged', 'Wet', 'Tampered', 'Other'];
         <app-field label="Damaged bundles"><input type="number" formControlName="damagedCartons" min="0" step="1" /></app-field>
         <app-field label="Missing bundles"><input type="number" formControlName="missingCartons" min="0" step="1" /></app-field>
         <app-field label="Condition">
-          <select formControlName="condition">
+          <app-select formControlName="condition">
             @for (c of conditions; track c) {
               <option [value]="c">{{ c }}</option>
             }
-          </select>
+          </app-select>
         </app-field>
         <app-field label="Delivery challan / vehicle no."><input type="text" formControlName="waybill" maxlength="80" /></app-field>
         <app-field label="Received by"><input type="text" formControlName="receivedBy" maxlength="120" /></app-field>

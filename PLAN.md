@@ -524,3 +524,16 @@ Progress (2026-11-19): K8 checks. Fresh reseed: all 13 parity checks pass. Full 
 
 K8 done (2026-11-19): pushed main (cd32556: J1-J5 and K1-K8) and deployed on Render, zingo-api then zingo-web (Manual Deploy, latest commit; render.yaml unchanged so no Blueprint sync). Live API answers the new endpoints (refs, distributor-orders/money); live web bundle has the new screens.
 
+## 19. Client tasks (2026-11-26)
+
+Plan and answers: `instruction and plans/client-tasks-2026-11-26-plan.md` (L0-L8).
+
+- L0 Delete business data: `npm run db:clear -- --yes` and Settings > Zingo > Delete business data (super admin, type DELETE). Keeps companies, Settings, lists, currencies + rates, categories / cost centers, container types, chart of accounts, staff logins, logos. Takes all locks first, retries on a deadlock. `settings.sampleDataOff` stops the seed from loading the sample again; `settings.setupDone` stops the start-up from re-making a company.
+- L1 Settings > Zingo tab (first tab): platform name, logo, tagline, address, contacts (super admin edits). Shown on the sidebar, login page, browser title and voucher footer. Root account shown as Super admin. A changed ROOT_EMAIL moves the super admin to it (with ROOT_PASSWORD).
+- L2 Logos on companies, manufacturers, distributors (Admin uploads ownerType logo; public GET logos/:id serves only logo images); table thumbnails.
+- L3 Super admin deletes any company or all of them (next active becomes primary; none left = platform name).
+- L4 Sidebar "who is signed in" card (company, distributor or manufacturer) from GET platform/identity.
+- L5 Rich text on every list description, note fields, voucher memo (text column, ledger lines get plain text) and bank / transfer references (server keeps plain text via PlainRef).
+- L6 Unsaved changes: browser close / reload, page change, tab change, sign out; app-modal has [dirty].
+- L7 Fields: 4 per row (3 under 1100px, 2 in md panels), label / control / hint rows shared (subgrid), radius 0.375rem, button labels centred, no page scroll behind an open dialog. Every native select is now app-select with search (it reads <option> children; [value] / (valueChange) outside forms). Kept native: rows per page, Switch account.
+- L8 Checks: API run 1033/1033 on a fresh seeded throwaway database (23 new L checks incl. clearing the data); browser sweep of 12 pages, 50 tabs, ~60 forms with no errors; UI flow (duplicate SKU, rich-text voucher, distributor order, manufacturer accept, discard guard). The throwaway database was dropped afterwards.

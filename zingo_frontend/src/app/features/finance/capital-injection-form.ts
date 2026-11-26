@@ -5,7 +5,7 @@ import { SettingsStore } from '../../core/settings.store';
 import { AttachmentMeta } from '../../core/attachments.api';
 import { fmtMoney } from '../../shared/format';
 import { isChequeMethod } from '../../shared/payments';
-import { Btn, Field, FileInput, MoneyInput, Offcanvas, RichText } from '../../ui';
+import { Btn, Field, FileInput, MoneyInput, Offcanvas, RichText, Select } from '../../ui';
 import { FormModal } from '../ops/form-modal';
 import { FinanceApi } from './finance.api';
 import { InvestorAccount, InvestorType } from './models';
@@ -60,7 +60,7 @@ type StreamForm = ReturnType<typeof streamGroup>;
 @Component({
   selector: 'app-capital-injection-form',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [ReactiveFormsModule, Offcanvas, Field, Btn, MoneyInput, FileInput, RichText],
+  imports: [ReactiveFormsModule, Offcanvas, Field, Btn, MoneyInput, FileInput, RichText, Select],
   styles: `
     .investors {
       display: contents;
@@ -258,10 +258,10 @@ type StreamForm = ReturnType<typeof streamGroup>;
         </fieldset>
 
         <app-field label="Investment type" [required]="true">
-          <select formControlName="mode" (change)="onMode()">
+          <app-select formControlName="mode" (valueChange)="onMode()">
             <option value="solo">Solo investor</option>
             <option value="shared">Shared investment</option>
-          </select>
+          </app-select>
         </app-field>
         @if (shared()) {
           <app-field label="Total amount" [required]="true" hint="All investors together">
@@ -281,7 +281,7 @@ type StreamForm = ReturnType<typeof streamGroup>;
               <div class="form-grid">
                 <app-field [label]="paidOut() ? 'Partner account' : 'Investor account'" [required]="true" [error]="bad(inv, 'account') ? 'Choose the account' : null"
                            [hint]="accounts().length ? '' : 'No accounts yet. Add people in Settings & Data'">
-                  <select formControlName="account">
+                  <app-select formControlName="account">
                     <option value="">Choose an account</option>
                     @if (people().length) {
                       <optgroup label="People">
@@ -304,7 +304,7 @@ type StreamForm = ReturnType<typeof streamGroup>;
                         }
                       </optgroup>
                     }
-                  </select>
+                  </app-select>
                 </app-field>
                 <app-field label="Amount invested" [required]="true" [error]="bad(inv, 'amount') ? 'Enter an amount above zero' : null">
                   <app-money-input formControlName="amount" [max]="investorMax()" (input)="onAmount(inv)" />
@@ -316,11 +316,11 @@ type StreamForm = ReturnType<typeof streamGroup>;
                 }
                 <app-field label="Investment date" [required]="true"><input type="date" formControlName="date" /></app-field>
                 <app-field label="Payment source">
-                  <select formControlName="paymentSource">
+                  <app-select formControlName="paymentSource">
                     @for (m of methods(); track m) {
                       <option [value]="m">{{ m }}</option>
                     }
-                  </select>
+                  </app-select>
                 </app-field>
 
                 <h4 class="investor__section">Invested against</h4>
@@ -332,12 +332,12 @@ type StreamForm = ReturnType<typeof streamGroup>;
                       <div class="cell cell--stream">
                         <span class="cell__cap" aria-hidden="true">Stream</span>
                         <div class="field"><div class="field__control">
-                          <select formControlName="stream" [attr.aria-label]="'Stream, investor ' + (i + 1) + ', line ' + (si + 1)">
+                          <app-select formControlName="stream" [ariaLabel]="'Stream, investor ' + (i + 1) + ', line ' + (si + 1)">
                             <option value="">Choose a stream</option>
                             @for (o of streamOptions(); track o.name) {
                               <option [value]="o.name" [disabled]="usedElsewhere(inv, s, o.name)">{{ o.name }}{{ o.type ? ' · ' + o.type : '' }}</option>
                             }
-                          </select>
+                          </app-select>
                         </div></div>
                       </div>
                       <div class="cell">
@@ -368,12 +368,12 @@ type StreamForm = ReturnType<typeof streamGroup>;
                 <app-field label="Payment reference"><input type="text" formControlName="paymentReference" placeholder="Transfer or receipt no." /></app-field>
                 @if (kind() === 'equity') {
                   <app-field label="Bank" hint="From Settings">
-                    <select formControlName="bankAccount">
+                    <app-select formControlName="bankAccount">
                       <option value="">Choose</option>
                       @for (t of bankAccounts(); track t) {
                         <option [value]="t">{{ t }}</option>
                       }
-                    </select>
+                    </app-select>
                   </app-field>
                 }
                 <app-field label="Payment against"><input type="text" formControlName="paymentAgainst" placeholder="Agreement or invoice no." /></app-field>
@@ -412,29 +412,29 @@ type StreamForm = ReturnType<typeof streamGroup>;
         }
         @if (kind() === 'loan') {
           <app-field label="Loan tenure">
-            <select formControlName="tenure">
+            <app-select formControlName="tenure">
               <option value="">Choose</option>
               @for (t of tenures(); track t) {
                 <option [value]="t">{{ t }}</option>
               }
-            </select>
+            </app-select>
           </app-field>
           <app-field label="Repayment plan">
-            <select formControlName="repaymentPlan">
+            <app-select formControlName="repaymentPlan">
               <option value="">Choose</option>
               @for (t of plans(); track t) {
                 <option [value]="t">{{ t }}</option>
               }
-            </select>
+            </app-select>
           </app-field>
           @if (showFrequency()) {
             <app-field label="Repayment frequency">
-              <select formControlName="repaymentFrequency">
+              <app-select formControlName="repaymentFrequency">
                 <option value="">Choose</option>
                 @for (t of frequencies(); track t) {
                   <option [value]="t">{{ t }}</option>
                 }
-              </select>
+              </app-select>
             </app-field>
           }
           @if (instalments(); as n) {
@@ -448,37 +448,37 @@ type StreamForm = ReturnType<typeof streamGroup>;
         }
         @if (kind() === 'advance') {
           <app-field label="Advance direction" [required]="true">
-            <select formControlName="direction">
+            <app-select formControlName="direction">
               <option value="in">Partner → Zen Foods</option>
               <option value="out">Zen Foods → Partner</option>
-            </select>
+            </app-select>
           </app-field>
           <app-field label="Advance purpose">
-            <select formControlName="purpose">
+            <app-select formControlName="purpose">
               <option value="">Choose</option>
               @for (t of purposes(); track t) {
                 <option [value]="t">{{ t }}</option>
               }
-            </select>
+            </app-select>
           </app-field>
           <app-field label="Settlement method">
-            <select formControlName="settlementMethod">
+            <app-select formControlName="settlementMethod">
               <option value="">Choose</option>
               @for (t of settlements(); track t) {
                 <option [value]="t">{{ t }}</option>
               }
-            </select>
+            </app-select>
           </app-field>
           <app-field label="Linked invoice / PO" hint="Optional"><input type="text" formControlName="linkedReference" placeholder="Invoice, PO or activity" /></app-field>
         }
         @if (kind() !== 'equity') {
           <app-field [label]="paidOut() ? 'Paying account' : 'Receiving account'" hint="Which bank or cash account. From Settings">
-            <select formControlName="bankAccount">
+            <app-select formControlName="bankAccount">
               <option value="">Choose</option>
               @for (t of bankAccounts(); track t) {
                 <option [value]="t">{{ t }}</option>
               }
-            </select>
+            </app-select>
           </app-field>
         }
 

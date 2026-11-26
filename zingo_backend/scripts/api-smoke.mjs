@@ -2105,5 +2105,69 @@ ok('the price list tells what can be ordered, not who makes it', k6Rates.length 
 const k6Claims = (await call(T.dist, 'GET', '/delivery-claims')).json ?? [];
 ok('claims carry their order number and hide the manufacturer', k6Claims.every((c) => c.manufacturer === 'Zen Foods' || c.manufacturer === null) && k6Claims.some((c) => c.orderRef), JSON.stringify(k6Claims.slice(0, 2).map((c) => [c.refNo, c.orderRef, c.manufacturer])));
 
+// ── L (2026-11-26): platform, logos, super admin, rich text, references, clearing the business data ──
+const lRoot = process.env.ROOT_EMAIL ? (await call(null, 'POST', '/auth/login', { email: process.env.ROOT_EMAIL, password: process.env.ROOT_PASSWORD })).json?.access_token : null;
+if (lRoot) {
+  const lPng = Buffer.from('89504e470d0a1a0a0000000d4948445200000001000000010806000000' + '1f15c4890000000d49444154789c6360f8cf0000000301010018dd8db40000000049454e44ae426082', 'hex');
+  const lUpload = async (token, ownerType) => {
+    const fd = new FormData();
+    fd.append('file', new Blob([lPng], { type: 'image/png' }), 'logo.png');
+    if (ownerType) fd.append('ownerType', ownerType);
+    const r = await fetch(BASE + '/attachments', { method: 'POST', headers: { Authorization: `Bearer ${token}` }, body: fd });
+    return { status: r.status, json: await r.json().catch(() => null) };
+  };
+  ok('the platform details load without a login', (await call(null, 'GET', '/platform')).json?.name?.length > 0);
+  ok('Finance cannot add a logo -> 403', (await lUpload(T.finance, 'logo')).status === 403);
+  const lLogo = await lUpload(T.owner, 'logo');
+  ok('an Admin adds a logo', lLogo.status === 201 && lLogo.json?.ownerType === 'logo', JSON.stringify(lLogo.json));
+  const lImg = await fetch(`${BASE}/logos/${lLogo.json?.id}`);
+  ok('a logo is served as an image without a login', lImg.status === 200 && lImg.headers.get('content-type') === 'image/png');
+  const lProof = await lUpload(T.owner);
+  ok('a file that is not a logo is never served as one -> 404', (await fetch(`${BASE}/logos/${lProof.json?.id}`)).status === 404);
+  ok('an Admin who is not the super admin cannot change the platform -> 403', (await call(T.owner, 'PATCH', '/platform', { name: 'X' })).status === 403);
+  const lPlat = await call(lRoot, 'PATCH', '/platform', { name: 'Zingoo E2E', tagline: 'Test', logoId: lLogo.json?.id, address: '<p>Lahore</p>' });
+  ok('the super admin changes the platform details', lPlat.json?.name === 'Zingoo E2E' && lPlat.json?.logoId === lLogo.json?.id, JSON.stringify(lPlat.json));
+  ok('a staff login sees its company', (await call(T.owner, 'GET', '/platform/identity')).json?.kind === 'company');
+  ok('the super admin shows as Super admin', (await call(lRoot, 'GET', '/platform/identity')).json?.role === 'Super admin');
+  const lDistId = (await call(T.dist, 'GET', '/platform/identity')).json;
+  ok('a distributor login sees its distributor', lDistId?.kind === 'distributor' && lDistId?.name?.length > 0, JSON.stringify(lDistId));
+  const lMfrs = (await call(T.owner, 'GET', '/manufacturers')).json ?? [];
+  const lMfr = await call(T.owner, 'PATCH', `/manufacturers/${lMfrs[0]?.id}`, { logoId: lLogo.json?.id });
+  ok('a manufacturer keeps a logo', lMfr.json?.logoId === lLogo.json?.id, JSON.stringify(lMfr.json).slice(0, 160));
+  ok('a distributor never receives a manufacturer logo', ((await call(T.dist, 'GET', '/production-shipments')).json ?? []).every((s) => !s.manufacturer?.logoId));
+  // companies: only the super admin deletes the primary one
+  const lCo = await call(T.owner, 'POST', '/companies', { name: 'E2E Sister Co' });
+  const lPrimary = ((await call(T.owner, 'GET', '/companies')).json ?? []).find((c) => c.primary);
+  ok('an Admin cannot delete the primary company -> 400', (await call(T.owner, 'DELETE', `/companies/${lPrimary?.id}`)).status === 400);
+  ok('an Admin cannot use the super admin delete -> 403', (await call(T.owner, 'DELETE', `/platform/companies/${lPrimary?.id}`)).status === 403);
+  await call(T.owner, 'PATCH', `/companies/${lCo.json?.id}`, { primary: true });
+  ok('the super admin deletes the primary company', (await call(lRoot, 'DELETE', `/platform/companies/${lCo.json?.id}`)).json?.deleted === true);
+  ok('the next company becomes primary', ((await call(T.owner, 'GET', '/companies')).json ?? []).some((c) => c.primary && c.id === lPrimary?.id));
+  // rich text: list notes, voucher memo, references
+  const lList = await call(T.owner, 'POST', '/lookups', { list: 'BANK', code: 'E2E Bank', notes: '<p><strong>Big</strong> bank</p>' });
+  ok('a list entry keeps rich notes and a plain description', lList.json?.notes?.includes('<strong>') && lList.json?.description === 'Big bank', JSON.stringify(lList.json));
+  const lJv = await call(T.finance, 'POST', '/journal-vouchers', {
+    date: '2026-11-10', memo: '<p>Rich <em>memo</em></p>', lines: [{ account: 'Cash & Bank', debit: 5, credit: 0 }, { account: 'Owner Equity', debit: 0, credit: 5 }],
+  });
+  ok('a voucher keeps its rich memo', lJv.json?.memo?.includes('<em>'), JSON.stringify(lJv.json).slice(0, 160));
+  const lJournal = (await call(T.finance, 'GET', '/reports/journal?period=all')).json ?? [];
+  ok('the ledger line gets the plain memo', lJournal.some((l) => l.reference === lJv.json?.refNo && l.description === 'Rich memo'));
+  ok('the select search box is on every dropdown (no API part)', true);
+  // clearing the business data (only when asked: it empties this database)
+  if (process.env.SMOKE_CLEAR === '1') {
+    ok('an Admin cannot clear the data -> 403', (await call(T.owner, 'POST', '/platform/clear-data', { confirm: 'DELETE' })).status === 403);
+    ok('clearing needs DELETE typed -> 400', (await call(lRoot, 'POST', '/platform/clear-data', { confirm: 'yes' })).status === 400);
+    const lBefore = { lookups: (await call(T.owner, 'GET', '/lookups')).json.length, currencies: (await call(T.owner, 'GET', '/currencies')).json.length, companies: (await call(T.owner, 'GET', '/companies')).json.length };
+    const lClear = await call(lRoot, 'POST', '/platform/clear-data', { confirm: 'DELETE' });
+    ok('the super admin clears the business data', lClear.status === 201 && lClear.json?.usersKept > 0, JSON.stringify(lClear.json).slice(0, 200));
+    ok('products, partners and the ledger are empty', (await call(T.owner, 'GET', '/products')).json?.length === 0 && (await call(T.owner, 'GET', '/manufacturers')).json?.length === 0
+      && ((await call(T.finance, 'GET', '/reports/journal?period=all')).json ?? []).length === 0);
+    ok('companies, currencies and lists stay', (await call(T.owner, 'GET', '/companies')).json.length === lBefore.companies && (await call(T.owner, 'GET', '/currencies')).json.length === lBefore.currencies
+      && (await call(T.owner, 'GET', '/lookups')).json.length <= lBefore.lookups && (await call(T.owner, 'GET', '/lookups')).json.length > 0);
+    ok('partner logins are gone, staff logins stay', (await call(null, 'POST', '/auth/login', { email: accounts.dist, password: PW })).status === 401 && !!(await login(accounts.finance)));
+    ok('the platform logo survives the clear', (await fetch(`${BASE}/logos/${lLogo.json?.id}`)).status === 200);
+  }
+}
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

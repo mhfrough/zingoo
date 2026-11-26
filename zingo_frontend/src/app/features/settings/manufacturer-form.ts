@@ -3,7 +3,7 @@ import { ChangeDetectionStrategy, Component, computed, inject, input } from '@an
 import { toSignal } from '@angular/core/rxjs-interop';
 import { FormArray, FormGroup, ReactiveFormsModule, Validators } from '@angular/forms';
 import { SettingsStore } from '../../core/settings.store';
-import { Btn, Field, FilesInput, MoneyInput, MultiSelect, Offcanvas, RichText, Select, SelectOption } from '../../ui';
+import { Btn, Field, FilesInput, LogoInput, MoneyInput, MultiSelect, Offcanvas, RichText, Select, SelectOption } from '../../ui';
 import { FormModal } from '../ops/form-modal';
 import { Manufacturer, PartnerBankAccount } from '../ops/models';
 import { SettingsApi } from './settings.api';
@@ -16,7 +16,7 @@ import { SettingsApi } from './settings.api';
 @Component({
   selector: 'app-manufacturer-form',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [FilesInput, ReactiveFormsModule, Offcanvas, Field, Btn, Select, MultiSelect, MoneyInput, RichText],
+  imports: [FilesInput, ReactiveFormsModule, Offcanvas, Field, Btn, Select, MultiSelect, MoneyInput, RichText, LogoInput],
   styles: `
     .form-section {
       grid-column: 1 / -1;
@@ -70,6 +70,9 @@ import { SettingsApi } from './settings.api';
         <div class="notice" data-tone="danger" role="alert">{{ error() }}</div>
       }
       <form [id]="formId" [formGroup]="form" (ngSubmit)="submit()" class="form-grid" novalidate>
+        <app-field label="Logo" [wide]="true" hint="Shown in the sidebar of its portal logins">
+          <app-logo-input formControlName="logoId" />
+        </app-field>
         <app-field label="Name" [wide]="true" [required]="true" [error]="invalid('name') ? 'Enter the name' : null">
           <input type="text" formControlName="name" maxlength="150" />
         </app-field>
@@ -94,11 +97,11 @@ import { SettingsApi } from './settings.api';
           </app-field>
         }
         <app-field label="Currency">
-          <select formControlName="currency">
+          <app-select formControlName="currency">
             @for (c of currencies(); track c.code) {
               <option [value]="c.code">{{ c.code }} · {{ c.name }}</option>
             }
-          </select>
+          </app-select>
         </app-field>
 
         <h4 class="form-section">Bank accounts</h4>
@@ -150,6 +153,7 @@ export class ManufacturerForm extends FormModal {
 
   readonly form = this.fb.nonNullable.group({
     name: ['', Validators.required],
+    logoId: this.fb.control<string | null>(null),
     contact: [''],
     paymentTerms: [['Advance'] as string[]],
     advancePct: [30, [Validators.required, Validators.min(0), Validators.max(100)]],
@@ -221,7 +225,7 @@ export class ManufacturerForm extends FormModal {
     this.banks.clear();
     for (const a of m?.bankAccounts ?? []) this.banks.push(this.bankGroup(a));
     this.form.reset({
-      name: m?.name ?? '', contact: m?.contact ?? '', paymentTerms: m?.paymentTerms?.length ? [...m.paymentTerms] : ['Advance'],
+      name: m?.name ?? '', logoId: m?.logoId ?? null, contact: m?.contact ?? '', paymentTerms: m?.paymentTerms?.length ? [...m.paymentTerms] : ['Advance'],
       advancePct: m ? Number(m.advancePct ?? 0) : Number(this.store.settings()?.defaultAdvancePct ?? 30),
       creditLimit: Number(m?.creditLimit ?? 0), paymentDays: m?.paymentDays ?? 30, currency: m?.currency ?? 'PKR', poc: m?.poc ?? '', contract: m?.contract ?? '',
       terms: m?.terms ?? '', files: m?.files ?? [],

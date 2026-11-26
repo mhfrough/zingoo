@@ -15,6 +15,7 @@ import { ReportsModule } from './reports/reports.module';
 import { SetupModule } from './setup/setup.module';
 import { CompaniesModule } from './companies/companies.module';
 import { UsersModule } from './users/users.module';
+import { PlatformModule } from './platform/platform.module';
 
 @Module({
   imports: [
@@ -46,6 +47,7 @@ import { UsersModule } from './users/users.module';
     // setup: settings, currencies, chart of accounts, cost centers
     SetupModule,
     CompaniesModule,
+    PlatformModule,
 
     // in-app notifications (global: every flow sends them)
     NotificationsModule,

@@ -1,5 +1,5 @@
 import { PartialType } from '@nestjs/swagger';
-import { IsBoolean, IsIn, IsInt, IsNotEmpty, IsNumber, IsOptional, IsString, Length, Max, MaxLength, Min, ValidateIf } from 'class-validator';
+import { IsBoolean, IsIn, IsInt, IsNotEmpty, IsNumber, IsOptional, IsString, IsUUID, Length, Max, MaxLength, Min, ValidateIf } from 'class-validator';
 
 export class CreateCompanyDto {
   @IsString() @IsNotEmpty() @MaxLength(150) name: string;
@@ -21,6 +21,8 @@ export class CreateCompanyDto {
   @IsOptional() @IsString() @MaxLength(120) signatoryA?: string;
   @IsOptional() @IsString() @MaxLength(120) signatoryB?: string;
   @IsOptional() @ValidateIf((_, v) => v !== null) @IsNumber() @Min(0) capitalTarget?: number | null;
+  /** the logo: an uploaded image id; null removes it */
+  @IsOptional() @ValidateIf((_, v) => v !== null) @IsUUID() logoId?: string | null;
   /** true makes this the primary company (the others stop being primary) */
   @IsOptional() @IsBoolean() primary?: boolean;
   @IsOptional() @IsBoolean() active?: boolean;

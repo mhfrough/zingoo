@@ -4,6 +4,7 @@ import {
 import { Btn } from './button';
 import { IconName } from './icon';
 import { Modal } from './modal';
+import { UnsavedChanges } from './unsaved-changes';
 
 export interface ConfirmOptions {
   title: string;
@@ -38,6 +39,11 @@ interface ConfirmState {
 @Injectable({ providedIn: 'root' })
 export class ConfirmService {
   readonly state = signal<ConfirmState | null>(null);
+
+  constructor() {
+    // the unsaved-changes warnings (page change, panels, dialogs) ask with this dialog
+    inject(UnsavedChanges).asker = () => this.discard();
+  }
 
   ask(opts: ConfirmOptions): Promise<boolean> {
     this.answer(false); // a dialog still open is cancelled, never left hanging

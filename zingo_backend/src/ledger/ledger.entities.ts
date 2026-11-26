@@ -69,7 +69,8 @@ export class JournalVoucher extends DocEntity {
   @Column({ type: 'date' })
   date: string;
 
-  @Column({ type: 'varchar', length: 250 })
+  /** written in the rich-text editor (a little HTML); the ledger lines get its plain text */
+  @Column({ type: 'text' })
   memo: string;
 
   @Column({ type: 'varchar', length: 3, default: 'PKR' })

@@ -4,7 +4,7 @@ import { ReactiveFormsModule, Validators } from '@angular/forms';
 import { Observable, of, switchMap } from 'rxjs';
 import { ATTACHMENT_ACCEPT, ATTACHMENT_MAX_BYTES } from '../../core/attachments.api';
 import { fmtMoney } from '../../shared/format';
-import { Btn, Field, RefInput, MoneyInput, MultiSelect, Offcanvas, RichText, SelectOption } from '../../ui';
+import { Btn, Field, MoneyInput, MultiSelect, Offcanvas, RefInput, RichText, Select, SelectOption } from '../../ui';
 import { FormModal } from '../ops/form-modal';
 import { Manufacturer } from '../ops/models';
 import { FactoryApi, OrderDetailData, OrderDoc } from './factory.api';
@@ -24,7 +24,7 @@ const addDays = (iso: string, n: number) => {
 @Component({
   selector: 'app-order-invoice-form',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [ReactiveFormsModule, Offcanvas, Field, Btn, MoneyInput, MultiSelect, RichText, RefInput],
+  imports: [ReactiveFormsModule, Offcanvas, Field, Btn, MoneyInput, MultiSelect, RichText, RefInput, Select],
   template: `
     <app-offcanvas #oc [(open)]="open" [title]="'Invoice ' + (detail()?.order?.refNo ?? '')" size="lg" [dirty]="form.dirty"
       [subtitle]="detail() ? detail()!.order.manufacturer.name + ' to Zen Foods' : ''"
@@ -38,10 +38,10 @@ const addDays = (iso: string, n: number) => {
       <form [id]="formId" [formGroup]="form" (ngSubmit)="send()" class="form-grid" novalidate>
         <app-field label="Invoice for" [required]="true"
           help="Advance: the share paid before production (the order's advance %). Balance: the rest of the order value, usually once the goods are ready.">
-          <select formControlName="kind">
+          <app-select formControlName="kind">
             <option value="Advance">Advance</option>
             <option value="Balance">Balance</option>
-          </select>
+          </app-select>
         </app-field>
         <app-field label="Amount (PKR)" [required]="true" [hint]="'Still open: ' + money(openAmount())" [error]="invalid('amount') ? 'Enter an amount' : null">
           <app-money-input formControlName="amount" />
